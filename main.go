@@ -446,6 +446,7 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Rustom Bayot API
 // deleteUserHandler allows an admin to delete a user.
 func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
