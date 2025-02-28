@@ -93,6 +93,7 @@ func main() {
 	http.HandleFunc("/user", userHandler)
 	// New endpoint: Only an admin can promote an existing user to admin.
 	http.HandleFunc("/assign-admin", assignAdminHandler)
+	http.HandleFunc("/admin-status", adminStatusHandler)
 
 	fmt.Println("Server listening on port 8080...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -444,6 +445,17 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("User '%s' has been updated to '%s' with new password", req.OldUsername, req.NewUsername),
 	})
+}
+
+// adminStatusHandler returns whether an admin is registered.
+func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
+	for _, user := range users {
+		if user.Role == "admin" {
+			json.NewEncoder(w).Encode(map[string]bool{"adminExists": true})
+			return
+		}
+	}
+	json.NewEncoder(w).Encode(map[string]bool{"adminExists": false})
 }
 
 // Rustom Bayot API
