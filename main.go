@@ -88,8 +88,9 @@ func main() {
 	}
 	log.Println("Database connected successfully")
 
-	// Create necessary tables if they don't exist and add indexes.
-	createTables()
+	// NOTE: We have removed the createTables() call here, so
+	// your code no longer creates tables or indexes automatically.
+	// Ensure your 'users' and 'files' tables are already in your DB.
 
 	// Set up HTTP handlers.
 	mux := http.NewServeMux()
@@ -131,45 +132,6 @@ func main() {
 	err = http.ListenAndServeTLS(":443", "server.crt", "server.key", handler)
 	if err != nil {
 		log.Fatal("HTTPS server error:", err)
-	}
-}
-
-// createTables creates the users and files tables if they don't exist,
-// and adds necessary indexes for faster queries.
-func createTables() {
-	userTable := `
-	CREATE TABLE IF NOT EXISTS users (
-		username TEXT PRIMARY KEY,
-		password TEXT NOT NULL,
-		role TEXT NOT NULL
-	);`
-	_, err := db.Exec(userTable)
-	if err != nil {
-		log.Fatal("Error creating users table:", err)
-	}
-
-	// Create an index on the 'role' column in the users table.
-	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);`)
-	if err != nil {
-		log.Fatal("Error creating index on users.role:", err)
-	}
-
-	fileTable := `
-	CREATE TABLE IF NOT EXISTS files (
-		file_name TEXT PRIMARY KEY,
-		size BIGINT,
-		content_type TEXT,
-		uploader TEXT
-	);`
-	_, err = db.Exec(fileTable)
-	if err != nil {
-		log.Fatal("Error creating files table:", err)
-	}
-
-	// Create an index on the 'uploader' column in the files table.
-	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);`)
-	if err != nil {
-		log.Fatal("Error creating index on files.uploader:", err)
 	}
 }
 
