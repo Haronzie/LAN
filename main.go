@@ -74,31 +74,58 @@ type AssignAdminRequest struct {
 }
 
 func main() {
-	// Public endpoints.
-	http.HandleFunc("/register", registerHandler)
-	http.HandleFunc("/login", loginHandler)
-	// Secured endpoints.
-	http.HandleFunc("/forgot-password", forgotPasswordHandler)
-	http.HandleFunc("/upload", uploadHandler)
-	http.HandleFunc("/delete-file", deleteFileHandler)
-	http.HandleFunc("/files", filesHandler)       // Lists all stored file records.
-	http.HandleFunc("/download", downloadHandler) // Download endpoint.
-	// Admin-only endpoints.
-	http.HandleFunc("/admin", adminHandler)
-	http.HandleFunc("/users", usersHandler)            // List all users (admin only).
-	http.HandleFunc("/add-user", addUserHandler)       // Admin can add a new user.
-	http.HandleFunc("/update-user", updateUserHandler) // Now uses PUT
-	http.HandleFunc("/delete-user", deleteUserHandler) // Admin can delete a user.
-	// A user-specific endpoint.
-	http.HandleFunc("/user", userHandler)
-	// New endpoint: Only an admin can promote an existing user to admin.
-	http.HandleFunc("/assign-admin", assignAdminHandler)
-	http.HandleFunc("/admin-status", adminStatusHandler)
+	// Create a new ServeMux to register endpoints.
+	mux := http.NewServeMux()
 
-	fmt.Println("Server listening on port 8080 with HTTPS...")
-	err := http.ListenAndServeTLS(":8080", "server.crt", "server.key", nil)
+	// Public endpoints.
+	mux.HandleFunc("/register", registerHandler)
+	mux.HandleFunc("/login", loginHandler)
+	// Secured endpoints.
+	mux.HandleFunc("/forgot-password", forgotPasswordHandler)
+	mux.HandleFunc("/upload", uploadHandler)
+	mux.HandleFunc("/delete-file", deleteFileHandler)
+	mux.HandleFunc("/files", filesHandler)       // Lists all stored file records.
+	mux.HandleFunc("/download", downloadHandler) // Download endpoint.
+	// Admin-only endpoints.
+	mux.HandleFunc("/admin", adminHandler)
+	mux.HandleFunc("/users", usersHandler)            // List all users (admin only).
+	mux.HandleFunc("/add-user", addUserHandler)       // Admin can add a new user.
+	mux.HandleFunc("/update-user", updateUserHandler) // Now uses PUT.
+	mux.HandleFunc("/delete-user", deleteUserHandler) // Admin can delete a user.
+	// User-specific endpoint.
+	mux.HandleFunc("/user", userHandler)
+	// New endpoint: Only an admin can promote an existing user to admin.
+	mux.HandleFunc("/assign-admin", assignAdminHandler)
+	mux.HandleFunc("/admin-status", adminStatusHandler)
+
+	// Enable CORS
+	handler := enableCORS(mux)
+
+	// Create HTTPS server (using standard port 443)
+	httpsServer := &http.Server{
+		Addr:    ":443",
+		Handler: handler,
+	}
+
+	// Optional: Create an HTTP server that redirects all requests to HTTPS.
+	go func() {
+		httpServer := &http.Server{
+			Addr: ":80",
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				target := "https://" + r.Host + r.RequestURI
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+			}),
+		}
+		log.Println("Starting HTTP redirect server on port 80...")
+		if err := httpServer.ListenAndServe(); err != nil {
+			log.Fatal("HTTP redirect server error:", err)
+		}
+	}()
+
+	log.Println("Starting HTTPS server on port 443...")
+	err := httpsServer.ListenAndServeTLS("/Users/arturopjacinto111/server.crt", "/Users/arturopjacinto111/server.key")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("HTTPS server error:", err)
 	}
 }
 
@@ -461,7 +488,6 @@ func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]bool{"adminExists": false})
 }
 
-// Rustom Bayot API
 // deleteUserHandler allows an admin to delete a user.
 func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
@@ -563,4 +589,14 @@ func isValidUserToken(token string) bool {
 	return ok && user.Role == "user"
 }
 
-//API Endpoints
+func enableCORS(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if r.Method == "OPTIONS" {
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
