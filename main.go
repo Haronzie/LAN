@@ -1,11 +1,15 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+
+	_ "github.com/lib/pq"
 )
 
 // User represents a registered user.
@@ -23,12 +27,7 @@ type FileRecord struct {
 	Uploader    string `json:"uploader"`     // Username of who uploaded the file
 }
 
-// Global maps for users, tokens, and files.
-var users = map[string]User{}
-var tokens = map[string]string{}
-var files = map[string]FileRecord{}
-
-// Structs for various API requests/responses.
+// Request/Response structs.
 type LoginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -58,56 +57,61 @@ type DeleteUserRequest struct {
 	Username string `json:"username"`
 }
 
-// ForgotPasswordRequest represents the JSON structure for resetting the admin's password.
 type ForgotPasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
 
-// DeleteFileRequest represents the JSON structure for deleting a file.
 type DeleteFileRequest struct {
 	FileName string `json:"file_name"`
 }
 
-// AssignAdminRequest is used for promoting a user to admin.
 type AssignAdminRequest struct {
 	Username string `json:"username"`
 }
 
-func main() {
-	// Create a new ServeMux to register endpoints.
-	mux := http.NewServeMux()
+var db *sql.DB
 
-	// Public endpoints.
+func main() {
+	// PostgreSQL connection string.
+	// Adjust host, port, user, password, dbname, and sslmode as needed.
+	connStr := "host=localhost port=5432 user=postgres password=haron dbname=Cdrrmo sslmode=disable"
+	var err error
+	db, err = sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal("Database connection error:", err)
+	}
+	defer db.Close()
+
+	// Ping the database to check the connection.
+	if err = db.Ping(); err != nil {
+		log.Fatal("Database ping error:", err)
+	}
+	log.Println("Database connected successfully")
+
+	// Create necessary tables if they don't exist.
+	createTables()
+
+	// Set up HTTP handlers.
+	mux := http.NewServeMux()
 	mux.HandleFunc("/register", registerHandler)
 	mux.HandleFunc("/login", loginHandler)
-	// Secured endpoints.
 	mux.HandleFunc("/forgot-password", forgotPasswordHandler)
 	mux.HandleFunc("/upload", uploadHandler)
 	mux.HandleFunc("/delete-file", deleteFileHandler)
-	mux.HandleFunc("/files", filesHandler)       // Lists all stored file records.
-	mux.HandleFunc("/download", downloadHandler) // Download endpoint.
-	// Admin-only endpoints.
+	mux.HandleFunc("/files", filesHandler)
+	mux.HandleFunc("/download", downloadHandler)
 	mux.HandleFunc("/admin", adminHandler)
-	mux.HandleFunc("/users", usersHandler)            // List all users (admin only).
-	mux.HandleFunc("/add-user", addUserHandler)       // Admin can add a new user.
-	mux.HandleFunc("/update-user", updateUserHandler) // Now uses PUT.
-	mux.HandleFunc("/delete-user", deleteUserHandler) // Admin can delete a user.
-	// User-specific endpoint.
+	mux.HandleFunc("/users", usersHandler)
+	mux.HandleFunc("/add-user", addUserHandler)
+	mux.HandleFunc("/update-user", updateUserHandler)
+	mux.HandleFunc("/delete-user", deleteUserHandler)
 	mux.HandleFunc("/user", userHandler)
-	// New endpoint: Only an admin can promote an existing user to admin.
 	mux.HandleFunc("/assign-admin", assignAdminHandler)
 	mux.HandleFunc("/admin-status", adminStatusHandler)
 
-	// Enable CORS
 	handler := enableCORS(mux)
 
-	// Create HTTPS server (using standard port 443)
-	httpsServer := &http.Server{
-		Addr:    ":443",
-		Handler: handler,
-	}
-
-	// Optional: Create an HTTP server that redirects all requests to HTTPS.
+	// Start HTTP redirect server on port 80.
 	go func() {
 		httpServer := &http.Server{
 			Addr: ":80",
@@ -122,14 +126,152 @@ func main() {
 		}
 	}()
 
+	// Start HTTPS server.
 	log.Println("Starting HTTPS server on port 443...")
-	err := httpsServer.ListenAndServeTLS("/Users/arturopjacinto111/server.crt", "/Users/arturopjacinto111/server.key")
+	err = http.ListenAndServeTLS(":443", "server.crt", "server.key", handler)
 	if err != nil {
 		log.Fatal("HTTPS server error:", err)
 	}
 }
 
-// registerHandler registers a new user. If no admin exists yet, the first registered user becomes the admin.
+// createTables creates the users and files tables if they don't exist.
+func createTables() {
+	userTable := `
+	CREATE TABLE IF NOT EXISTS users (
+		username TEXT PRIMARY KEY,
+		password TEXT NOT NULL,
+		role TEXT NOT NULL
+	);`
+	_, err := db.Exec(userTable)
+	if err != nil {
+		log.Fatal("Error creating users table:", err)
+	}
+
+	fileTable := `
+	CREATE TABLE IF NOT EXISTS files (
+		file_name TEXT PRIMARY KEY,
+		size BIGINT,
+		content_type TEXT,
+		uploader TEXT
+	);`
+	_, err = db.Exec(fileTable)
+	if err != nil {
+		log.Fatal("Error creating files table:", err)
+	}
+}
+
+// generateToken creates a dummy token for the given username.
+func generateToken(username string) string {
+	return "Bearer " + username + "-token"
+}
+
+// getUsernameFromToken extracts the username from our dummy token.
+func getUsernameFromToken(token string) (string, error) {
+	if !strings.HasPrefix(token, "Bearer ") {
+		return "", errors.New("invalid token")
+	}
+	token = strings.TrimPrefix(token, "Bearer ")
+	if !strings.HasSuffix(token, "-token") {
+		return "", errors.New("invalid token")
+	}
+	username := strings.TrimSuffix(token, "-token")
+	return username, nil
+}
+
+// getUserByUsername retrieves a user from the database.
+func getUserByUsername(username string) (User, error) {
+	row := db.QueryRow("SELECT username, password, role FROM users WHERE username = $1", username)
+	var user User
+	err := row.Scan(&user.Username, &user.Password, &user.Role)
+	return user, err
+}
+
+// createUser inserts a new user into the database.
+func createUser(user User) error {
+	_, err := db.Exec("INSERT INTO users(username, password, role) VALUES($1, $2, $3)", user.Username, user.Password, user.Role)
+	return err
+}
+
+// updateUser updates an existing user in the database.
+func updateUser(user User) error {
+	_, err := db.Exec("UPDATE users SET password = $1, role = $2 WHERE username = $3", user.Password, user.Role, user.Username)
+	return err
+}
+
+// deleteUser removes a user from the database.
+func deleteUser(username string) error {
+	_, err := db.Exec("DELETE FROM users WHERE username = $1", username)
+	return err
+}
+
+// getUserByToken retrieves a user using the token.
+func getUserByToken(token string) (User, error) {
+	username, err := getUsernameFromToken(token)
+	if err != nil {
+		return User{}, err
+	}
+	return getUserByUsername(username)
+}
+
+// adminExists checks if any admin exists in the database.
+func adminExists() bool {
+	row := db.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return false
+	}
+	return count > 0
+}
+
+// isValidAdminToken checks if the token belongs to an admin.
+func isValidAdminToken(token string) bool {
+	user, err := getUserByToken(token)
+	return err == nil && user.Role == "admin"
+}
+
+// isValidUserToken checks if the token belongs to a regular user.
+func isValidUserToken(token string) bool {
+	user, err := getUserByToken(token)
+	return err == nil && user.Role == "user"
+}
+
+// File-related DB functions.
+func getFileRecord(fileName string) (FileRecord, error) {
+	row := db.QueryRow("SELECT file_name, size, content_type, uploader FROM files WHERE file_name = $1", fileName)
+	var fr FileRecord
+	err := row.Scan(&fr.FileName, &fr.Size, &fr.ContentType, &fr.Uploader)
+	return fr, err
+}
+
+func createFileRecord(fr FileRecord) error {
+	_, err := db.Exec("INSERT INTO files(file_name, size, content_type, uploader) VALUES($1, $2, $3, $4)", fr.FileName, fr.Size, fr.ContentType, fr.Uploader)
+	return err
+}
+
+func deleteFileRecord(fileName string) error {
+	_, err := db.Exec("DELETE FROM files WHERE file_name = $1", fileName)
+	return err
+}
+
+func getAllFiles() ([]FileRecord, error) {
+	rows, err := db.Query("SELECT file_name, size, content_type, uploader FROM files")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var files []FileRecord
+	for rows.Next() {
+		var fr FileRecord
+		if err := rows.Scan(&fr.FileName, &fr.Size, &fr.ContentType, &fr.Uploader); err != nil {
+			return nil, err
+		}
+		files = append(files, fr)
+	}
+	return files, nil
+}
+
+// Handlers
+
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -146,25 +288,27 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Username and password cannot be empty", http.StatusBadRequest)
 		return
 	}
-	if _, exists := users[req.Username]; exists {
+	// Check if user already exists.
+	if _, err := getUserByUsername(req.Username); err == nil {
 		http.Error(w, "User already exists", http.StatusBadRequest)
 		return
 	}
-	// Allow first user to become admin; if an admin already exists, registration is closed.
-	for _, user := range users {
-		if user.Role == "admin" {
-			http.Error(w, "Admin already registered. Registration closed.", http.StatusForbidden)
-			return
-		}
+	// Allow first user to become admin; if an admin exists, registration is closed.
+	if adminExists() {
+		http.Error(w, "Admin already registered. Registration closed.", http.StatusForbidden)
+		return
 	}
 	newUser := User{
 		Username: req.Username,
 		Password: req.Password,
 		Role:     "admin",
 	}
-	users[req.Username] = newUser
-	token := "Bearer " + req.Username + "-token"
-	tokens[req.Username] = token
+	if err := createUser(newUser); err != nil {
+		http.Error(w, "Error creating user", http.StatusInternalServerError)
+		return
+	}
+	token := generateToken(req.Username)
+	// Respond with token.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("Admin '%s' registered successfully", req.Username),
@@ -172,7 +316,6 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// loginHandler authenticates users and returns their token.
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -185,17 +328,16 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
-	user, exists := users[req.Username]
-	if !exists || user.Password != req.Password {
+	user, err := getUserByUsername(req.Username)
+	if err != nil || user.Password != req.Password {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
-	token := tokens[req.Username]
+	token := generateToken(req.Username)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(LoginResponse{Token: token})
 }
 
-// forgotPasswordHandler allows only the admin to reset their own password.
 func forgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -216,22 +358,22 @@ func forgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "New password cannot be empty", http.StatusBadRequest)
 		return
 	}
-	adminUser, exists := getUserByToken(token)
-	if !exists || adminUser.Role != "admin" {
+	adminUser, err := getUserByToken(token)
+	if err != nil || adminUser.Role != "admin" {
 		http.Error(w, "Admin user not found", http.StatusNotFound)
 		return
 	}
 	adminUser.Password = req.NewPassword
-	users[adminUser.Username] = adminUser
-	newToken := "Bearer " + adminUser.Username + "-token"
-	tokens[adminUser.Username] = newToken
+	if err := updateUser(adminUser); err != nil {
+		http.Error(w, "Error updating password", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Admin password has been reset successfully. Please login with your new password.",
 	})
 }
 
-// uploadHandler allows both admin and user to upload a file.
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -242,9 +384,12 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	// Retrieve the current user from token.
-	currentUser, _ := getUserByToken(token)
-	err := r.ParseMultipartForm(10 << 20) // 10 MB memory limit
+	currentUser, err := getUserByToken(token)
+	if err != nil {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+	err = r.ParseMultipartForm(10 << 20) // 10 MB memory limit
 	if err != nil {
 		http.Error(w, "Error parsing form data", http.StatusBadRequest)
 		return
@@ -255,32 +400,35 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	if _, exists := files[handler.Filename]; exists {
+	// Check if file already exists.
+	if _, err := getFileRecord(handler.Filename); err == nil {
 		http.Error(w, "File already exists", http.StatusBadRequest)
 		return
 	}
-	uploadedFile := FileRecord{
+	fr := FileRecord{
 		FileName:    handler.Filename,
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
 		Uploader:    currentUser.Username,
 	}
-	files[handler.Filename] = uploadedFile
+	if err := createFileRecord(fr); err != nil {
+		http.Error(w, "Error saving file record", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("File '%s' uploaded successfully", handler.Filename),
 	})
 }
 
-// deleteFileHandler allows admin to delete any file, and allows a regular user to delete only files they uploaded.
 func deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 	token := r.Header.Get("Authorization")
-	user, ok := getUserByToken(token)
-	if !ok {
+	user, err := getUserByToken(token)
+	if err != nil {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -294,40 +442,41 @@ func deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "File name cannot be empty", http.StatusBadRequest)
 		return
 	}
-	fileRecord, exists := files[req.FileName]
-	if !exists {
+	fr, err := getFileRecord(req.FileName)
+	if err != nil {
 		http.Error(w, "File does not exist", http.StatusNotFound)
 		return
 	}
-	// If the caller is not an admin, check that they are the uploader.
-	if user.Role != "admin" && fileRecord.Uploader != user.Username {
+	// Only admin or the uploader can delete.
+	if user.Role != "admin" && fr.Uploader != user.Username {
 		http.Error(w, "Forbidden: You can only delete files you uploaded", http.StatusForbidden)
 		return
 	}
-	delete(files, req.FileName)
+	if err := deleteFileRecord(req.FileName); err != nil {
+		http.Error(w, "Error deleting file record", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("File '%s' has been deleted successfully", req.FileName),
 	})
 }
 
-// filesHandler returns all stored file records. Accessible to both admin and user.
 func filesHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
 	if !(isValidAdminToken(token) || isValidUserToken(token)) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	fileList := make([]FileRecord, 0, len(files))
-	for _, record := range files {
-		fileList = append(fileList, record)
+	files, err := getAllFiles()
+	if err != nil {
+		http.Error(w, "Error retrieving files", http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(fileList)
+	json.NewEncoder(w).Encode(files)
 }
 
-// downloadHandler allows both admin and user to download a file.
-// Since actual file content is not stored, it returns dummy content.
 func downloadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -343,18 +492,17 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Filename is required", http.StatusBadRequest)
 		return
 	}
-	fileRecord, exists := files[fileName]
-	if !exists {
+	fr, err := getFileRecord(fileName)
+	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", fileRecord.ContentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileRecord.FileName))
-	dummyContent := fmt.Sprintf("This is dummy content for file %s", fileRecord.FileName)
+	w.Header().Set("Content-Type", fr.ContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+	dummyContent := fmt.Sprintf("This is dummy content for file %s", fr.FileName)
 	w.Write([]byte(dummyContent))
 }
 
-// adminHandler responds only if the provided token belongs to an admin.
 func adminHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
 	if !isValidAdminToken(token) {
@@ -365,7 +513,6 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "Welcome admin")
 }
 
-// userHandler responds only if the provided token belongs to a regular user.
 func userHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
 	if !isValidUserToken(token) {
@@ -376,22 +523,31 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "Welcome user")
 }
 
-// usersHandler returns all registered users (admin only).
 func usersHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
 	if !isValidAdminToken(token) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
+	rows, err := db.Query("SELECT username FROM users")
+	if err != nil {
+		http.Error(w, "Error retrieving users", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
 	var userList []string
-	for username := range users {
+	for rows.Next() {
+		var username string
+		if err := rows.Scan(&username); err != nil {
+			http.Error(w, "Error scanning user", http.StatusInternalServerError)
+			return
+		}
 		userList = append(userList, username)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(userList)
 }
 
-// addUserHandler allows an admin to add a new user (with role "user").
 func addUserHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
 	if !isValidAdminToken(token) {
@@ -413,7 +569,8 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Username and password cannot be empty", http.StatusBadRequest)
 		return
 	}
-	if _, exists := users[req.Username]; exists {
+	// Check if user exists.
+	if _, err := getUserByUsername(req.Username); err == nil {
 		http.Error(w, "User already exists", http.StatusBadRequest)
 		return
 	}
@@ -422,16 +579,16 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 		Role:     "user",
 	}
-	users[req.Username] = newUser
-	tokens[req.Username] = "Bearer " + req.Username + "-token"
+	if err := createUser(newUser); err != nil {
+		http.Error(w, "Error adding user", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("User '%s' has been added successfully", req.Username),
 	})
 }
 
-// updateUserHandler allows an admin to update an existing user's username and password.
-// Refactored to use the PUT method.
 func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
 	if !isValidAdminToken(token) {
@@ -454,41 +611,42 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Old username, new username, and new password are required", http.StatusBadRequest)
 		return
 	}
-	user, exists := users[req.OldUsername]
-	if !exists {
+	user, err := getUserByUsername(req.OldUsername)
+	if err != nil {
 		http.Error(w, "User does not exist", http.StatusNotFound)
 		return
 	}
+	// Check if new username is already taken (if changed).
 	if req.OldUsername != req.NewUsername {
-		if _, exists := users[req.NewUsername]; exists {
+		if _, err := getUserByUsername(req.NewUsername); err == nil {
 			http.Error(w, "New username already taken", http.StatusBadRequest)
 			return
 		}
 	}
-	delete(users, req.OldUsername)
+	// Update user info.
 	user.Username = req.NewUsername
 	user.Password = req.NewPassword
-	users[req.NewUsername] = user
-	delete(tokens, req.OldUsername)
-	tokens[req.NewUsername] = "Bearer " + req.NewUsername + "-token"
+	// Remove old record and update with new info.
+	if err := deleteUser(req.OldUsername); err != nil {
+		http.Error(w, "Error updating user", http.StatusInternalServerError)
+		return
+	}
+	if err := createUser(user); err != nil {
+		http.Error(w, "Error updating user", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("User '%s' has been updated to '%s' with new password", req.OldUsername, req.NewUsername),
 	})
 }
 
-// adminStatusHandler returns whether an admin is registered.
 func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
-	for _, user := range users {
-		if user.Role == "admin" {
-			json.NewEncoder(w).Encode(map[string]bool{"adminExists": true})
-			return
-		}
-	}
-	json.NewEncoder(w).Encode(map[string]bool{"adminExists": false})
+	exists := adminExists()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"adminExists": exists})
 }
 
-// deleteUserHandler allows an admin to delete a user.
 func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization")
 	if !isValidAdminToken(token) {
@@ -509,31 +667,26 @@ func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
 		return
 	}
-	if _, exists := users[req.Username]; !exists {
-		http.Error(w, "User does not exist", http.StatusNotFound)
+	if err := deleteUser(req.Username); err != nil {
+		http.Error(w, "User does not exist or error deleting user", http.StatusNotFound)
 		return
 	}
-	delete(users, req.Username)
-	delete(tokens, req.Username)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("User '%s' has been deleted successfully", req.Username),
 	})
 }
 
-// assignAdminHandler allows an admin to promote an existing user to admin.
 func assignAdminHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-
 	token := r.Header.Get("Authorization")
 	if !isValidAdminToken(token) {
 		http.Error(w, "Forbidden: Only an admin can assign a new admin", http.StatusForbidden)
 		return
 	}
-
 	var req AssignAdminRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -544,9 +697,8 @@ func assignAdminHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
 		return
 	}
-
-	user, exists := users[req.Username]
-	if !exists {
+	user, err := getUserByUsername(req.Username)
+	if err != nil {
 		http.Error(w, "User does not exist", http.StatusNotFound)
 		return
 	}
@@ -554,41 +706,18 @@ func assignAdminHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "User is already an admin", http.StatusBadRequest)
 		return
 	}
-
-	// Promote the user to admin.
 	user.Role = "admin"
-	users[req.Username] = user
-	tokens[req.Username] = "Bearer " + req.Username + "-token"
-
+	if err := updateUser(user); err != nil {
+		http.Error(w, "Error updating user role", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("User '%s' is now an admin", req.Username),
 	})
 }
 
-// getUserByToken finds a user associated with a given token.
-func getUserByToken(token string) (User, bool) {
-	for username, t := range tokens {
-		if t == token {
-			u, exists := users[username]
-			return u, exists
-		}
-	}
-	return User{}, false
-}
-
-// isValidAdminToken checks whether the provided token belongs to an admin.
-func isValidAdminToken(token string) bool {
-	user, ok := getUserByToken(token)
-	return ok && user.Role == "admin"
-}
-
-// isValidUserToken checks whether the provided token belongs to a regular user.
-func isValidUserToken(token string) bool {
-	user, ok := getUserByToken(token)
-	return ok && user.Role == "user"
-}
-
+// enableCORS sets CORS headers.
 func enableCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
