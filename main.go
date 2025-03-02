@@ -95,8 +95,11 @@ func main() {
 	http.HandleFunc("/assign-admin", assignAdminHandler)
 	http.HandleFunc("/admin-status", adminStatusHandler)
 
-	fmt.Println("Server listening on port 8080...")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	fmt.Println("Server listening on port 8080 with HTTPS...")
+	err := http.ListenAndServeTLS(":8080", "server.crt", "server.key", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // registerHandler registers a new user. If no admin exists yet, the first registered user becomes the admin.
