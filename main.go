@@ -110,6 +110,20 @@ type AssignAdminRequest struct {
 
 var db *sql.DB
 
+// In-memory cache for file records using a hash map.
+var fileCache = make(map[string]FileRecord)
+
+// Get a file record from the cache.
+func getCachedFileRecord(fileName string) (FileRecord, bool) {
+	record, exists := fileCache[fileName]
+	return record, exists
+}
+
+// Add or update a file record in the cache.
+func cacheFileRecord(record FileRecord) {
+	fileCache[record.FileName] = record
+}
+
 func main() {
 	// PostgreSQL connection string.
 	connStr := "host=localhost port=5432 user=postgres password=haron dbname=Cdrrmo sslmode=disable"
@@ -262,6 +276,8 @@ func createFileRecord(fr FileRecord) error {
 }
 
 func deleteFileRecord(fileName string) error {
+	// Remove from cache.
+	delete(fileCache, fileName)
 	_, err := db.Exec("DELETE FROM files WHERE file_name = $1", fileName)
 	return err
 }
@@ -456,6 +472,9 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error saving file record", http.StatusInternalServerError)
 		return
 	}
+	// Cache the new file record.
+	cacheFileRecord(fr)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("File '%s' uploaded successfully", handler.Filename),
@@ -531,11 +550,20 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Filename is required", http.StatusBadRequest)
 		return
 	}
-	fr, err := getFileRecord(fileName)
-	if err != nil {
-		http.Error(w, "File not found", http.StatusNotFound)
-		return
+
+	// Try to get the file record from the cache first.
+	fr, exists := getCachedFileRecord(fileName)
+	if !exists {
+		// If not in the cache, fetch it from the database.
+		fr, err = getFileRecord(fileName)
+		if err != nil {
+			http.Error(w, "File not found", http.StatusNotFound)
+			return
+		}
+		// Cache the record for future requests.
+		cacheFileRecord(fr)
 	}
+
 	w.Header().Set("Content-Type", fr.ContentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
 	dummyContent := fmt.Sprintf("This is dummy content for file %s", fr.FileName)
