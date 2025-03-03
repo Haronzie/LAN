@@ -11,11 +11,16 @@ import (
 
 	_ "github.com/lib/pq"
 
-	"github.com/gorilla/sessions"
-
-	// ADDED for bcrypt:
 	"golang.org/x/crypto/bcrypt"
 )
+
+// Global token blacklist to track logged-out tokens.
+var tokenBlacklist = make(map[string]bool)
+
+// isTokenBlacklisted checks if the token has been invalidated.
+func isTokenBlacklisted(token string) bool {
+	return tokenBlacklist[token]
+}
 
 // ADDED for bcrypt: Helper functions to hash and compare passwords.
 func hashPassword(password string) (string, error) {
@@ -53,8 +58,6 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	// We still include the token field to preserve important lines,
-	// although session-based auth is now in use.
 	Token string `json:"token"`
 }
 
@@ -92,31 +95,6 @@ type AssignAdminRequest struct {
 
 var db *sql.DB
 
-// ===== Using Gorilla Sessions =====
-
-// Initialize a new cookie store with a strong authentication key.
-var store = sessions.NewCookieStore([]byte("very-secret-key"))
-
-// getUserFromRequest retrieves the authenticated user using the session cookie.
-// If the session cookie isn't available, it falls back to the Authorization header.
-func getUserFromRequest(r *http.Request) (User, error) {
-	// Try to retrieve the session.
-	session, err := store.Get(r, "session")
-	if err == nil {
-		if username, ok := session.Values["username"].(string); ok && username != "" {
-			return getUserByUsername(username)
-		}
-	}
-	// Fallback to legacy token-based authentication.
-	token := r.Header.Get("Authorization")
-	if token != "" {
-		return getUserByToken(token)
-	}
-	return User{}, errors.New("not authenticated")
-}
-
-// =================================
-
 func main() {
 	// PostgreSQL connection string.
 	connStr := "host=localhost port=5432 user=postgres password=haron dbname=Cdrrmo sslmode=disable"
@@ -140,6 +118,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/register", registerHandler)
 	mux.HandleFunc("/login", loginHandler)
+	mux.HandleFunc("/logout", logoutHandler) // <-- Added logout endpoint
 	mux.HandleFunc("/forgot-password", forgotPasswordHandler)
 	mux.HandleFunc("/upload", uploadHandler)
 	mux.HandleFunc("/delete-file", deleteFileHandler)
@@ -206,7 +185,6 @@ func createTables() {
 }
 
 // generateToken creates a dummy token for the given username.
-// (This function is kept to preserve important lines, though session-based auth is now used.)
 func generateToken(username string) string {
 	return "Bearer " + username + "-token"
 }
@@ -250,8 +228,11 @@ func deleteUser(username string) error {
 	return err
 }
 
-// getUserByToken retrieves a user using the token.
+// getUserByToken retrieves a user using the token and checks if the token is blacklisted.
 func getUserByToken(token string) (User, error) {
+	if isTokenBlacklisted(token) {
+		return User{}, errors.New("token has been logged out")
+	}
 	username, err := getUsernameFromToken(token)
 	if err != nil {
 		return User{}, err
@@ -267,6 +248,18 @@ func adminExists() bool {
 		return false
 	}
 	return count > 0
+}
+
+// isValidAdminToken checks if the token belongs to an admin.
+func isValidAdminToken(token string) bool {
+	user, err := getUserByToken(token)
+	return err == nil && user.Role == "admin"
+}
+
+// isValidUserToken checks if the token belongs to a regular user.
+func isValidUserToken(token string) bool {
+	user, err := getUserByToken(token)
+	return err == nil && user.Role == "user"
 }
 
 // File-related DB functions.
@@ -349,23 +342,8 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error creating user", http.StatusInternalServerError)
 		return
 	}
-
-	// Create a session using gorilla/sessions.
-	session, err := store.Get(r, "session")
-	if err != nil {
-		http.Error(w, "Error creating session", http.StatusInternalServerError)
-		return
-	}
-	session.Values["username"] = req.Username
-	session.Values["role"] = newUser.Role
-	if err := session.Save(r, w); err != nil {
-		http.Error(w, "Error saving session", http.StatusInternalServerError)
-		return
-	}
-
-	// We still call generateToken to preserve important lines.
 	token := generateToken(req.Username)
-	// Respond with token (for legacy reasons) along with the session cookie.
+	// Respond with token.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("Admin '%s' registered successfully", req.Username),
@@ -393,23 +371,34 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a session using gorilla/sessions.
-	session, err := store.Get(r, "session")
-	if err != nil {
-		http.Error(w, "Error creating session", http.StatusInternalServerError)
-		return
-	}
-	session.Values["username"] = req.Username
-	session.Values["role"] = user.Role
-	if err := session.Save(r, w); err != nil {
-		http.Error(w, "Error saving session", http.StatusInternalServerError)
-		return
-	}
-
-	// We still generate a dummy token to preserve important lines.
 	token := generateToken(req.Username)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(LoginResponse{Token: token})
+}
+
+// logoutHandler invalidates the token by adding it to a blacklist.
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		http.Error(w, "Missing token", http.StatusUnauthorized)
+		return
+	}
+	// Verify token validity.
+	_, err := getUserByToken(token)
+	if err != nil {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+	// Invalidate the token.
+	tokenBlacklist[token] = true
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Logged out successfully",
+	})
 }
 
 func forgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
@@ -417,9 +406,8 @@ func forgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	// Use session-based auth.
-	user, err := getUserFromRequest(r)
-	if err != nil || user.Role != "admin" {
+	token := r.Header.Get("Authorization")
+	if !isValidAdminToken(token) {
 		http.Error(w, "Forbidden: Only admin can use forgot password", http.StatusForbidden)
 		return
 	}
@@ -433,15 +421,21 @@ func forgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "New password cannot be empty", http.StatusBadRequest)
 		return
 	}
+	adminUser, err := getUserByToken(token)
+	if err != nil || adminUser.Role != "admin" {
+		http.Error(w, "Admin user not found", http.StatusNotFound)
+		return
+	}
+
 	// ADDED for bcrypt: Hash the new admin password before storing.
 	hashedPass, err := hashPassword(req.NewPassword)
 	if err != nil {
 		http.Error(w, "Error hashing password", http.StatusInternalServerError)
 		return
 	}
-	user.Password = hashedPass
+	adminUser.Password = hashedPass
 
-	if err := updateUser(user); err != nil {
+	if err := updateUser(adminUser); err != nil {
 		http.Error(w, "Error updating password", http.StatusInternalServerError)
 		return
 	}
@@ -456,9 +450,14 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	user, err := getUserFromRequest(r)
-	if err != nil {
+	token := r.Header.Get("Authorization")
+	if !(isValidAdminToken(token) || isValidUserToken(token)) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	currentUser, err := getUserByToken(token)
+	if err != nil {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
 	}
 	err = r.ParseMultipartForm(10 << 20) // 10 MB memory limit
@@ -481,7 +480,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		FileName:    handler.Filename,
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
-		Uploader:    user.Username,
+		Uploader:    currentUser.Username,
 	}
 	if err := createFileRecord(fr); err != nil {
 		http.Error(w, "Error saving file record", http.StatusInternalServerError)
@@ -498,7 +497,8 @@ func deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	user, err := getUserFromRequest(r)
+	token := r.Header.Get("Authorization")
+	user, err := getUserByToken(token)
 	if err != nil {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -534,8 +534,8 @@ func deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func filesHandler(w http.ResponseWriter, r *http.Request) {
-	_, err := getUserFromRequest(r)
-	if err != nil {
+	token := r.Header.Get("Authorization")
+	if !(isValidAdminToken(token) || isValidUserToken(token)) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -553,8 +553,8 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	_, err := getUserFromRequest(r)
-	if err != nil {
+	token := r.Header.Get("Authorization")
+	if !(isValidAdminToken(token) || isValidUserToken(token)) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -575,8 +575,8 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func adminHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := getUserFromRequest(r)
-	if err != nil || user.Role != "admin" {
+	token := r.Header.Get("Authorization")
+	if !isValidAdminToken(token) {
 		http.NotFound(w, r)
 		return
 	}
@@ -585,8 +585,8 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func userHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := getUserFromRequest(r)
-	if err != nil || user.Role != "user" {
+	token := r.Header.Get("Authorization")
+	if !isValidUserToken(token) {
 		http.NotFound(w, r)
 		return
 	}
@@ -595,8 +595,8 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func usersHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := getUserFromRequest(r)
-	if err != nil || user.Role != "admin" {
+	token := r.Header.Get("Authorization")
+	if !isValidAdminToken(token) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -620,8 +620,8 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func addUserHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := getUserFromRequest(r)
-	if err != nil || user.Role != "admin" {
+	token := r.Header.Get("Authorization")
+	if !isValidAdminToken(token) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -669,8 +669,8 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateUserHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := getUserFromRequest(r)
-	if err != nil || user.Role != "admin" {
+	token := r.Header.Get("Authorization")
+	if !isValidAdminToken(token) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -690,7 +690,7 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Old username, new username, and new password are required", http.StatusBadRequest)
 		return
 	}
-	userToUpdate, err := getUserByUsername(req.OldUsername)
+	user, err := getUserByUsername(req.OldUsername)
 	if err != nil {
 		http.Error(w, "User does not exist", http.StatusNotFound)
 		return
@@ -703,7 +703,7 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Update user info.
-	userToUpdate.Username = req.NewUsername
+	user.Username = req.NewUsername
 
 	// ADDED for bcrypt: Hash the updated password.
 	hashedPass, err := hashPassword(req.NewPassword)
@@ -711,14 +711,14 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error hashing password", http.StatusInternalServerError)
 		return
 	}
-	userToUpdate.Password = hashedPass
+	user.Password = hashedPass
 
 	// Remove old record and update with new info.
 	if err := deleteUser(req.OldUsername); err != nil {
 		http.Error(w, "Error updating user", http.StatusInternalServerError)
 		return
 	}
-	if err := createUser(userToUpdate); err != nil {
+	if err := createUser(user); err != nil {
 		http.Error(w, "Error updating user", http.StatusInternalServerError)
 		return
 	}
@@ -735,8 +735,8 @@ func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := getUserFromRequest(r)
-	if err != nil || user.Role != "admin" {
+	token := r.Header.Get("Authorization")
+	if !isValidAdminToken(token) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -769,8 +769,8 @@ func assignAdminHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	user, err := getUserFromRequest(r)
-	if err != nil || user.Role != "admin" {
+	token := r.Header.Get("Authorization")
+	if !isValidAdminToken(token) {
 		http.Error(w, "Forbidden: Only an admin can assign a new admin", http.StatusForbidden)
 		return
 	}
@@ -784,17 +784,17 @@ func assignAdminHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
 		return
 	}
-	userToAssign, err := getUserByUsername(req.Username)
+	user, err := getUserByUsername(req.Username)
 	if err != nil {
 		http.Error(w, "User does not exist", http.StatusNotFound)
 		return
 	}
-	if userToAssign.Role == "admin" {
+	if user.Role == "admin" {
 		http.Error(w, "User is already an admin", http.StatusBadRequest)
 		return
 	}
-	userToAssign.Role = "admin"
-	if err := updateUser(userToAssign); err != nil {
+	user.Role = "admin"
+	if err := updateUser(user); err != nil {
 		http.Error(w, "Error updating user role", http.StatusInternalServerError)
 		return
 	}
