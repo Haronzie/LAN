@@ -10,7 +10,24 @@ import (
 	"strings"
 
 	_ "github.com/lib/pq"
+
+	// ADDED for bcrypt:
+	"golang.org/x/crypto/bcrypt"
 )
+
+// ADDED for bcrypt: Helper functions to hash and compare passwords.
+func hashPassword(password string) (string, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hashed), nil
+}
+
+func checkPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
 
 // User represents a registered user.
 type User struct {
@@ -73,7 +90,6 @@ var db *sql.DB
 
 func main() {
 	// PostgreSQL connection string.
-	// Adjust host, port, user, password, dbname, and sslmode as needed.
 	connStr := "host=localhost port=5432 user=postgres password=haron dbname=Cdrrmo sslmode=disable"
 	var err error
 	db, err = sql.Open("postgres", connStr)
@@ -88,9 +104,8 @@ func main() {
 	}
 	log.Println("Database connected successfully")
 
-	// NOTE: We have removed the createTables() call here, so
-	// your code no longer creates tables or indexes automatically.
-	// Ensure your 'users' and 'files' tables are already in your DB.
+	// Create necessary tables if they don't exist.
+	createTables()
 
 	// Set up HTTP handlers.
 	mux := http.NewServeMux()
@@ -132,6 +147,32 @@ func main() {
 	err = http.ListenAndServeTLS(":443", "server.crt", "server.key", handler)
 	if err != nil {
 		log.Fatal("HTTPS server error:", err)
+	}
+}
+
+// createTables creates the users and files tables if they don't exist.
+func createTables() {
+	userTable := `
+	CREATE TABLE IF NOT EXISTS users (
+		username TEXT PRIMARY KEY,
+		password TEXT NOT NULL,
+		role TEXT NOT NULL
+	);`
+	_, err := db.Exec(userTable)
+	if err != nil {
+		log.Fatal("Error creating users table:", err)
+	}
+
+	fileTable := `
+	CREATE TABLE IF NOT EXISTS files (
+		file_name TEXT PRIMARY KEY,
+		size BIGINT,
+		content_type TEXT,
+		uploader TEXT
+	);`
+	_, err = db.Exec(fileTable)
+	if err != nil {
+		log.Fatal("Error creating files table:", err)
 	}
 }
 
@@ -273,9 +314,17 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Admin already registered. Registration closed.", http.StatusForbidden)
 		return
 	}
+
+	// ADDED for bcrypt: Hash the incoming password before storing.
+	hashedPass, err := hashPassword(req.Password)
+	if err != nil {
+		http.Error(w, "Error hashing password", http.StatusInternalServerError)
+		return
+	}
+
 	newUser := User{
 		Username: req.Username,
-		Password: req.Password,
+		Password: hashedPass, // store hashed password
 		Role:     "admin",
 	}
 	if err := createUser(newUser); err != nil {
@@ -304,10 +353,13 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
 	user, err := getUserByUsername(req.Username)
-	if err != nil || user.Password != req.Password {
+
+	// ADDED for bcrypt: Compare hashed password in DB with incoming password.
+	if err != nil || !checkPasswordHash(req.Password, user.Password) {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
+
 	token := generateToken(req.Username)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(LoginResponse{Token: token})
@@ -338,7 +390,15 @@ func forgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Admin user not found", http.StatusNotFound)
 		return
 	}
-	adminUser.Password = req.NewPassword
+
+	// ADDED for bcrypt: Hash the new admin password before storing.
+	hashedPass, err := hashPassword(req.NewPassword)
+	if err != nil {
+		http.Error(w, "Error hashing password", http.StatusInternalServerError)
+		return
+	}
+	adminUser.Password = hashedPass
+
 	if err := updateUser(adminUser); err != nil {
 		http.Error(w, "Error updating password", http.StatusInternalServerError)
 		return
@@ -549,9 +609,17 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "User already exists", http.StatusBadRequest)
 		return
 	}
+
+	// ADDED for bcrypt: Hash the new user's password before storing.
+	hashedPass, err := hashPassword(req.Password)
+	if err != nil {
+		http.Error(w, "Error hashing password", http.StatusInternalServerError)
+		return
+	}
+
 	newUser := User{
 		Username: req.Username,
-		Password: req.Password,
+		Password: hashedPass, // store hashed password
 		Role:     "user",
 	}
 	if err := createUser(newUser); err != nil {
@@ -600,7 +668,15 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Update user info.
 	user.Username = req.NewUsername
-	user.Password = req.NewPassword
+
+	// ADDED for bcrypt: Hash the updated password.
+	hashedPass, err := hashPassword(req.NewPassword)
+	if err != nil {
+		http.Error(w, "Error hashing password", http.StatusInternalServerError)
+		return
+	}
+	user.Password = hashedPass
+
 	// Remove old record and update with new info.
 	if err := deleteUser(req.OldUsername); err != nil {
 		http.Error(w, "Error updating user", http.StatusInternalServerError)
