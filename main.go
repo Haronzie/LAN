@@ -816,3 +816,5 @@ func enableCORS(h http.Handler) http.Handler {
 		h.ServeHTTP(w, r)
 	})
 }
+
+//added session based authentication
