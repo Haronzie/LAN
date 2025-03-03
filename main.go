@@ -26,6 +26,29 @@ func hashPassword(password string) (string, error) {
 	}
 	return string(hashed), nil
 }
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+	// Retrieve the session named "session"
+	session, err := store.Get(r, "session")
+	if err != nil {
+		http.Error(w, "Error retrieving session", http.StatusInternalServerError)
+		return
+	}
+	// Invalidate the session
+	session.Options.MaxAge = -1
+	if err := session.Save(r, w); err != nil {
+		http.Error(w, "Error saving session", http.StatusInternalServerError)
+		return
+	}
+	// Respond with a success message
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Logout successful",
+	})
+}
 
 func checkPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
@@ -110,6 +133,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/register", registerHandler)
 	mux.HandleFunc("/login", loginHandler)
+	mux.HandleFunc("/logout", logoutHandler)
 	mux.HandleFunc("/forgot-password", forgotPasswordHandler)
 	mux.HandleFunc("/upload", uploadHandler)
 	mux.HandleFunc("/delete-file", deleteFileHandler)
