@@ -1,0 +1,717 @@
+openapi: 3.0.3
+info:
+  title: Cdrrmo API
+  description: >
+    The Cdrrmo API supports user registration, login, file management, and administrative operations.
+    It uses session cookie-based authentication and role-based access (admin vs. user).
+  version: "1.0.0"
+
+servers:
+  - url: https://localhost
+    description: Secure local server (HTTPS on port 443)
+
+tags:
+  - name: Authentication
+    description: Endpoints for registering, logging in, and logging out users.
+  - name: Password Management
+    description: Endpoints for resetting the admin password.
+  - name: File Management
+    description: Endpoints for uploading, downloading, listing, and deleting files.
+  - name: User Administration
+    description: Endpoints for managing users (adding, updating, deleting, promoting).
+  - name: Role-Based Access
+    description: Endpoints restricted by user roles (admin vs. user).
+
+paths:
+  /register:
+    post:
+      tags:
+        - Authentication
+      operationId: registerAdmin
+      summary: Register a new admin user
+      description: >
+        Registers a new admin if no admin exists; further registration is forbidden if an admin is already registered.
+      x-public: true
+      requestBody:
+        description: Registration details for a new admin.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Admin registered successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Admin 'adminUser' registered successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X POST https://localhost/register \
+              -H "Content-Type: application/json" \
+              -d '{"username": "adminUser", "password": "adminPass"}'
+
+  /login:
+    post:
+      tags:
+        - Authentication
+      operationId: loginUser
+      summary: Login a user
+      description: >
+        Authenticates a user with username and password and sets a session cookie upon success.
+      x-public: true
+      requestBody:
+        description: Login credentials.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Login successful"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Unauthorized – invalid username or password.
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X POST https://localhost/login \
+              -H "Content-Type: application/json" \
+              -d '{"username": "adminUser", "password": "adminPass"}'
+
+  /logout:
+    post:
+      tags:
+        - Authentication
+      operationId: logoutUser
+      summary: Logout current user
+      description: >
+        Logs out the current user by invalidating the session cookie.
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: Logout successful.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Logout successful"
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X POST https://localhost/logout \
+              -H "Cookie: session=your_session_cookie"
+
+  /admin-status:
+    get:
+      tags:
+        - User Administration
+      operationId: adminStatus
+      summary: Check if any admin exists
+      description: >
+        Returns a boolean indicating whether at least one admin account is present.
+      x-public: true
+      responses:
+        '200':
+          description: Boolean admin existence check.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  adminExists:
+                    type: boolean
+                    example: true
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X GET https://localhost/admin-status
+
+  /forgot-password:
+    post:
+      tags:
+        - Password Management
+      operationId: forgotPassword
+      summary: Reset admin password
+      description: >
+        Allows a logged-in admin to reset their password.
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200':
+          description: Password reset successful.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Admin password has been reset successfully."
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X POST https://localhost/forgot-password \
+              -H "Content-Type: application/json" \
+              -H "Cookie: session=your_session_cookie" \
+              -d '{"new_password": "newAdminPass"}'
+
+  /upload:
+    post:
+      tags:
+        - File Management
+      operationId: uploadFile
+      summary: Upload a file
+      description: >
+        Requires an authenticated session. Uploads a file via multipart form-data.
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: File uploaded successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "File 'example.txt' uploaded successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X POST https://localhost/upload \
+              -H "Cookie: session=your_session_cookie" \
+              -F "file=@/path/to/example.txt"
+
+  /delete-file:
+    delete:
+      tags:
+        - File Management
+      operationId: deleteFile
+      summary: Delete a file
+      description: >
+        Requires an authenticated session. Only admin or the file uploader can delete the file.
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteFileRequest'
+      responses:
+        '200':
+          description: File deleted successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "File 'example.txt' has been deleted successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: File not found.
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X DELETE https://localhost/delete-file \
+              -H "Content-Type: application/json" \
+              -H "Cookie: session=your_session_cookie" \
+              -d '{"file_name": "example.txt"}'
+
+  /files:
+    get:
+      tags:
+        - File Management
+      operationId: listFiles
+      summary: Retrieve all file records
+      description: >
+        Returns a list of all file records. Requires an authenticated session.
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: A list of file records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FileRecord'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X GET https://localhost/files \
+              -H "Cookie: session=your_session_cookie"
+
+  /download:
+    get:
+      tags:
+        - File Management
+      operationId: downloadFile
+      summary: Download a file
+      description: >
+        Requires an authenticated session. Initiates a download of the specified file.
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "example.txt"
+      responses:
+        '200':
+          description: File download initiated (dummy content).
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                example: "This is dummy content for file example.txt"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: File not found.
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X GET "https://localhost/download?filename=example.txt" \
+              -H "Cookie: session=your_session_cookie"
+
+  /admin:
+    get:
+      tags:
+        - Role-Based Access
+      operationId: adminEndpoint
+      summary: Admin-only endpoint
+      description: >
+        Returns a welcome message if the user is an admin.
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: Admin access granted.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Welcome admin"
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X GET https://localhost/admin \
+              -H "Cookie: session=your_session_cookie"
+
+  /user:
+    get:
+      tags:
+        - Role-Based Access
+      operationId: userEndpoint
+      summary: User-only endpoint
+      description: >
+        Returns a welcome message if the user is a standard user.
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: User access granted.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Welcome user"
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X GET https://localhost/user \
+              -H "Cookie: session=your_session_cookie"
+
+  /users:
+    get:
+      tags:
+        - User Administration
+      operationId: listUsers
+      summary: Retrieve all usernames (admin-only)
+      description: >
+        Returns a list of all usernames. Requires admin authentication.
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: List of usernames.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  example: "adminUser"
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X GET https://localhost/users \
+              -H "Cookie: session=your_session_cookie"
+
+  /add-user:
+    post:
+      tags:
+        - User Administration
+      operationId: addUser
+      summary: Add a new user (admin-only)
+      description: >
+        Allows an admin to add a new standard user.
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddUserRequest'
+      responses:
+        '200':
+          description: User added successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User 'newUser' has been added successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X POST https://localhost/add-user \
+              -H "Content-Type: application/json" \
+              -H "Cookie: session=your_session_cookie" \
+              -d '{"username": "newUser", "password": "userPass"}'
+
+  /update-user:
+    put:
+      tags:
+        - User Administration
+      operationId: updateUser
+      summary: Update an existing user (admin-only)
+      description: >
+        Updates the username and/or password for a user.
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User 'oldUser' has been updated to 'newUser' with new password"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: User not found.
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X PUT https://localhost/update-user \
+              -H "Content-Type: application/json" \
+              -H "Cookie: session=your_session_cookie" \
+              -d '{"old_username": "oldUser", "new_username": "newUser", "new_password": "newUserPass"}'
+
+  /delete-user:
+    delete:
+      tags:
+        - User Administration
+      operationId: deleteUser
+      summary: Delete a user (admin-only)
+      description: >
+        Deletes a user from the system.
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteUserRequest'
+      responses:
+        '200':
+          description: User deleted successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User 'userToDelete' has been deleted successfully"
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: User not found.
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X DELETE https://localhost/delete-user \
+              -H "Content-Type: application/json" \
+              -H "Cookie: session=your_session_cookie" \
+              -d '{"username": "userToDelete"}'
+
+  /assign-admin:
+    post:
+      tags:
+        - User Administration
+      operationId: assignAdmin
+      summary: Assign admin role to a user (admin-only)
+      description: >
+        Promotes an existing user to admin.
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignAdminRequest'
+      responses:
+        '200':
+          description: User assigned as admin successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User 'userToPromote' is now an admin"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: User not found.
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl -X POST https://localhost/assign-admin \
+              -H "Content-Type: application/json" \
+              -H "Cookie: session=your_session_cookie" \
+              -d '{"username": "userToPromote"}'
+
+components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: >
+        Cookie-based session authentication. A "session" cookie is set upon successful login.
+  responses:
+    BadRequest:
+      description: Bad request.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                example: "Invalid request body or missing required fields"
+    Forbidden:
+      description: Forbidden – the user does not have permission to access this endpoint.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                example: "Forbidden: Only admin can access this endpoint"
+  schemas:
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          example: "adminUser"
+        password:
+          type: string
+          example: "adminPass"
+      required:
+        - username
+        - password
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          example: "adminUser"
+        password:
+          type: string
+          example: "adminPass"
+      required:
+        - username
+        - password
+
+    ForgotPasswordRequest:
+      type: object
+      properties:
+        new_password:
+          type: string
+          example: "newAdminPass"
+      required:
+        - new_password
+
+    DeleteFileRequest:
+      type: object
+      properties:
+        file_name:
+          type: string
+          example: "example.txt"
+      required:
+        - file_name
+
+    AddUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          example: "newUser"
+        password:
+          type: string
+          example: "userPass"
+      required:
+        - username
+        - password
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        old_username:
+          type: string
+          example: "oldUser"
+        new_username:
+          type: string
+          example: "newUser"
+        new_password:
+          type: string
+          example: "newUserPass"
+      required:
+        - old_username
+        - new_username
+        - new_password
+
+    DeleteUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          example: "userToDelete"
+      required:
+        - username
+
+    AssignAdminRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          example: "userToPromote"
+      required:
+        - username
+
+    FileRecord:
+      type: object
+      properties:
+        file_name:
+          type: string
+          example: "example.txt"
+        size:
+          type: integer
+          format: int64
+          example: 1024
+        content_type:
+          type: string
+          example: "text/plain"
+        uploader:
+          type: string
+          example: "adminUser"
