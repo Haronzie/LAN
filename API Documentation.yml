@@ -30,7 +30,7 @@ paths:
       operationId: registerAdmin
       summary: Register a new admin user
       description: >
-        Registers a new admin if no admin exists; further registration is forbidden if an admin is already registered.
+        Registers a new admin if no admin exists; if an admin is already registered, registration is closed.
       x-public: true
       requestBody:
         description: Registration details for a new admin.
@@ -53,7 +53,15 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Forbidden – Admin already registered. Registration closed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Admin already registered. Registration closed."
       x-codeSamples:
         - lang: cURL
           source: |
@@ -92,6 +100,14 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           description: Unauthorized – invalid username or password.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Invalid username or password"
       x-codeSamples:
         - lang: cURL
           source: |
@@ -177,11 +193,19 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: "Admin password has been reset successfully."
+                    example: "Admin password has been reset successfully. Please login with your new password."
         '400':
           $ref: '#/components/responses/BadRequest'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Forbidden – Only admin can use forgot password.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Forbidden: Only admin can use forgot password"
       x-codeSamples:
         - lang: cURL
           source: |
@@ -198,6 +222,7 @@ paths:
       summary: Upload a file
       description: >
         Requires an authenticated session. Uploads a file via multipart form-data.
+        Accessible to both admin and standard users.
       security:
         - SessionCookie: []
       requestBody:
@@ -223,8 +248,16 @@ paths:
                     example: "File 'example.txt' uploaded successfully"
         '400':
           $ref: '#/components/responses/BadRequest'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+        '401':
+          description: Unauthorized – session not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Unauthorized"
       x-codeSamples:
         - lang: cURL
           source: |
@@ -262,7 +295,15 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Forbidden – You can only delete files you uploaded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Forbidden: You can only delete files you uploaded"
         '404':
           description: File not found.
       x-codeSamples:
