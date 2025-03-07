@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/gorilla/sessions"
@@ -297,7 +298,11 @@ func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
 	req.Password = strings.TrimSpace(req.Password)
 	user, err := a.getUserByUsername(req.Username)
 	if err != nil || !checkPasswordHash(req.Password, user.Password) {
-		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Invalid username or password",
+		})
 		return
 	}
 
@@ -781,27 +786,41 @@ func main() {
 	mux.HandleFunc("/assign-admin", app.assignAdminHandler)
 	mux.HandleFunc("/admin-status", app.adminStatusHandler)
 
+	staticPath, err := filepath.Abs("static")
+	if err != nil {
+		log.Fatal("Error finding static directory:", err)
+	}
+	fs := http.FileServer(http.Dir(staticPath))
+	mux.Handle("/", fs)
+	imagesFS := http.FileServer(http.Dir("images"))
+	mux.Handle("/images/", http.StripPrefix("/images/", imagesFS))
+
 	handler := enableCORS(mux)
 
 	// Start HTTP redirect server on port 80.
-	go func() {
-		httpServer := &http.Server{
-			Addr: ":80",
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				target := "https://" + r.Host + r.RequestURI
-				http.Redirect(w, r, target, http.StatusMovedPermanently)
-			}),
-		}
-		log.Println("Starting HTTP redirect server on port 80...")
-		if err := httpServer.ListenAndServe(); err != nil {
-			log.Fatal("HTTP redirect server error:", err)
-		}
-	}()
+	// go func() {
+	// 	httpServer := &http.Server{
+	// 		Addr: ":80",
+	// 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// 			target := "https://" + r.Host + r.RequestURI
+	// 			http.Redirect(w, r, target, http.StatusMovedPermanently)
+	// 		}),
+	// 	}
+	// 	log.Println("Starting HTTP redirect server on port 80...")
+	// 	if err := httpServer.ListenAndServe(); err != nil {
+	// 		log.Fatal("HTTP redirect server error:", err)
+	// 	}
+	// }()
 
-	// Start HTTPS server.
-	log.Println("Starting HTTPS server on port 443...")
-	err = http.ListenAndServeTLS(":443", "server.crt", "server.key", handler)
+	// // Start HTTPS server.
+	// log.Println("Starting HTTPS server on port 443...")
+	// err = http.ListenAndServeTLS(":443", "server.crt", "server.key", handler)
+	// if err != nil {
+	// 	log.Fatal("HTTPS server error:", err)
+	// }
+	log.Println("Starting HTTP server on port 8080...")
+	err = http.ListenAndServe(":8080", handler)
 	if err != nil {
-		log.Fatal("HTTPS server error:", err)
+		log.Fatal("HTTP server error:", err)
 	}
 }
