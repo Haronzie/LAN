@@ -450,7 +450,7 @@ func (a *App) deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user.Role != "admin" && fr.Uploader != user.Username {
-		http.Error(w, "Forbidden: You can only delete g you uploaded", http.StatusForbidden)
+		http.Error(w, "Forbidden: You can only delete files  you uploaded", http.StatusForbidden)
 		return
 	}
 	if err := a.deleteFileRecord(req.FileName); err != nil {
