@@ -539,20 +539,24 @@ func (a *App) usersHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	rows, err := a.DB.Query("SELECT username FROM users")
+	rows, err := a.DB.Query("SELECT username, role FROM users")
 	if err != nil {
 		http.Error(w, "Error retrieving users", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-	var userList []string
+	type UserWithRole struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+	}
+	var userList []UserWithRole
 	for rows.Next() {
-		var username string
-		if err := rows.Scan(&username); err != nil {
+		var u UserWithRole
+		if err := rows.Scan(&u.Username, &u.Role); err != nil {
 			http.Error(w, "Error scanning user", http.StatusInternalServerError)
 			return
 		}
-		userList = append(userList, username)
+		userList = append(userList, u)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(userList)

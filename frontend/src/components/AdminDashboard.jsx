@@ -148,10 +148,27 @@ const AdminDashboard = () => {
     e.preventDefault();
     setError('');
     setMessage('');
+  
+    // Prevent deleting the current admin account.
     if (deleteUsername.trim().toLowerCase() === currentUser.trim().toLowerCase()) {
       setError("Cannot delete your own admin account. Please assign another admin before deleting your account.");
       return;
     }
+  
+    // Check if the user exists in the fetched user list.
+    const userExists = users.some((u) => {
+      // Handle if users are returned as objects (with username property) or strings.
+      if (typeof u === 'object' && u.username) {
+        return u.username.toLowerCase() === deleteUsername.trim().toLowerCase();
+      }
+      return u.toLowerCase() === deleteUsername.trim().toLowerCase();
+    });
+    if (!userExists) {
+      setError("User does not exist.");
+      return;
+    }
+  
+    // Proceed with deletion if the user exists.
     try {
       const response = await fetch('/delete-user', {
         method: 'DELETE',
@@ -170,7 +187,7 @@ const AdminDashboard = () => {
       setError(err.message);
     }
   };
-
+  
   // Assign Admin handler
   const handleAssignAdmin = async (e) => {
     e.preventDefault();
@@ -338,7 +355,11 @@ const AdminDashboard = () => {
           ) : (
             <ul>
               {users.map((user, index) => (
-                <li key={index}>{user}</li>
+                <li key={index}>
+                  {typeof user === 'object'
+                  ? `${user.username} (${user.role})`
+                  : user}
+                  </li>
               ))}
             </ul>
           )}
