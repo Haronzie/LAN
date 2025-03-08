@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect,useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Spinner from './Spinner'; // Make sure Spinner.jsx and Spinner.css exist in your project
 
@@ -45,7 +45,7 @@ const AdminDashboard = () => {
   }, []);
 
   // Fetch users from the back-end
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await fetch('/users');
@@ -58,10 +58,10 @@ const AdminDashboard = () => {
       setError(err.message);
     }
     setIsLoading(false);
-  };
+  }, []);
 
   // Fetch files from the back-end
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await fetch('/files');
@@ -74,7 +74,8 @@ const AdminDashboard = () => {
       setError(err.message);
     }
     setIsLoading(false);
-  };
+  }, []);
+
 
   // Refresh data on tab change
   useEffect(() => {
@@ -86,7 +87,7 @@ const AdminDashboard = () => {
     if (activeTab === 'files') {
       fetchFiles();
     }
-  }, [activeTab]);
+  }, [activeTab,fetchUsers,fetchFiles]);
 
   // Add User handler
   const handleAddUser = async (e) => {
