@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('users'); // default tab is "View Users"
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [files, setFiles] = useState([]);
   const [message, setMessage] = useState('');
@@ -21,6 +24,27 @@ const AdminDashboard = () => {
 
   // State for "Assign Admin"
   const [assignUsername, setAssignUsername] = useState('');
+
+  // State for file upload
+  const [uploadFile, setUploadFile] = useState(null);
+
+  // NEW: Current logged in user and role
+  const [currentUser, setCurrentUser] = useState('');
+  const [currentRole, setCurrentRole] = useState('');
+
+  // Get username and role from localStorage (the key "loggedInUser" must match your Login.jsx)
+  useEffect(() => {
+    const storedUser = localStorage.getItem('loggedInUser');
+    if (storedUser) {
+      const userObj = JSON.parse(storedUser);
+      if (userObj && userObj.username) {
+        setCurrentUser(userObj.username);
+      }
+      if (userObj && userObj.role) {
+        setCurrentRole(userObj.role);
+      }
+    }
+  }, []);
 
   // Fetch users from the back-end
   const fetchUsers = async () => {
@@ -44,13 +68,13 @@ const AdminDashboard = () => {
         throw new Error('Failed to fetch files');
       }
       const data = await response.json();
-      setFiles(data);
+      setFiles(data || []); // Default to empty array if no files
     } catch (err) {
       setError(err.message);
     }
   };
 
-  // When the active tab changes, refresh data if needed
+  // Refresh data on tab change
   useEffect(() => {
     setError('');
     setMessage('');
@@ -117,11 +141,16 @@ const AdminDashboard = () => {
     }
   };
 
-  // Delete User handler
+  // Delete User handler with self-deletion check
   const handleDeleteUser = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
+    // Prevent admin from deleting their own account.
+    if (deleteUsername.trim().toLowerCase() === currentUser.trim().toLowerCase()) {
+      setError("Cannot delete your own admin account. Please assign another admin before deleting your account.");
+      return;
+    }
     try {
       const response = await fetch('/delete-user', {
         method: 'DELETE',
@@ -165,6 +194,105 @@ const AdminDashboard = () => {
     }
   };
 
+  // Upload File handler
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    if (!uploadFile) {
+      setError('Please select a file to upload.');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', uploadFile);
+    try {
+      const response = await fetch('/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || 'Failed to upload file');
+      }
+      const data = await response.json();
+      setMessage(data.message);
+      setUploadFile(null);
+      fetchFiles();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // Refactored Delete File handler: Admin can delete any file regardless of uploader.
+  const handleDeleteFile = async (file) => {
+    setError('');
+    setMessage('');
+
+    // If user is admin, allow deletion regardless of uploader.
+    // Otherwise, only allow deletion if the current user is the uploader.
+    if (currentRole === 'admin' || currentUser.trim() === file.uploader.trim()) {
+      // Allowed to delete
+    } else {
+      setError('You are not allowed to delete this file.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/delete-file', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: file.file_name }),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || 'Failed to delete file');
+      }
+      const data = await response.json();
+      setMessage(data.message);
+      fetchFiles();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // Download File handler
+  const handleDownload = (file) => {
+    setError('');
+    setMessage('');
+    try {
+      const downloadUrl = `/download?filename=${encodeURIComponent(file.file_name)}`;
+      // Create a temporary link element and trigger the download
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = file.file_name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // Logout handler
+  const handleLogout = async () => {
+    setError('');
+    setMessage('');
+    try {
+      const response = await fetch('/logout', {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || 'Failed to logout');
+      }
+      const data = await response.json();
+      setMessage(data.message);
+      navigate('/login');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div style={{ padding: '1rem' }}>
       <h2>Admin Dashboard</h2>
@@ -175,6 +303,8 @@ const AdminDashboard = () => {
         <button onClick={() => setActiveTab('deleteUser')}>Delete User</button>
         <button onClick={() => setActiveTab('assignAdmin')}>Assign Admin</button>
         <button onClick={() => setActiveTab('files')}>View Files</button>
+        <button onClick={() => setActiveTab('uploadFile')}>Upload File</button>
+        <button onClick={handleLogout}>Logout</button>
       </nav>
       {error && <p style={{ color: 'red' }}>{error}</p>}
       {message && <p style={{ color: 'green' }}>{message}</p>}
@@ -293,13 +423,34 @@ const AdminDashboard = () => {
             <p>No files found.</p>
           ) : (
             <ul>
-              {files.map((file, index) => (
-                <li key={index}>
-                  {file.file_name} - {file.size} bytes - Uploaded by: {file.uploader}
-                </li>
-              ))}
+              {files.map((file, index) => {
+                console.log('currentUser:', currentUser, 'currentRole:', currentRole, 'file.uploader:', file.uploader);
+                return (
+                  <li key={index}>
+                    {file.file_name} - {file.size} bytes - Uploaded by: {file.uploader}{' '}
+                    <button onClick={() => handleDownload(file)}>Download</button>
+                    <button onClick={() => handleDeleteFile(file)}>Delete</button>
+                  </li>
+                );
+              })}
             </ul>
           )}
+        </div>
+      )}
+
+      {activeTab === 'uploadFile' && (
+        <div>
+          <h3>Upload File</h3>
+          <form onSubmit={handleUpload}>
+            <div>
+              <label>Select File: </label>
+              <input
+                type="file"
+                onChange={(e) => setUploadFile(e.target.files[0])}
+              />
+            </div>
+            <button type="submit">Upload</button>
+          </form>
         </div>
       )}
     </div>

@@ -1,10 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 const Register = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [isRegistrationClosed, setIsRegistrationClosed] = useState(false);
+
+  const navigate = useNavigate(); // Create the navigate instance
+
+  // Check if an admin is already registered on mount
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      try {
+        const response = await fetch('/admin-status');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.adminExists) {
+            setIsRegistrationClosed(true);
+          } else {
+            setIsRegistrationClosed(false);
+          }
+        } else {
+          console.error('Failed to check admin status');
+        }
+      } catch (err) {
+        console.error('Error checking admin status:', err);
+      }
+    };
+
+    checkAdminStatus();
+  }, []);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -19,9 +46,7 @@ const Register = () => {
     try {
       const response = await fetch('/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
 
@@ -33,11 +58,22 @@ const Register = () => {
         setMessage(data.message);
         setUsername('');
         setPassword('');
+        // Redirect to Login after a successful registration
+        navigate('/login');
       }
     } catch (err) {
       setError(`An error occurred: ${err.message}`);
     }
   };
+
+  if (isRegistrationClosed) {
+    return (
+      <div style={{ maxWidth: '400px', margin: 'auto' }}>
+        <h2>Register</h2>
+        <p style={{ color: 'red' }}>Admin already registered. Registration is closed.</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '400px', margin: 'auto' }}>

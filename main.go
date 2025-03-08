@@ -199,7 +199,7 @@ func (a *App) getAllFiles() ([]FileRecord, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var files []FileRecord
+	files := []FileRecord{} // Initialized as an empty slice.
 	for rows.Next() {
 		var fr FileRecord
 		if err := rows.Scan(&fr.FileName, &fr.Size, &fr.ContentType, &fr.Uploader); err != nil {
@@ -319,7 +319,9 @@ func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Login successful",
+		"message":  "Login successful",
+		"username": user.Username,
+		"role":     user.Role,
 	})
 }
 
@@ -448,7 +450,7 @@ func (a *App) deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user.Role != "admin" && fr.Uploader != user.Username {
-		http.Error(w, "Forbidden: You can only delete files you uploaded", http.StatusForbidden)
+		http.Error(w, "Forbidden: You can only delete files  you uploaded", http.StatusForbidden)
 		return
 	}
 	if err := a.deleteFileRecord(req.FileName); err != nil {
