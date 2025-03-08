@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Spinner from './Spinner'; // Import your Spinner component
 
@@ -7,16 +7,15 @@ const UserDashboard = () => {
 
   // Tabs: "files" or "upload"
   const [activeTab, setActiveTab] = useState('files');
-
   const [files, setFiles] = useState([]);
   const [uploadFile, setUploadFile] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   
-  // New: Loading state
+  // Loading state
   const [isLoading, setIsLoading] = useState(false);
-
-  // NEW: Retrieve logged-in user from localStorage
+  
+  // Retrieve logged-in user from localStorage
   const [loggedInUser, setLoggedInUser] = useState(null);
 
   useEffect(() => {
@@ -26,8 +25,12 @@ const UserDashboard = () => {
     }
   }, []);
 
-  // Fetch files from the back-end
-  const fetchFiles = async () => {
+  // Wrap fetchFiles in useCallback so it becomes a stable dependency.
+  const fetchFiles = useCallback(async () => {
+    if (!loggedInUser) {
+      setError('You must be logged in to view files.');
+      return;
+    }
     setIsLoading(true);
     try {
       const response = await fetch('/files');
@@ -40,18 +43,25 @@ const UserDashboard = () => {
       setError(err.message);
     }
     setIsLoading(false);
-  };
+  }, [loggedInUser]);
 
-  // Fetch files on component mount
+  // Fetch files on component mount and whenever fetchFiles changes
   useEffect(() => {
-    fetchFiles();
-  }, []);
+    if (loggedInUser) { 
+      fetchFiles();
+    }
+  }, [loggedInUser, fetchFiles]);
 
-  // Handle file upload
+  // Handle file upload (with login check)
   const handleUpload = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
+
+    if (!loggedInUser) {
+      setError('You must be logged in to upload a file.');
+      return;
+    }
 
     if (!uploadFile) {
       setError('Please select a file to upload.');
@@ -90,7 +100,7 @@ const UserDashboard = () => {
       }
       const data = await response.json();
       setMessage(data.message);
-      // Redirect to login
+      // Redirect to login page
       navigate('/login');
     } catch (err) {
       setError(err.message);
@@ -122,10 +132,14 @@ const UserDashboard = () => {
     }
   };
 
-  // Handle file deletion
+  // Handle file deletion (with login check)
   const handleDelete = async (fileName) => {
     setError('');
     setMessage('');
+    if (!loggedInUser) {
+      setError('You must be logged in to delete a file.');
+      return;
+    }
     try {
       const response = await fetch('/delete-file', {
         method: 'DELETE',
@@ -150,7 +164,7 @@ const UserDashboard = () => {
       <button onClick={handleLogout}>Logout</button>
 
       {/* Navigation for tabs */}
-      <nav style={{ marginBottom: '1rem', marginTop: '1rem' }}>
+      <nav style={{ margin: '1rem 0' }}>
         <button onClick={() => setActiveTab('files')}>View Files</button>
         <button onClick={() => setActiveTab('upload')}>Upload File</button>
       </nav>
@@ -159,7 +173,7 @@ const UserDashboard = () => {
       {error && <p style={{ color: 'red' }}>{error}</p>}
       {message && <p style={{ color: 'green' }}>{message}</p>}
 
-      {/* Conditionally render based on active tab */}
+      {/* Render content based on active tab */}
       {activeTab === 'files' && (
         <div>
           <h3>Files</h3>
@@ -169,18 +183,15 @@ const UserDashboard = () => {
             <p>No files found.</p>
           ) : (
             <ul>
-              {files.map((file, index) => {
-                console.log('loggedInUser:', loggedInUser, 'file.uploader:', file.uploader);
-                return (
-                  <li key={index}>
-                    {file.file_name} - {file.size} bytes - Uploaded by: {file.uploader}{' '}
-                    <button onClick={() => handleDownload(file.file_name)}>Download</button>
-                    {loggedInUser && loggedInUser.username === file.uploader && (
-                      <button onClick={() => handleDelete(file.file_name)}>Delete</button>
-                    )}
-                  </li>
-                );
-              })}
+              {files.map((file, index) => (
+                <li key={index}>
+                  {file.file_name} - {file.size} bytes - Uploaded by: {file.uploader}{' '}
+                  <button onClick={() => handleDownload(file.file_name)}>Download</button>
+                  {loggedInUser && loggedInUser.username === file.uploader && (
+                    <button onClick={() => handleDelete(file.file_name)}>Delete</button>
+                  )}
+                </li>
+              ))}
             </ul>
           )}
         </div>
