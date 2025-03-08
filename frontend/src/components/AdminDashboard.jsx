@@ -30,20 +30,16 @@ const AdminDashboard = () => {
   // State for file upload
   const [uploadFile, setUploadFile] = useState(null);
 
-  // NEW: Current logged in user and role
+  // Current logged in user
   const [currentUser, setCurrentUser] = useState('');
-  const [currentRole, setCurrentRole] = useState('');
 
-  // Get username and role from localStorage
+  // Get username from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser) {
       const userObj = JSON.parse(storedUser);
       if (userObj && userObj.username) {
         setCurrentUser(userObj.username);
-      }
-      if (userObj && userObj.role) {
-        setCurrentRole(userObj.role);
       }
     }
   }, []);
@@ -232,9 +228,8 @@ const AdminDashboard = () => {
   const handleDeleteFile = async (file) => {
     setError('');
     setMessage('');
-    if (currentRole === 'admin' || currentUser.trim() === file.uploader.trim()) {
-      // Allowed to delete
-    } else {
+    // Only show the delete button if the current user is the uploader
+    if (currentUser.trim() !== file.uploader.trim()) {
       setError('You are not allowed to delete this file.');
       return;
     }
@@ -339,7 +334,9 @@ const AdminDashboard = () => {
                 <li key={index}>
                   {file.file_name} - {file.size} bytes - Uploaded by: {file.uploader}{' '}
                   <button onClick={() => handleDownload(file)}>Download</button>
-                  <button onClick={() => handleDeleteFile(file)}>Delete</button>
+                  {currentUser.trim() === file.uploader.trim() && (
+                    <button onClick={() => handleDeleteFile(file)}>Delete</button>
+                  )}
                 </li>
               ))}
             </ul>
