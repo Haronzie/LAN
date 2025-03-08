@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Spinner from './Spinner'; // Import your Spinner component
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -11,6 +12,9 @@ const UserDashboard = () => {
   const [uploadFile, setUploadFile] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  
+  // New: Loading state
+  const [isLoading, setIsLoading] = useState(false);
 
   // NEW: Retrieve logged-in user from localStorage
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -24,6 +28,7 @@ const UserDashboard = () => {
 
   // Fetch files from the back-end
   const fetchFiles = async () => {
+    setIsLoading(true);
     try {
       const response = await fetch('/files');
       if (!response.ok) {
@@ -34,6 +39,7 @@ const UserDashboard = () => {
     } catch (err) {
       setError(err.message);
     }
+    setIsLoading(false);
   };
 
   // Fetch files on component mount
@@ -157,7 +163,9 @@ const UserDashboard = () => {
       {activeTab === 'files' && (
         <div>
           <h3>Files</h3>
-          {files.length === 0 ? (
+          {isLoading ? (
+            <Spinner />  // Spinner displayed when loading
+          ) : files.length === 0 ? (
             <p>No files found.</p>
           ) : (
             <ul>
