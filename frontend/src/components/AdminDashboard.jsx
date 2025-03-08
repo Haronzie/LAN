@@ -1,4 +1,4 @@
-import React, { useState, useEffect,useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Spinner from './Spinner'; // Make sure Spinner.jsx and Spinner.css exist in your project
 
@@ -76,7 +76,6 @@ const AdminDashboard = () => {
     setIsLoading(false);
   }, []);
 
-
   // Refresh data on tab change
   useEffect(() => {
     setError('');
@@ -87,7 +86,7 @@ const AdminDashboard = () => {
     if (activeTab === 'files') {
       fetchFiles();
     }
-  }, [activeTab,fetchUsers,fetchFiles]);
+  }, [activeTab, fetchUsers, fetchFiles]);
 
   // Add User handler
   const handleAddUser = async (e) => {
@@ -289,6 +288,29 @@ const AdminDashboard = () => {
     }
   };
 
+  // Forgot Password handler
+  const handleForgotPassword = async () => {
+    const newPassword = window.prompt("Enter your new password:");
+    if (!newPassword) return;
+    setError('');
+    setMessage('');
+    try {
+      const response = await fetch('/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: newPassword }),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || 'Failed to reset password');
+      }
+      const data = await response.json();
+      setMessage(data.message);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div style={{ padding: '1rem' }}>
       <h2>Admin Dashboard</h2>
@@ -301,6 +323,7 @@ const AdminDashboard = () => {
         <button onClick={() => setActiveTab('files')}>View Files</button>
         <button onClick={() => setActiveTab('uploadFile')}>Upload File</button>
         <button onClick={handleLogout}>Logout</button>
+        <button onClick={handleForgotPassword}>Forgot Password</button>
       </nav>
       {error && <p style={{ color: 'red' }}>{error}</p>}
       {message && <p style={{ color: 'green' }}>{message}</p>}
