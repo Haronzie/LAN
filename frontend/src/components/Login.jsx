@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import FocusableInput from './FocusableInput';
+import ClickableButton from './ClickableButton';
 
 const Login = () => {
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -19,22 +23,28 @@ const Login = () => {
     try {
       const response = await fetch('/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
 
       if (!response.ok) {
-        // Try to parse and display error message from the server
-        const errorText = await response.text();
-        setError(errorText || 'Login failed.');
+        setError('Invalid username or password.');
       } else {
         const data = await response.json();
         setMessage(data.message);
-        // Optionally clear input fields after a successful login
         setUsername('');
         setPassword('');
+
+        // Store username and role in localStorage
+        localStorage.setItem('loggedInUser', JSON.stringify({ username: data.username, role: data.role }));
+
+
+        // Redirect based on role
+        if (data.role === 'admin') {
+          navigate('/admin-dashboard');
+        } else {
+          navigate('/user-dashboard');
+        }
       }
     } catch (err) {
       setError(`An error occurred: ${err.message}`);
@@ -48,12 +58,11 @@ const Login = () => {
         <div style={{ marginBottom: '1rem' }}>
           <label htmlFor="username">Username:</label>
           <br />
-          <input
-            type="text"
+          <FocusableInput
             id="username"
+            placeholder="Enter your username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            style={{ width: '100%' }}
           />
         </div>
         <div style={{ marginBottom: '1rem' }}>
@@ -64,10 +73,13 @@ const Login = () => {
             id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%' }}
+            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
           />
         </div>
-        <button type="submit">Login</button>
+        {/* Use ClickableButton as a submit button */}
+        <ClickableButton type="submit" ariaLabel="Login">
+          Login
+        </ClickableButton>
       </form>
       {error && <p style={{ color: 'red', marginTop: '1rem' }}>{error}</p>}
       {message && <p style={{ color: 'green', marginTop: '1rem' }}>{message}</p>}
