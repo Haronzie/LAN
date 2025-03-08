@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Spinner from './Spinner'; // Make sure Spinner.jsx and Spinner.css exist in your project
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ const AdminDashboard = () => {
   const [files, setFiles] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false); // Loading state
 
   // States for "Add User"
   const [newUsername, setNewUsername] = useState('');
@@ -32,7 +34,7 @@ const AdminDashboard = () => {
   const [currentUser, setCurrentUser] = useState('');
   const [currentRole, setCurrentRole] = useState('');
 
-  // Get username and role from localStorage (the key "loggedInUser" must match your Login.jsx)
+  // Get username and role from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser) {
@@ -48,6 +50,7 @@ const AdminDashboard = () => {
 
   // Fetch users from the back-end
   const fetchUsers = async () => {
+    setIsLoading(true);
     try {
       const response = await fetch('/users');
       if (!response.ok) {
@@ -58,10 +61,12 @@ const AdminDashboard = () => {
     } catch (err) {
       setError(err.message);
     }
+    setIsLoading(false);
   };
 
   // Fetch files from the back-end
   const fetchFiles = async () => {
+    setIsLoading(true);
     try {
       const response = await fetch('/files');
       if (!response.ok) {
@@ -72,6 +77,7 @@ const AdminDashboard = () => {
     } catch (err) {
       setError(err.message);
     }
+    setIsLoading(false);
   };
 
   // Refresh data on tab change
@@ -146,7 +152,6 @@ const AdminDashboard = () => {
     e.preventDefault();
     setError('');
     setMessage('');
-    // Prevent admin from deleting their own account.
     if (deleteUsername.trim().toLowerCase() === currentUser.trim().toLowerCase()) {
       setError("Cannot delete your own admin account. Please assign another admin before deleting your account.");
       return;
@@ -223,20 +228,16 @@ const AdminDashboard = () => {
     }
   };
 
-  // Refactored Delete File handler: Admin can delete any file regardless of uploader.
+  // Delete File handler
   const handleDeleteFile = async (file) => {
     setError('');
     setMessage('');
-
-    // If user is admin, allow deletion regardless of uploader.
-    // Otherwise, only allow deletion if the current user is the uploader.
     if (currentRole === 'admin' || currentUser.trim() === file.uploader.trim()) {
       // Allowed to delete
     } else {
       setError('You are not allowed to delete this file.');
       return;
     }
-
     try {
       const response = await fetch('/delete-file', {
         method: 'DELETE',
@@ -261,7 +262,6 @@ const AdminDashboard = () => {
     setMessage('');
     try {
       const downloadUrl = `/download?filename=${encodeURIComponent(file.file_name)}`;
-      // Create a temporary link element and trigger the download
       const a = document.createElement('a');
       a.href = downloadUrl;
       a.download = file.file_name;
@@ -312,12 +312,35 @@ const AdminDashboard = () => {
       {activeTab === 'users' && (
         <div>
           <h3>User List</h3>
-          {users.length === 0 ? (
+          {isLoading ? (
+            <Spinner />
+          ) : users.length === 0 ? (
             <p>No users found.</p>
           ) : (
             <ul>
               {users.map((user, index) => (
                 <li key={index}>{user}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'files' && (
+        <div>
+          <h3>Files</h3>
+          {isLoading ? (
+            <Spinner />
+          ) : files.length === 0 ? (
+            <p>No files found.</p>
+          ) : (
+            <ul>
+              {files.map((file, index) => (
+                <li key={index}>
+                  {file.file_name} - {file.size} bytes - Uploaded by: {file.uploader}{' '}
+                  <button onClick={() => handleDownload(file)}>Download</button>
+                  <button onClick={() => handleDeleteFile(file)}>Delete</button>
+                </li>
               ))}
             </ul>
           )}
@@ -413,28 +436,6 @@ const AdminDashboard = () => {
             </div>
             <button type="submit">Assign Admin</button>
           </form>
-        </div>
-      )}
-
-      {activeTab === 'files' && (
-        <div>
-          <h3>Files</h3>
-          {files.length === 0 ? (
-            <p>No files found.</p>
-          ) : (
-            <ul>
-              {files.map((file, index) => {
-                console.log('currentUser:', currentUser, 'currentRole:', currentRole, 'file.uploader:', file.uploader);
-                return (
-                  <li key={index}>
-                    {file.file_name} - {file.size} bytes - Uploaded by: {file.uploader}{' '}
-                    <button onClick={() => handleDownload(file)}>Download</button>
-                    <button onClick={() => handleDeleteFile(file)}>Delete</button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
         </div>
       )}
 
