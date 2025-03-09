@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'; // Import useNavigate
 const Register = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  // New state for toggling password visibility
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isRegistrationClosed, setIsRegistrationClosed] = useState(false);
@@ -90,16 +92,31 @@ const Register = () => {
             style={{ width: '100%' }}
           />
         </div>
-        <div style={{ marginBottom: '1rem' }}>
+        <div style={{ marginBottom: '1rem', position: 'relative' }}>
           <label htmlFor="password">Password:</label>
           <br />
           <input
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%' }}
+            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
           />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            style={{
+              position: 'absolute',
+              right: '10px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
         </div>
         <button type="submit">Register</button>
       </form>
