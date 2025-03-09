@@ -21,20 +21,22 @@ function App() {
             margin: 0,
             padding: 0,
             display: 'flex',
-            flexDirection: 'column',
+            flexDirection: 'row',   // Change this to 'row'
+            gap: '1rem',           // Space between links
+            alignItems: 'center'   // Optional, aligns items vertically in center
           }}
         >
-          <li style={{ marginBottom: '0.5rem' }}>
+          <li>
             <Link to="/register" style={{ textDecoration: 'none', color: '#333' }}>
               Register
             </Link>
           </li>
-          <li style={{ marginBottom: '0.5rem' }}>
+          <li>
             <Link to="/login" style={{ textDecoration: 'none', color: '#333' }}>
               Login
             </Link>
           </li>
-          <li style={{ marginBottom: '0.5rem' }}>
+          <li>
             <Link to="/admin-dashboard" style={{ textDecoration: 'none', color: '#333' }}>
               Admin Dashboard
             </Link>
