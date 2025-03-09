@@ -118,6 +118,7 @@ const AdminDashboard = () => {
     e.preventDefault();
     setError('');
     setMessage('');
+  
     try {
       const response = await fetch('/update-user', {
         method: 'PUT',
@@ -142,27 +143,35 @@ const AdminDashboard = () => {
       setError(err.message);
     }
   };
+  
 
-  // Delete User handler with self-deletion check
+
+  // Delete User handler with self-deletion check and graceful error handling
   const handleDeleteUser = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
   
+    const trimmedUsername = deleteUsername.trim().toLowerCase();
+  
     // Prevent deleting the current admin account.
-    if (deleteUsername.trim().toLowerCase() === currentUser.trim().toLowerCase()) {
+    if (trimmedUsername === currentUser.trim().toLowerCase()) {
       setError("Cannot delete your own admin account. Please assign another admin before deleting your account.");
       return;
     }
   
-    // Check if the user exists in the fetched user list.
+    // Check if the users array is non-empty and contains the username.
+    if (!users || users.length === 0) {
+      setError("No users available.");
+      return;
+    }
+  
     const userExists = users.some((u) => {
-      // Handle if users are returned as objects (with username property) or strings.
-      if (typeof u === 'object' && u.username) {
-        return u.username.toLowerCase() === deleteUsername.trim().toLowerCase();
-      }
-      return u.toLowerCase() === deleteUsername.trim().toLowerCase();
+      // When users are returned as objects with a username property:
+      const username = typeof u === 'object' && u.username ? u.username.toLowerCase() : "";
+      return username === trimmedUsername;
     });
+  
     if (!userExists) {
       setError("User does not exist.");
       return;
@@ -187,6 +196,8 @@ const AdminDashboard = () => {
       setError(err.message);
     }
   };
+  
+
   
   // Assign Admin handler
   const handleAssignAdmin = async (e) => {
@@ -418,38 +429,39 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {activeTab === 'updateUser' && (
-        <div>
-          <h3>Update User</h3>
-          <form onSubmit={handleUpdateUser}>
-            <div>
-              <label>Old Username: </label>
-              <input
-                type="text"
-                value={oldUsername}
-                onChange={(e) => setOldUsername(e.target.value)}
-              />
-            </div>
-            <div>
-              <label>New Username: </label>
-              <input
-                type="text"
-                value={updatedUsername}
-                onChange={(e) => setUpdatedUsername(e.target.value)}
-              />
-            </div>
-            <div>
-              <label>New Password: </label>
-              <input
-                type="password"
-                value={updatedPassword}
-                onChange={(e) => setUpdatedPassword(e.target.value)}
-              />
-            </div>
-            <button type="submit">Update User</button>
-          </form>
-        </div>
-      )}
+{activeTab === 'updateUser' && (
+  <div>
+    <h3>Update User</h3>
+    <form onSubmit={handleUpdateUser}>
+      <div>
+        <label>Old Username: </label>
+        <input
+          type="text"
+          value={oldUsername}
+          onChange={(e) => setOldUsername(e.target.value)}
+        />
+      </div>
+      <div>
+        <label>New Username: </label>
+        <input
+          type="text"
+          value={updatedUsername}
+          onChange={(e) => setUpdatedUsername(e.target.value)}
+        />
+      </div>
+      <div>
+        <label>New Password: </label>
+        <input
+          type="password"
+          value={updatedPassword}
+          onChange={(e) => setUpdatedPassword(e.target.value)}
+        />
+      </div>
+      <button type="submit">Update User</button>
+    </form>
+  </div>
+)}
+
 
       {activeTab === 'deleteUser' && (
         <div>
