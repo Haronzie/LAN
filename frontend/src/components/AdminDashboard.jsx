@@ -299,12 +299,16 @@ const AdminDashboard = () => {
       }
       const data = await response.json();
       setMessage(data.message);
+  
+      // Clear the stored user data
+      localStorage.removeItem('loggedInUser');
+  
       navigate('/login');
     } catch (err) {
       setError(err.message);
     }
   };
-
+  
   // Forgot Password handler
   const handleForgotPassword = async () => {
     const newPassword = window.prompt("Enter your new password:");

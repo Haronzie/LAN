@@ -107,12 +107,16 @@ const UserDashboard = () => {
       }
       const data = await response.json();
       setMessage(data.message);
-      // Redirect to login page
+      
+      // Clear user data from localStorage
+      localStorage.removeItem('loggedInUser');
+  
       navigate('/login');
     } catch (err) {
       setError(err.message);
     }
   };
+  
 
   // Handle file download
   const handleDownload = async (fileName) => {
