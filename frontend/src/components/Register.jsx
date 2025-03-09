@@ -5,7 +5,7 @@ import { FaEye, FaEyeSlash } from 'react-icons/fa';
 const Register = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  // New state for toggling password visibility
+  // State for toggling password visibility
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -20,11 +20,7 @@ const Register = () => {
         const response = await fetch('/admin-status');
         if (response.ok) {
           const data = await response.json();
-          if (data.adminExists) {
-            setIsRegistrationClosed(true);
-          } else {
-            setIsRegistrationClosed(false);
-          }
+          setIsRegistrationClosed(data.adminExists);
         } else {
           console.error('Failed to check admin status');
         }
@@ -104,23 +100,6 @@ const Register = () => {
             style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
           />
           <button
-
-  type="button"
-  onClick={() => setShowPassword(!showPassword)}
-  style={{
-    position: 'absolute',
-    right: '10px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer'
-  }}
->
-  {showPassword ? <FaEyeSlash /> : <FaEye />}
-</button>
-
-
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             style={{
@@ -135,7 +114,6 @@ const Register = () => {
           >
             {showPassword ? <FaEyeSlash /> : <FaEye />}
           </button>
-
         </div>
         <button type="submit">Register</button>
       </form>
