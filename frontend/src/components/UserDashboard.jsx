@@ -21,9 +21,16 @@ const UserDashboard = () => {
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser) {
-      setLoggedInUser(JSON.parse(storedUser));
+      const userObj = JSON.parse(storedUser);
+      // If the user has the admin role, redirect away from UserDashboard.
+      if (userObj.role && userObj.role === 'admin') {
+        navigate('/admin-dashboard');
+      } else {
+        setLoggedInUser(userObj);
+      }
     }
-  }, []);
+  }, [navigate]);
+  
 
   // Wrap fetchFiles in useCallback so it becomes a stable dependency.
   const fetchFiles = useCallback(async () => {
