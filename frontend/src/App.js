@@ -7,7 +7,8 @@ import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
-import GuestRoute from './components/GuestRoute';
+import RegisterRoute from './components/RegisterRoute';
+import LoginRoute from './components/LoginRoute';
 
 function App() {
   return (
@@ -49,23 +50,23 @@ function App() {
       {/* Container for routed content */}
       <div className="container">
         <Routes>
-          {/* Registration Route: Only show "Registration is closed" when applicable */}
+          {/* Registration Route */}
           <Route
             path="/register"
             element={
-              <GuestRoute>
+              <RegisterRoute>
                 <Register />
-              </GuestRoute>
+              </RegisterRoute>
             }
           />
 
-          {/* Login Route: Only block logged-in users from accessing */}
+          {/* Login Route */}
           <Route
             path="/login"
             element={
-              <GuestRoute>
+              <LoginRoute>
                 <Login />
-              </GuestRoute>
+              </LoginRoute>
             }
           />
 
