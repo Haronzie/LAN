@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 const Register = () => {
   const [username, setUsername] = useState('');
@@ -115,7 +116,7 @@ const Register = () => {
               cursor: 'pointer'
             }}
           >
-            {showPassword ? 'Hide' : 'Show'}
+            {showPassword ? <FaEyeSlash /> : <FaEye />}
           </button>
         </div>
         <button type="submit">Register</button>
