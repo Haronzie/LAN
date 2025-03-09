@@ -655,6 +655,21 @@ func (a *App) updateUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error updating user", http.StatusInternalServerError)
 		return
 	}
+	// Update file records if the username has changed
+	if req.OldUsername != req.NewUsername {
+		_, err = a.DB.Exec("UPDATE files SET uploader = $1 WHERE uploader = $2", req.NewUsername, req.OldUsername)
+		if err != nil {
+			http.Error(w, "Error updating file records", http.StatusInternalServerError)
+			return
+		}
+	}
+	if req.OldUsername == user.Username {
+		session, err := a.Store.Get(r, "session")
+		if err == nil {
+			session.Options.MaxAge = -1 // Invalidate session
+			session.Save(r, w)
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("User '%s' has been updated to '%s' with new password", req.OldUsername, req.NewUsername),

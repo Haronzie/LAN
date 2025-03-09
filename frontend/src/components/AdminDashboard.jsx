@@ -19,7 +19,12 @@ const AdminDashboard = () => {
   // States for "Update User"
   const [oldUsername, setOldUsername] = useState('');
   const [updatedUsername, setUpdatedUsername] = useState('');
+  const [oldPassword, setOldPassword] = useState('');
   const [updatedPassword, setUpdatedPassword] = useState('');
+
+  // New states to toggle password visibility
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   // State for "Delete User"
   const [deleteUsername, setDeleteUsername] = useState('');
@@ -113,12 +118,43 @@ const AdminDashboard = () => {
     }
   };
 
-  // Update User handler
+  // Update User handler with additional error handling
   const handleUpdateUser = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
+
   
+
+    // Check if all fields are provided
+    if (
+      !oldUsername.trim() ||
+      !updatedUsername.trim() ||
+      !oldPassword.trim() ||
+      !updatedPassword.trim()
+    ) {
+      setError("All fields are required for updating the user.");
+      return;
+    }
+
+    // If the new username is the same as the old username, reject the update.
+    if (oldUsername.trim().toLowerCase() === updatedUsername.trim().toLowerCase()) {
+      setError("New username must be different from the old username.");
+      return;
+    }
+
+    // Check if the new username is already taken by another user.
+    const usernameTaken = users.some(
+      (user) =>
+        typeof user === 'object' &&
+        user.username.toLowerCase() === updatedUsername.trim().toLowerCase() &&
+        user.username.toLowerCase() !== oldUsername.trim().toLowerCase()
+    );
+    if (usernameTaken) {
+      setError("New username is already taken.");
+      return;
+    }
+
     try {
       const response = await fetch('/update-user', {
         method: 'PUT',
@@ -126,6 +162,7 @@ const AdminDashboard = () => {
         body: JSON.stringify({
           old_username: oldUsername,
           new_username: updatedUsername,
+          old_password: oldPassword,
           new_password: updatedPassword,
         }),
       });
@@ -137,8 +174,15 @@ const AdminDashboard = () => {
       setMessage(data.message);
       setOldUsername('');
       setUpdatedUsername('');
+      setOldPassword('');
       setUpdatedPassword('');
       fetchUsers();
+      // If the admin updated their own credentials, log them out automatically.
+  if (oldUsername.trim().toLowerCase() === currentUser.trim().toLowerCase()) {
+    localStorage.removeItem('loggedInUser');
+    navigate('/login');
+    return; // Stop further processing
+  }
     } catch (err) {
       setError(err.message);
     }
@@ -151,14 +195,17 @@ const AdminDashboard = () => {
     e.preventDefault();
     setError('');
     setMessage('');
+
   
     const trimmedUsername = deleteUsername.trim().toLowerCase();
   
+
     // Prevent deleting the current admin account.
     if (trimmedUsername === currentUser.trim().toLowerCase()) {
       setError("Cannot delete your own admin account. Please assign another admin before deleting your account.");
       return;
     }
+
   
     // Check if the users array is non-empty and contains the username.
     if (!users || users.length === 0) {
@@ -170,14 +217,22 @@ const AdminDashboard = () => {
       // When users are returned as objects with a username property:
       const username = typeof u === 'object' && u.username ? u.username.toLowerCase() : "";
       return username === trimmedUsername;
+
+
+    // Check if the user exists in the fetched user list.
+    const userExists = users.some((u) => {
+      if (typeof u === 'object' && u.username) {
+        return u.username.toLowerCase() === deleteUsername.trim().toLowerCase();
+      }
+      return u.toLowerCase() === deleteUsername.trim().toLowerCase();
+
     });
   
     if (!userExists) {
       setError("User does not exist.");
       return;
     }
-  
-    // Proceed with deletion if the user exists.
+
     try {
       const response = await fetch('/delete-user', {
         method: 'DELETE',
@@ -196,9 +251,6 @@ const AdminDashboard = () => {
       setError(err.message);
     }
   };
-  
-
-  
   // Assign Admin handler
   const handleAssignAdmin = async (e) => {
     e.preventDefault();
@@ -256,7 +308,6 @@ const AdminDashboard = () => {
   const handleDeleteFile = async (file) => {
     setError('');
     setMessage('');
-    // Only show the delete button if the current user is the uploader
     if (currentUser.trim() !== file.uploader.trim()) {
       setError('You are not allowed to delete this file.');
       return;
@@ -310,34 +361,8 @@ const AdminDashboard = () => {
       }
       const data = await response.json();
       setMessage(data.message);
-  
-      // Clear the stored user data
       localStorage.removeItem('loggedInUser');
-  
       navigate('/login');
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-  
-  // Forgot Password handler
-  const handleForgotPassword = async () => {
-    const newPassword = window.prompt("Enter your new password:");
-    if (!newPassword) return;
-    setError('');
-    setMessage('');
-    try {
-      const response = await fetch('/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_password: newPassword }),
-      });
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText || 'Failed to reset password');
-      }
-      const data = await response.json();
-      setMessage(data.message);
     } catch (err) {
       setError(err.message);
     }
@@ -355,7 +380,6 @@ const AdminDashboard = () => {
         <button onClick={() => setActiveTab('files')}>View Files</button>
         <button onClick={() => setActiveTab('uploadFile')}>Upload File</button>
         <button onClick={handleLogout}>Logout</button>
-        <button onClick={handleForgotPassword}>Forgot Password</button>
       </nav>
       {error && <p style={{ color: 'red' }}>{error}</p>}
       {message && <p style={{ color: 'green' }}>{message}</p>}
@@ -372,9 +396,9 @@ const AdminDashboard = () => {
               {users.map((user, index) => (
                 <li key={index}>
                   {typeof user === 'object'
-                  ? `${user.username} (${user.role})`
-                  : user}
-                  </li>
+                    ? `${user.username} (${user.role})`
+                    : user}
+                </li>
               ))}
             </ul>
           )}
@@ -429,6 +453,7 @@ const AdminDashboard = () => {
         </div>
       )}
 
+
 {activeTab === 'updateUser' && (
   <div>
     <h3>Update User</h3>
@@ -462,7 +487,53 @@ const AdminDashboard = () => {
   </div>
 )}
 
-
+      {activeTab === 'updateUser' && (
+        <div>
+          <h3>Update User</h3>
+          <form onSubmit={handleUpdateUser}>
+            <div>
+              <label>Old Username: </label>
+              <input
+                type="text"
+                value={oldUsername}
+                onChange={(e) => setOldUsername(e.target.value)}
+              />
+            </div>
+            <div>
+              <label>New Username: </label>
+              <input
+                type="text"
+                value={updatedUsername}
+                onChange={(e) => setUpdatedUsername(e.target.value)}
+              />
+            </div>
+            <div>
+              <label>Old Password: </label>
+              <input
+                type={showOldPassword ? "text" : "password"}
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+              />
+              <button type="button" onClick={() => setShowOldPassword(!showOldPassword)}>
+                {showOldPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+            <div>
+              <label>New Password: </label>
+              <input
+                type={showNewPassword ? "text" : "password"}
+                value={updatedPassword}
+                onChange={(e) => setUpdatedPassword(e.target.value)}
+              />
+              <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}>
+                {showNewPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+            <button type="submit">Update User</button>
+          </form>
+        </div>
+      )}
+      
       {activeTab === 'deleteUser' && (
         <div>
           <h3>Delete User</h3>
