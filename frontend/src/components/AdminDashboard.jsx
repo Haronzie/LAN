@@ -16,15 +16,10 @@ const AdminDashboard = () => {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  // States for "Update User"
+  // States for "Update User" (only using old username, new username, and new password)
   const [oldUsername, setOldUsername] = useState('');
   const [updatedUsername, setUpdatedUsername] = useState('');
-  const [oldPassword, setOldPassword] = useState('');
   const [updatedPassword, setUpdatedPassword] = useState('');
-
-  // New states to toggle password visibility
-  const [showOldPassword, setShowOldPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
 
   // State for "Delete User"
   const [deleteUsername, setDeleteUsername] = useState('');
@@ -124,16 +119,25 @@ const AdminDashboard = () => {
     setError('');
     setMessage('');
 
-  
-
-    // Check if all fields are provided
+    // Validate that all required fields are provided
     if (
       !oldUsername.trim() ||
       !updatedUsername.trim() ||
-      !oldPassword.trim() ||
       !updatedPassword.trim()
     ) {
-      setError("All fields are required for updating the user.");
+      setError("Old username, new username, and new password are required.");
+      return;
+    }
+
+    // Check if the old username exists in the users array
+    const userExists = users.some((u) => {
+      const username = (typeof u === 'object' && u.username)
+        ? u.username.toLowerCase()
+        : "";
+      return username === oldUsername.trim().toLowerCase();
+    });
+    if (!userExists) {
+      setError("User does not exist.");
       return;
     }
 
@@ -144,12 +148,13 @@ const AdminDashboard = () => {
     }
 
     // Check if the new username is already taken by another user.
-    const usernameTaken = users.some(
-      (user) =>
-        typeof user === 'object' &&
-        user.username.toLowerCase() === updatedUsername.trim().toLowerCase() &&
-        user.username.toLowerCase() !== oldUsername.trim().toLowerCase()
-    );
+    const usernameTaken = users.some((u) => {
+      const username = (typeof u === 'object' && u.username)
+        ? u.username.toLowerCase()
+        : "";
+      return username === updatedUsername.trim().toLowerCase() &&
+             username !== oldUsername.trim().toLowerCase();
+    });
     if (usernameTaken) {
       setError("New username is already taken.");
       return;
@@ -162,7 +167,6 @@ const AdminDashboard = () => {
         body: JSON.stringify({
           old_username: oldUsername,
           new_username: updatedUsername,
-          old_password: oldPassword,
           new_password: updatedPassword,
         }),
       });
@@ -174,21 +178,19 @@ const AdminDashboard = () => {
       setMessage(data.message);
       setOldUsername('');
       setUpdatedUsername('');
-      setOldPassword('');
       setUpdatedPassword('');
       fetchUsers();
+
       // If the admin updated their own credentials, log them out automatically.
-  if (oldUsername.trim().toLowerCase() === currentUser.trim().toLowerCase()) {
-    localStorage.removeItem('loggedInUser');
-    navigate('/login');
-    return; // Stop further processing
-  }
+      if (oldUsername.trim().toLowerCase() === currentUser.trim().toLowerCase()) {
+        localStorage.removeItem('loggedInUser');
+        navigate('/login');
+        return;
+      }
     } catch (err) {
       setError(err.message);
     }
   };
-  
-
 
   // Delete User handler with self-deletion check and graceful error handling
   const handleDeleteUser = async (e) => {
@@ -196,9 +198,7 @@ const AdminDashboard = () => {
     setError('');
     setMessage('');
 
-  
     const trimmedUsername = deleteUsername.trim().toLowerCase();
-  
 
     // Prevent deleting the current admin account.
     if (trimmedUsername === currentUser.trim().toLowerCase()) {
@@ -206,28 +206,17 @@ const AdminDashboard = () => {
       return;
     }
 
-  
     // Check if the users array is non-empty and contains the username.
     if (!users || users.length === 0) {
       setError("No users available.");
       return;
     }
-  
+
     const userExists = users.some((u) => {
-      // When users are returned as objects with a username property:
       const username = typeof u === 'object' && u.username ? u.username.toLowerCase() : "";
       return username === trimmedUsername;
-
-
-    // Check if the user exists in the fetched user list.
-    const userExists = users.some((u) => {
-      if (typeof u === 'object' && u.username) {
-        return u.username.toLowerCase() === deleteUsername.trim().toLowerCase();
-      }
-      return u.toLowerCase() === deleteUsername.trim().toLowerCase();
-
     });
-  
+
     if (!userExists) {
       setError("User does not exist.");
       return;
@@ -251,6 +240,7 @@ const AdminDashboard = () => {
       setError(err.message);
     }
   };
+
   // Assign Admin handler
   const handleAssignAdmin = async (e) => {
     e.preventDefault();
@@ -453,40 +443,6 @@ const AdminDashboard = () => {
         </div>
       )}
 
-
-{activeTab === 'updateUser' && (
-  <div>
-    <h3>Update User</h3>
-    <form onSubmit={handleUpdateUser}>
-      <div>
-        <label>Old Username: </label>
-        <input
-          type="text"
-          value={oldUsername}
-          onChange={(e) => setOldUsername(e.target.value)}
-        />
-      </div>
-      <div>
-        <label>New Username: </label>
-        <input
-          type="text"
-          value={updatedUsername}
-          onChange={(e) => setUpdatedUsername(e.target.value)}
-        />
-      </div>
-      <div>
-        <label>New Password: </label>
-        <input
-          type="password"
-          value={updatedPassword}
-          onChange={(e) => setUpdatedPassword(e.target.value)}
-        />
-      </div>
-      <button type="submit">Update User</button>
-    </form>
-  </div>
-)}
-
       {activeTab === 'updateUser' && (
         <div>
           <h3>Update User</h3>
@@ -508,32 +464,18 @@ const AdminDashboard = () => {
               />
             </div>
             <div>
-              <label>Old Password: </label>
-              <input
-                type={showOldPassword ? "text" : "password"}
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-              />
-              <button type="button" onClick={() => setShowOldPassword(!showOldPassword)}>
-                {showOldPassword ? "Hide" : "Show"}
-              </button>
-            </div>
-            <div>
               <label>New Password: </label>
               <input
-                type={showNewPassword ? "text" : "password"}
+                type="password"
                 value={updatedPassword}
                 onChange={(e) => setUpdatedPassword(e.target.value)}
               />
-              <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}>
-                {showNewPassword ? "Hide" : "Show"}
-              </button>
             </div>
             <button type="submit">Update User</button>
           </form>
         </div>
       )}
-      
+
       {activeTab === 'deleteUser' && (
         <div>
           <h3>Delete User</h3>
