@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
-
 const Register = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -105,6 +104,7 @@ const Register = () => {
             style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
           />
           <button
+
   type="button"
   onClick={() => setShowPassword(!showPassword)}
   style={{
@@ -119,6 +119,22 @@ const Register = () => {
 >
   {showPassword ? <FaEyeSlash /> : <FaEye />}
 </button>
+
+
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            style={{
+              position: 'absolute',
+              right: '10px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            {showPassword ? <FaEyeSlash /> : <FaEye />}
+          </button>
 
         </div>
         <button type="submit">Register</button>
