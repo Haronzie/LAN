@@ -320,18 +320,27 @@ const AdminDashboard = () => {
     }
   };
 
-  // Download File handler
-  const handleDownload = (file) => {
+  // Updated Download File handler using blob
+  const handleDownload = async (file) => {
     setError('');
     setMessage('');
     try {
-      const downloadUrl = `/download?filename=${encodeURIComponent(file.file_name)}`;
+      const response = await fetch(`/download?filename=${encodeURIComponent(file.file_name)}`, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = downloadUrl;
+      a.href = url;
       a.download = file.file_name;
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
+      a.remove();
+      window.URL.revokeObjectURL(url);
     } catch (err) {
       setError(err.message);
     }

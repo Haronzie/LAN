@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -402,25 +404,44 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Check if file already exists.
+	var msg string
+	// Check if the file record already exists.
 	if _, err := a.getFileRecord(handler.Filename); err == nil {
-		http.Error(w, "File already exists", http.StatusBadRequest)
+		// File exists: allow overwriting.
+		msg = fmt.Sprintf("File '%s' overwritten successfully", handler.Filename)
+		// Optionally, update the record in the database if necessary.
+	} else {
+		// File does not exist: create new file record.
+		fr := FileRecord{
+			FileName:    handler.Filename,
+			Size:        handler.Size,
+			ContentType: handler.Header.Get("Content-Type"),
+			Uploader:    currentUser.Username,
+		}
+		if err := a.createFileRecord(fr); err != nil {
+			http.Error(w, "Error saving file record", http.StatusInternalServerError)
+			return
+		}
+		a.cacheFileRecord(fr)
+		msg = fmt.Sprintf("File '%s' uploaded successfully", handler.Filename)
+	}
+
+	// Save (or overwrite) the file on disk in the "uploads" folder.
+	dstPath := filepath.Join("uploads", handler.Filename)
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		http.Error(w, "Error saving file", http.StatusInternalServerError)
 		return
 	}
-	fr := FileRecord{
-		FileName:    handler.Filename,
-		Size:        handler.Size,
-		ContentType: handler.Header.Get("Content-Type"),
-		Uploader:    currentUser.Username,
-	}
-	if err := a.createFileRecord(fr); err != nil {
-		http.Error(w, "Error saving file record", http.StatusInternalServerError)
+	defer dst.Close()
+	if _, err := io.Copy(dst, file); err != nil {
+		http.Error(w, "Error saving file", http.StatusInternalServerError)
 		return
 	}
-	a.cacheFileRecord(fr)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": fmt.Sprintf("File '%s' uploaded successfully", handler.Filename),
+		"message": msg,
 	})
 }
 
@@ -483,6 +504,7 @@ func (a *App) downloadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
+	// Check if user is authenticated.
 	_, err := a.getUserFromSession(r)
 	if err != nil {
 		http.Error(w, "Forbidden", http.StatusForbidden)
@@ -493,24 +515,30 @@ func (a *App) downloadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Filename is required", http.StatusBadRequest)
 		return
 	}
-	fr, exists := a.getCachedFileRecord(fileName)
-	if exists {
-		log.Println("Serving from cache:", fileName)
-	} else {
-		log.Println("Fetching from database:", fileName)
-		fr, err = a.getFileRecord(fileName)
-		if err != nil {
-			http.Error(w, "File not found", http.StatusNotFound)
-			return
-		}
-		a.cacheFileRecord(fr)
+	// Retrieve file record from the database.
+	fr, err := a.getFileRecord(fileName)
+	if err != nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
 	}
 
+	// Build the full file path from the "uploads" folder.
+	filePath := filepath.Join("uploads", fileName)
+	f, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, "Error opening file", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	// Set headers to prompt a file download in the browser.
 	w.Header().Set("Content-Type", fr.ContentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
-	// Dummy content as in the original code.
-	dummyContent := fmt.Sprintf("This is dummy content for file %s", fr.FileName)
-	w.Write([]byte(dummyContent))
+
+	// Stream the file to the response.
+	if _, err := io.Copy(w, f); err != nil {
+		log.Println("Error sending file:", err)
+	}
 }
 
 func (a *App) adminHandler(w http.ResponseWriter, r *http.Request) {
@@ -779,6 +807,13 @@ func main() {
 		log.Fatal("Database ping error:", err)
 	}
 	log.Println("Database connected successfully")
+
+	if _, err := os.Stat("uploads"); os.IsNotExist(err) {
+		err := os.Mkdir("uploads", 0755)
+		if err != nil {
+			log.Fatal("Failed to create uploads folder:", err)
+		}
+	}
 
 	// Create an instance of App.
 	app := &App{
