@@ -8,6 +8,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { Layout, Menu } from 'antd';
+import HomePage from './components/HomePage';
 import Register from './components/Register';
 import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
@@ -19,8 +20,15 @@ import LoginRoute from './components/LoginRoute';
 const { Header, Content } = Layout;
 
 function App() {
-  // useLocation hook returns an object describing the current URL
   const location = useLocation();
+
+  const menuItems = [
+    { key: '/', label: <Link to="/">Home</Link> },
+    { key: '/register', label: <Link to="/register">Register</Link> },
+    { key: '/login', label: <Link to="/login">Login</Link> },
+    { key: '/admin-dashboard', label: <Link to="/admin-dashboard">Admin Dashboard</Link> },
+    { key: '/user-dashboard', label: <Link to="/user-dashboard">User Dashboard</Link> },
+  ];
 
   return (
     <Layout>
@@ -28,23 +36,10 @@ function App() {
         <Menu
           theme="dark"
           mode="horizontal"
-          // Use the current pathname as the selected key
           selectedKeys={[location.pathname]}
           style={{ lineHeight: '64px' }}
-        >
-          <Menu.Item key="/register">
-            <Link to="/register">Register</Link>
-          </Menu.Item>
-          <Menu.Item key="/login">
-            <Link to="/login">Login</Link>
-          </Menu.Item>
-          <Menu.Item key="/admin-dashboard">
-            <Link to="/admin-dashboard">Admin Dashboard</Link>
-          </Menu.Item>
-          <Menu.Item key="/user-dashboard">
-            <Link to="/user-dashboard">User Dashboard</Link>
-          </Menu.Item>
-        </Menu>
+          items={menuItems}
+        />
       </Header>
       <Content
         style={{
@@ -54,6 +49,7 @@ function App() {
         }}
       >
         <Routes>
+          <Route path="/" element={<HomePage />} />
           <Route
             path="/register"
             element={
@@ -86,22 +82,13 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/"
-            element={
-              <div style={{ padding: '1rem', textAlign: 'center' }}>
-                <h2>Welcome to Our App</h2>
-                <p>Please choose an option above.</p>
-              </div>
-            }
-          />
         </Routes>
       </Content>
     </Layout>
   );
 }
 
-// We wrap App in a small component that provides the Router context.
+// Wrap App in a Router provider.
 function AppWrapper() {
   return (
     <Router>

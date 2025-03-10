@@ -1,35 +1,25 @@
 // src/components/UserDashboard.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Layout,
-  Tabs,
-  Button,
-  Form,
-  Upload,
-  Spin,
-  List,
-  message,
-} from 'antd';
+import { Layout, Button, Form, Upload, Spin, List, Row, Col, Input, message } from 'antd';
 import { UploadOutlined, DownloadOutlined, DeleteOutlined } from '@ant-design/icons';
 
 const { Header, Content } = Layout;
-const { TabPane } = Tabs;
 
 const UserDashboard = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('files');
   const [files, setFiles] = useState([]);
   const [uploadFile, setUploadFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Retrieve logged-in user from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser) {
       const userObj = JSON.parse(storedUser);
-      // If the user is admin, redirect away from UserDashboard.
+      // If the user is admin, redirect to the admin dashboard
       if (userObj.role && userObj.role === 'admin') {
         navigate('/admin-dashboard');
       } else {
@@ -64,7 +54,7 @@ const UserDashboard = () => {
     }
   }, [loggedInUser, fetchFiles]);
 
-  // Handle file upload using Ant Design's Form and Upload components
+  // Handle file upload
   const handleUpload = async () => {
     if (!loggedInUser) {
       message.error('You must be logged in to upload a file.');
@@ -157,14 +147,19 @@ const UserDashboard = () => {
     }
   };
 
+  // Filter files by search term
+  const filteredFiles = files.filter((f) =>
+    f.file_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Header
         style={{
+          backgroundColor: '#001529',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          backgroundColor: '#001529',
         }}
       >
         <h2 style={{ color: '#fff', margin: 0 }}>User Dashboard</h2>
@@ -173,14 +168,21 @@ const UserDashboard = () => {
         </Button>
       </Header>
       <Content style={{ padding: '1rem' }}>
-        <Tabs activeKey={activeTab} onChange={(key) => setActiveTab(key)}>
-          <TabPane tab="View Files" key="files">
+        <Row gutter={[16, 16]}>
+          <Col xs={24} md={16}>
+            <h3>Files</h3>
+            <Input.Search
+              placeholder="Search files by name"
+              allowClear
+              onSearch={(value) => setSearchTerm(value)}
+              style={{ marginBottom: 16 }}
+            />
             <Spin spinning={isLoading}>
-              {files.length === 0 ? (
+              {filteredFiles.length === 0 ? (
                 <p>No files found.</p>
               ) : (
                 <List
-                  dataSource={files}
+                  dataSource={filteredFiles}
                   renderItem={(file) => (
                     <List.Item
                       actions={[
@@ -191,8 +193,7 @@ const UserDashboard = () => {
                         >
                           Download
                         </Button>,
-                        loggedInUser &&
-                        loggedInUser.username === file.uploader ? (
+                        loggedInUser && loggedInUser.username === file.uploader ? (
                           <Button
                             icon={<DeleteOutlined />}
                             size="small"
@@ -213,8 +214,9 @@ const UserDashboard = () => {
                 />
               )}
             </Spin>
-          </TabPane>
-          <TabPane tab="Upload File" key="upload">
+          </Col>
+          <Col xs={24} md={8}>
+            <h3>Upload File</h3>
             <Form layout="vertical" onFinish={handleUpload}>
               <Form.Item label="Select File">
                 <Upload
@@ -229,13 +231,13 @@ const UserDashboard = () => {
                 </Upload>
               </Form.Item>
               <Form.Item>
-                <Button type="primary" htmlType="submit">
+                <Button type="primary" htmlType="submit" block>
                   Upload
                 </Button>
               </Form.Item>
             </Form>
-          </TabPane>
-        </Tabs>
+          </Col>
+        </Row>
       </Content>
     </Layout>
   );
