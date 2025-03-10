@@ -103,29 +103,42 @@ func checkPasswordHash(password, hash string) bool {
 
 // createTables creates the users and files tables if they don't exist.
 func (a *App) createTables() {
+	// Create the users table with active defaulting to false.
 	userTable := `
-  CREATE TABLE IF NOT EXISTS users (
-    username TEXT PRIMARY KEY,
-    password TEXT NOT NULL,
-    role TEXT NOT NULL,
-    active BOOLEAN DEFAULT TRUE
-  );`
-
+    CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT FALSE
+    );`
 	_, err := a.DB.Exec(userTable)
 	if err != nil {
 		log.Fatal("Error creating users table:", err)
 	}
 
+	// Create an index on the users table for role and active status.
+	_, err = a.DB.Exec("CREATE INDEX IF NOT EXISTS idx_users_role_active ON users (role, active)")
+	if err != nil {
+		log.Fatal("Error creating index on users table:", err)
+	}
+
+	// Create the files table.
 	fileTable := `
-	CREATE TABLE IF NOT EXISTS files (
-		file_name TEXT PRIMARY KEY,
-		size BIGINT,
-		content_type TEXT,
-		uploader TEXT
-	);`
+    CREATE TABLE IF NOT EXISTS files (
+        file_name TEXT PRIMARY KEY,
+        size BIGINT,
+        content_type TEXT,
+        uploader TEXT
+    );`
 	_, err = a.DB.Exec(fileTable)
 	if err != nil {
 		log.Fatal("Error creating files table:", err)
+	}
+
+	// Create an index on the files table for the file_name column.
+	_, err = a.DB.Exec("CREATE INDEX IF NOT EXISTS idx_files_filename ON files (file_name)")
+	if err != nil {
+		log.Fatal("Error creating index on files table:", err)
 	}
 }
 
@@ -378,7 +391,8 @@ func (a *App) logoutHandler(w http.ResponseWriter, r *http.Request) {
 	// Retrieve the user from the session and mark them inactive.
 	user, err := a.getUserFromSession(r)
 	if err == nil && user.Username != "" {
-		if _, updateErr := a.DB.Exec("UPDATE users SET active = $1 WHERE username = $2", false, user.Username); updateErr != nil {
+		_, updateErr := a.DB.Exec("UPDATE users SET active = $1 WHERE username = $2", false, user.Username)
+		if updateErr != nil {
 			http.Error(w, "Error updating user status", http.StatusInternalServerError)
 			return
 		}
@@ -686,6 +700,7 @@ func (a *App) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error hashing password", http.StatusInternalServerError)
 		return
 	}
+	// Create new user. We don't set the active field here so that it defaults to false in the DB.
 	newUser := User{
 		Username: req.Username,
 		Password: hashedPass,
