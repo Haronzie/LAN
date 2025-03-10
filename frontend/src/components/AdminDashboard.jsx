@@ -1,5 +1,5 @@
 // src/components/AdminDashboard.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Layout,
@@ -11,6 +11,7 @@ import {
   Upload,
   Spin,
   message,
+  Card,
 } from 'antd';
 import {
   UploadOutlined,
@@ -25,6 +26,7 @@ import {
 } from '@ant-design/icons';
 
 const { Header, Sider, Content } = Layout;
+const SIDEBAR_WIDTH = 200; // fixed sidebar width
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -60,7 +62,7 @@ const AdminDashboard = () => {
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/users');
+      const response = await fetch('/users', { credentials: 'include' });
       if (!response.ok) {
         throw new Error('Failed to fetch users');
       }
@@ -76,7 +78,7 @@ const AdminDashboard = () => {
   const fetchFiles = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/files');
+      const response = await fetch('/files', { credentials: 'include' });
       if (!response.ok) {
         throw new Error('Failed to fetch files');
       }
@@ -98,8 +100,6 @@ const AdminDashboard = () => {
   }, [selectedMenu, fetchUsers, fetchFiles]);
 
   // ========== Handlers for User Management ==========
-
-  // Add User
   const handleAddUser = async (values) => {
     try {
       const response = await fetch('/add-user', {
@@ -122,7 +122,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Update User
   const handleUpdateUser = async (values) => {
     if (
       !values.oldUsername.trim() ||
@@ -132,8 +131,6 @@ const AdminDashboard = () => {
       message.error('Old username, new username, and new password are required.');
       return;
     }
-    // Basic checks...
-    // (Same logic you had before)
     try {
       const response = await fetch('/update-user', {
         method: 'PUT',
@@ -151,7 +148,6 @@ const AdminDashboard = () => {
       const data = await response.json();
       message.success(data.message);
       fetchUsers();
-      // If current user changed their own username, log out
       if (
         values.oldUsername.trim().toLowerCase() ===
         currentUser?.username.trim().toLowerCase()
@@ -164,7 +160,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Delete User
   const handleDeleteUser = async (values) => {
     const trimmedUsername = values.deleteUsername.trim().toLowerCase();
     if (currentUser && trimmedUsername === currentUser.username.trim().toLowerCase()) {
@@ -191,7 +186,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Assign Admin
   const handleAssignAdmin = async (values) => {
     try {
       const response = await fetch('/assign-admin', {
@@ -212,8 +206,6 @@ const AdminDashboard = () => {
   };
 
   // ========== Handlers for File Management ==========
-
-  // Upload File
   const handleFileUpload = async () => {
     if (!uploadFile) {
       message.error('Please select a file to upload.');
@@ -240,7 +232,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Download File
   const handleDownload = async (file) => {
     try {
       const response = await fetch(
@@ -267,9 +258,11 @@ const AdminDashboard = () => {
     }
   };
 
-  // Delete File
   const handleDeleteFile = async (file) => {
-    if (currentUser?.role !== 'admin' && currentUser?.username.trim() !== file.uploader.trim()) {
+    if (
+      currentUser?.role !== 'admin' &&
+      currentUser?.username.trim() !== file.uploader.trim()
+    ) {
       message.error('You are not allowed to delete this file.');
       return;
     }
@@ -291,8 +284,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // ========== Logout ==========
-
   const handleLogout = async () => {
     try {
       const response = await fetch('/logout', { method: 'POST' });
@@ -311,7 +302,9 @@ const AdminDashboard = () => {
 
   // ========== Table Definitions ==========
 
+  // The "No." column references "row_num" which we will set in a sorted array below.
   const userColumns = [
+    { title: 'No.', dataIndex: 'row_num', key: 'row_num', width: 60 },
     { title: 'Username', dataIndex: 'username', key: 'username' },
     { title: 'Role', dataIndex: 'role', key: 'role' },
     {
@@ -358,22 +351,40 @@ const AdminDashboard = () => {
 
   // ========== Filtered Data ==========
 
+  // Basic filtering by searchTerm
   const filteredUsers = users.filter((u) =>
     u.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Sort admins first, then alphabetical by username. Assign row_num after sorting.
+  const sortedAndNumberedUsers = useMemo(() => {
+    // Make a copy so we don't mutate state
+    const copied = [...filteredUsers];
+
+    // Sort: admin first, then by username
+    copied.sort((a, b) => {
+      if (a.role === 'admin' && b.role !== 'admin') return -1;
+      if (b.role === 'admin' && a.role !== 'admin') return 1;
+      return a.username.localeCompare(b.username);
+    });
+
+    // Assign row_num in ascending order
+    return copied.map((user, index) => ({
+      ...user,
+      row_num: index + 1,
+    }));
+  }, [filteredUsers]);
 
   const filteredFiles = files.filter((f) =>
     f.file_name.toLowerCase().includes(fileSearchTerm.toLowerCase())
   );
 
   // ========== Conditional Rendering of Content ==========
-
   const renderContent = () => {
     switch (selectedMenu) {
       case 'viewUsers':
         return (
-          <div>
-            <h3>User List</h3>
+          <Card title="User List" style={{ marginBottom: 24 }}>
             <Input.Search
               placeholder="Search users by username"
               allowClear
@@ -381,9 +392,9 @@ const AdminDashboard = () => {
               style={{ marginBottom: 16, maxWidth: 300 }}
             />
             <Spin spinning={isLoading}>
-              {filteredUsers.length > 0 ? (
+              {sortedAndNumberedUsers.length > 0 ? (
                 <Table
-                  dataSource={filteredUsers}
+                  dataSource={sortedAndNumberedUsers}
                   columns={userColumns}
                   rowKey="username"
                   pagination={false}
@@ -392,12 +403,11 @@ const AdminDashboard = () => {
                 <p>No users found.</p>
               )}
             </Spin>
-          </div>
+          </Card>
         );
       case 'viewFiles':
         return (
-          <div>
-            <h3>Files</h3>
+          <Card title="Files" style={{ marginBottom: 24 }}>
             <Input.Search
               placeholder="Search files by name"
               allowClear
@@ -416,12 +426,11 @@ const AdminDashboard = () => {
                 <p>No files found.</p>
               )}
             </Spin>
-          </div>
+          </Card>
         );
       case 'addUser':
         return (
-          <div>
-            <h3>Add User</h3>
+          <Card title="Add User" style={{ marginBottom: 24 }}>
             <Form layout="vertical" onFinish={handleAddUser}>
               <Form.Item
                 label="Username"
@@ -443,12 +452,11 @@ const AdminDashboard = () => {
                 </Button>
               </Form.Item>
             </Form>
-          </div>
+          </Card>
         );
       case 'updateUser':
         return (
-          <div>
-            <h3>Update User</h3>
+          <Card title="Update User" style={{ marginBottom: 24 }}>
             <Form layout="vertical" onFinish={handleUpdateUser}>
               <Form.Item
                 label="Old Username"
@@ -477,12 +485,11 @@ const AdminDashboard = () => {
                 </Button>
               </Form.Item>
             </Form>
-          </div>
+          </Card>
         );
       case 'deleteUser':
         return (
-          <div>
-            <h3>Delete User</h3>
+          <Card title="Delete User" style={{ marginBottom: 24 }}>
             <Form layout="vertical" onFinish={handleDeleteUser}>
               <Form.Item
                 label="Username"
@@ -497,12 +504,11 @@ const AdminDashboard = () => {
                 </Button>
               </Form.Item>
             </Form>
-          </div>
+          </Card>
         );
       case 'assignAdmin':
         return (
-          <div>
-            <h3>Assign Admin Role</h3>
+          <Card title="Assign Admin Role" style={{ marginBottom: 24 }}>
             <Form layout="vertical" onFinish={handleAssignAdmin}>
               <Form.Item
                 label="Username"
@@ -517,12 +523,11 @@ const AdminDashboard = () => {
                 </Button>
               </Form.Item>
             </Form>
-          </div>
+          </Card>
         );
       case 'uploadFile':
         return (
-          <div>
-            <h3>Upload File</h3>
+          <Card title="Upload File" style={{ marginBottom: 24 }}>
             <Form layout="vertical" onFinish={handleFileUpload}>
               <Form.Item label="Select File">
                 <Upload
@@ -542,7 +547,7 @@ const AdminDashboard = () => {
                 </Button>
               </Form.Item>
             </Form>
-          </div>
+          </Card>
         );
       default:
         return <div>Welcome to the Admin Dashboard</div>;
@@ -550,7 +555,6 @@ const AdminDashboard = () => {
   };
 
   // ========== Menu Items ==========
-
   const menuItems = [
     { key: 'viewUsers', icon: <UserOutlined />, label: 'View Users' },
     { key: 'viewFiles', icon: <FileOutlined />, label: 'View Files' },
@@ -562,9 +566,31 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider breakpoint="lg" collapsedWidth="80">
-        <div style={{ height: 64, margin: 16, color: '#fff', fontSize: 18 }}>
+    <Layout>
+      {/* Fixed sidebar */}
+      <Sider
+        width={SIDEBAR_WIDTH}
+        style={{
+          position: 'fixed',
+          height: '100vh',
+          left: 0,
+          top: 0,
+          overflow: 'auto',
+          backgroundColor: '#001529',
+          zIndex: 1000,
+        }}
+        breakpoint="lg"
+        collapsedWidth={80}
+      >
+        <div
+          style={{
+            height: 64,
+            margin: 16,
+            color: '#fff',
+            fontSize: 18,
+            textAlign: 'center',
+          }}
+        >
           <strong>Admin Panel</strong>
         </div>
         <Menu
@@ -575,14 +601,23 @@ const AdminDashboard = () => {
           items={menuItems}
         />
       </Sider>
-      <Layout>
+
+      {/* Main layout with fixed header */}
+      <Layout style={{ marginLeft: SIDEBAR_WIDTH }}>
         <Header
           style={{
+            position: 'fixed',
+            top: 0,
+            left: SIDEBAR_WIDTH,
+            right: 0,
+            height: 64,
             backgroundColor: '#fff',
             padding: '0 1rem',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            zIndex: 1001,
+            boxShadow: '0 2px 8px #f0f1f2',
           }}
         >
           <h2 style={{ margin: 0 }}>LAN File Sharing</h2>
@@ -590,7 +625,9 @@ const AdminDashboard = () => {
             Logout
           </Button>
         </Header>
-        <Content style={{ padding: '1rem' }}>
+
+        {/* Content area with padding to account for fixed header */}
+        <Content style={{ marginTop: 80, padding: '1rem 2rem' }}>
           {renderContent()}
         </Content>
       </Layout>

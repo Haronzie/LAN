@@ -195,6 +195,21 @@ func (a *App) getUserFromSession(r *http.Request) (User, error) {
 // ----- App Methods for File Operations -----
 
 // getFileRecord retrieves a file record from the database.
+// getFileRecordWithCache checks the in-memory cache first; if the file record is not found, it queries the database and stores the result in the cache.
+func (a *App) getFileRecordWithCache(fileName string) (FileRecord, error) {
+	// Check the cache first
+	if fr, exists := a.getCachedFileRecord(fileName); exists {
+		return fr, nil
+	}
+	// If not in cache, query the database
+	fr, err := a.getFileRecord(fileName)
+	if err != nil {
+		return fr, err
+	}
+	// Cache the result for future requests
+	a.cacheFileRecord(fr)
+	return fr, nil
+}
 func (a *App) getFileRecord(fileName string) (FileRecord, error) {
 	row := a.DB.QueryRow("SELECT file_name, size, content_type, uploader FROM files WHERE file_name = $1", fileName)
 	var fr FileRecord
@@ -583,13 +598,12 @@ func (a *App) downloadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Filename is required", http.StatusBadRequest)
 		return
 	}
-	// Retrieve file record from the database.
-	fr, err := a.getFileRecord(fileName)
+	// Retrieve file record using the cache
+	fr, err := a.getFileRecordWithCache(fileName)
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
 	}
-
 	// Build the full file path from the "uploads" folder.
 	filePath := filepath.Join("uploads", fileName)
 	f, err := os.Open(filePath)
