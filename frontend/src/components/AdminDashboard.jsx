@@ -1,4 +1,3 @@
-// src/components/AdminDashboard.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,6 +11,7 @@ import {
   Spin,
   message,
   Card,
+  Modal, // Imported Modal for confirmation
 } from 'antd';
 import {
   UploadOutlined,
@@ -30,6 +30,9 @@ const SIDEBAR_WIDTH = 200; // fixed sidebar width
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+
+  // Create a form instance for the Add User form.
+  const [addUserForm] = Form.useForm();
 
   // Menu selection state
   const [selectedMenu, setSelectedMenu] = useState('viewUsers');
@@ -100,6 +103,8 @@ const AdminDashboard = () => {
   }, [selectedMenu, fetchUsers, fetchFiles]);
 
   // ========== Handlers for User Management ==========
+
+  // Modified to return a success flag.
   const handleAddUser = async (values) => {
     try {
       const response = await fetch('/add-user', {
@@ -117,8 +122,10 @@ const AdminDashboard = () => {
       const data = await response.json();
       message.success(data.message);
       fetchUsers();
+      return true;
     } catch (err) {
       message.error(err.message);
+      return false;
     }
   };
 
@@ -184,6 +191,27 @@ const AdminDashboard = () => {
     } catch (err) {
       message.error(err.message);
     }
+  };
+
+  // New confirmation function for deleting user.
+  const showDeleteUserConfirm = (values) => {
+    // Check if the user exists in the current list
+    const userExists = users.some(
+      (u) => u.username.toLowerCase() === values.deleteUsername.trim().toLowerCase()
+    );
+    if (!userExists) {
+      message.error('User does not exist.');
+      return;
+    }
+
+    Modal.confirm({
+      title: 'Are you sure you want to delete this user?',
+      content: `User "${values.deleteUsername}" will be permanently deleted.`,
+      okText: 'Yes, Delete',
+      okType: 'danger',
+      cancelText: 'No',
+      onOk: () => handleDeleteUser(values),
+    });
   };
 
   const handleAssignAdmin = async (values) => {
@@ -301,8 +329,6 @@ const AdminDashboard = () => {
   };
 
   // ========== Table Definitions ==========
-
-  // The "No." column references "row_num" which we will set in a sorted array below.
   const userColumns = [
     { title: 'No.', dataIndex: 'row_num', key: 'row_num', width: 60 },
     { title: 'Username', dataIndex: 'username', key: 'username' },
@@ -350,25 +376,18 @@ const AdminDashboard = () => {
   ];
 
   // ========== Filtered Data ==========
-
-  // Basic filtering by searchTerm
   const filteredUsers = users.filter((u) =>
     u.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Sort admins first, then alphabetical by username. Assign row_num after sorting.
   const sortedAndNumberedUsers = useMemo(() => {
-    // Make a copy so we don't mutate state
     const copied = [...filteredUsers];
-
-    // Sort: admin first, then by username
     copied.sort((a, b) => {
       if (a.role === 'admin' && b.role !== 'admin') return -1;
       if (b.role === 'admin' && a.role !== 'admin') return 1;
       return a.username.localeCompare(b.username);
     });
-
-    // Assign row_num in ascending order
     return copied.map((user, index) => ({
       ...user,
       row_num: index + 1,
@@ -431,7 +450,17 @@ const AdminDashboard = () => {
       case 'addUser':
         return (
           <Card title="Add User" style={{ marginBottom: 24 }}>
-            <Form layout="vertical" onFinish={handleAddUser}>
+            <Form
+              form={addUserForm}
+              layout="vertical"
+              onFinish={async (values) => {
+                const success = await handleAddUser(values);
+                if (success) {
+                  // Reset the fields on success
+                  addUserForm.resetFields();
+                }
+              }}
+            >
               <Form.Item
                 label="Username"
                 name="newUsername"
@@ -490,7 +519,7 @@ const AdminDashboard = () => {
       case 'deleteUser':
         return (
           <Card title="Delete User" style={{ marginBottom: 24 }}>
-            <Form layout="vertical" onFinish={handleDeleteUser}>
+            <Form layout="vertical" onFinish={showDeleteUserConfirm}>
               <Form.Item
                 label="Username"
                 name="deleteUsername"
@@ -636,5 +665,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
-

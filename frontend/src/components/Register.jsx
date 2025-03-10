@@ -1,7 +1,7 @@
 // src/components/Register.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Form, Input, Button, message, Modal } from 'antd';
+import { Form, Input, Button, message, Modal, Card } from 'antd';
 
 const Register = () => {
   const [isRegistrationClosed, setIsRegistrationClosed] = useState(false);
@@ -15,9 +15,9 @@ const Register = () => {
         const response = await fetch('/admin-status');
         if (response.ok) {
           const data = await response.json();
-          console.log("adminExists:", data.adminExists); // Debug log
           setIsRegistrationClosed(data.adminExists);
           if (data.adminExists) {
+            // Show a modal popup informing the user that registration is closed.
             setModalVisible(true);
           }
         } else {
@@ -56,7 +56,7 @@ const Register = () => {
 
   return (
     <>
-      {/* Modal for registration closed */}
+      {/* Modal popup that informs the user registration is closed */}
       <Modal
         open={modalVisible}
         title="Registration Closed"
@@ -70,31 +70,78 @@ const Register = () => {
         <p>Admin already registered. Registration is closed.</p>
       </Modal>
 
-      {/* Render registration form only if registration is not closed */}
-      {!isRegistrationClosed && (
-        <div style={{ maxWidth: '400px', margin: 'auto', padding: '1rem' }}>
-          <h2>Register</h2>
-          <Form layout="vertical" onFinish={handleRegister}>
-            <Form.Item
-              label="Username"
-              name="username"
-              rules={[{ required: true, message: 'Please input your username!' }]}
-            >
-              <Input placeholder="Enter your username" />
-            </Form.Item>
-            <Form.Item
-              label="Password"
-              name="password"
-              rules={[{ required: true, message: 'Please input your password!' }]}
-            >
-              <Input.Password placeholder="Enter your password" />
-            </Form.Item>
-            <Form.Item>
-              <Button type="primary" htmlType="submit" block>
-                Register
-              </Button>
-            </Form.Item>
-          </Form>
+      {/* If registration is closed, display a friendly message with a button to go to login.
+          This ensures that if a user accesses the registration page from the navigation bar,
+          they receive clear feedback rather than a hidden page. */}
+      {isRegistrationClosed ? (
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#f0f2f5',
+            padding: '1rem',
+          }}
+        >
+          <Card
+            title="Registration Closed"
+            bordered={false}
+            style={{
+              width: 400,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+              borderRadius: '8px',
+            }}
+          >
+            <p>Admin already registered. Registration is closed.</p>
+            <Button type="primary" block onClick={() => navigate('/login')}>
+              Go to Login
+            </Button>
+          </Card>
+        </div>
+      ) : (
+        // Registration form is displayed if no admin exists.
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#f0f2f5',
+            padding: '1rem',
+          }}
+        >
+          <Card
+            title="Register"
+            bordered={false}
+            style={{
+              width: 400,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+              borderRadius: '8px',
+            }}
+          >
+            <Form layout="vertical" onFinish={handleRegister}>
+              <Form.Item
+                label="Username"
+                name="username"
+                rules={[{ required: true, message: 'Please input your username!' }]}
+              >
+                <Input placeholder="Enter your username" />
+              </Form.Item>
+              <Form.Item
+                label="Password"
+                name="password"
+                rules={[{ required: true, message: 'Please input your password!' }]}
+              >
+                <Input.Password placeholder="Enter your password" />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit" block>
+                  Register
+                </Button>
+              </Form.Item>
+            </Form>
+          </Card>
         </div>
       )}
     </>

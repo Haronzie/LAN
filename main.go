@@ -165,8 +165,18 @@ func (a *App) updateUser(user User) error {
 
 // deleteUser removes a user from the database.
 func (a *App) deleteUser(username string) error {
-	_, err := a.DB.Exec("DELETE FROM users WHERE username = $1", username)
-	return err
+	res, err := a.DB.Exec("DELETE FROM users WHERE username = $1", username)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.New("user does not exist")
+	}
+	return nil
 }
 
 // adminExists checks if any admin exists in the database.
@@ -431,37 +441,64 @@ func (a *App) logoutHandler(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) forgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Invalid request method"})
 		return
 	}
-	user, err := a.getUserFromSession(r)
-	if err != nil || user.Role != "admin" {
-		http.Error(w, "Forbidden: Only admin can use forgot password", http.StatusForbidden)
-		return
+
+	// Decode the request body into a struct with username & new_password
+	var req struct {
+		Username    string `json:"username"`
+		NewPassword string `json:"new_password"`
 	}
-	var req ForgotPasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Invalid request body"})
 		return
 	}
+	req.Username = strings.TrimSpace(req.Username)
 	req.NewPassword = strings.TrimSpace(req.NewPassword)
-	if req.NewPassword == "" {
-		http.Error(w, "New password cannot be empty", http.StatusBadRequest)
+	if req.Username == "" || req.NewPassword == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Username and new password cannot be empty"})
 		return
 	}
+
+	// Attempt to retrieve the user by username
+	userRecord, err := a.getUserByUsername(req.Username)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Username not found"})
+		return
+	}
+
+	// Hash the new password
 	hashedPass, err := hashPassword(req.NewPassword)
 	if err != nil {
-		http.Error(w, "Error hashing password", http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Error hashing password"})
 		return
 	}
-	user.Password = hashedPass
-	if err := a.updateUser(user); err != nil {
-		http.Error(w, "Error updating password", http.StatusInternalServerError)
+
+	// Update the user record with the new password
+	userRecord.Password = hashedPass
+	if err := a.updateUser(userRecord); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Error updating password"})
 		return
 	}
+
+	// Return success
+	log.Println("Reached forgotPasswordHandler success block")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Admin password has been reset successfully. Please login with your new password.",
+		"message": "Password has been reset successfully. Please login with your new password.",
 	})
 }
 
@@ -938,16 +975,7 @@ func main() {
 	mux.HandleFunc("/admin-status", app.adminStatusHandler)
 	mux.HandleFunc("/update-user-status", app.updateUserStatusHandler)
 
-	staticPath, err := filepath.Abs("static")
-	if err != nil {
-		log.Fatal("Error finding static directory:", err)
-	}
-	fs := http.FileServer(http.Dir(staticPath))
-	mux.Handle("/", fs)
-	imagesFS := http.FileServer(http.Dir("images"))
-	mux.Handle("/images/", http.StripPrefix("/images/", imagesFS))
-
-	handler := enableCORS(mux)
+	handler := mux
 
 	// Start HTTP redirect server on port 80.
 	// go func() {

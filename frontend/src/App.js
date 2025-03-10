@@ -11,6 +11,7 @@ import { Layout, Menu } from 'antd';
 import HomePage from './components/HomePage';
 import Register from './components/Register';
 import Login from './components/Login';
+import ForgotPassword from './components/ForgotPassword';
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -66,6 +67,7 @@ function App() {
               </LoginRoute>
             }
           />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route
             path="/admin-dashboard"
             element={
