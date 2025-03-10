@@ -26,7 +26,7 @@ const Register = () => {
     checkAdminStatus();
   }, []);
 
-  // Handle form submission
+  // Handle form submission and redirect to Login on success
   const handleRegister = async (values) => {
     const { username, password } = values;
     try {
@@ -42,7 +42,7 @@ const Register = () => {
       } else {
         const data = await response.json();
         message.success(data.message);
-        // Redirect to Login after a successful registration
+        // Redirect to Login after successful registration
         navigate('/login');
       }
     } catch (err) {
@@ -54,7 +54,9 @@ const Register = () => {
     return (
       <div style={{ maxWidth: '400px', margin: 'auto', padding: '1rem' }}>
         <h2>Register</h2>
-        <p style={{ color: 'red' }}>Admin already registered. Registration is closed.</p>
+        <p style={{ color: 'red' }}>
+          Admin already registered. Registration is closed.
+        </p>
       </div>
     );
   }
