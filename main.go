@@ -29,6 +29,7 @@ type User struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Role     string `json:"role"` // "admin" or "user"
+	Active   bool   `json:"active"`
 }
 
 // FileRecord represents a stored file with metadata.
@@ -63,6 +64,10 @@ type UpdateUserRequest struct {
 
 type DeleteUserRequest struct {
 	Username string `json:"username"`
+}
+type UpdateUserStatusRequest struct {
+	Username string `json:"username"`
+	Active   bool   `json:"active"`
 }
 
 type ForgotPasswordRequest struct {
@@ -99,11 +104,13 @@ func checkPasswordHash(password, hash string) bool {
 // createTables creates the users and files tables if they don't exist.
 func (a *App) createTables() {
 	userTable := `
-	CREATE TABLE IF NOT EXISTS users (
-		username TEXT PRIMARY KEY,
-		password TEXT NOT NULL,
-		role TEXT NOT NULL
-	);`
+  CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL,
+    active BOOLEAN DEFAULT TRUE
+  );`
+
 	_, err := a.DB.Exec(userTable)
 	if err != nil {
 		log.Fatal("Error creating users table:", err)
@@ -124,9 +131,10 @@ func (a *App) createTables() {
 
 // getUserByUsername retrieves a user from the database.
 func (a *App) getUserByUsername(username string) (User, error) {
-	row := a.DB.QueryRow("SELECT username, password, role FROM users WHERE username = $1", username)
+	row := a.DB.QueryRow("SELECT username, password, role, active FROM users WHERE username = $1", username)
 	var user User
-	err := row.Scan(&user.Username, &user.Password, &user.Role)
+	err := row.Scan(&user.Username, &user.Password, &user.Role, &user.Active)
+
 	return user, err
 }
 
@@ -262,6 +270,7 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 		Username: req.Username,
 		Password: hashedPass,
 		Role:     "admin",
+		Active:   true,
 	}
 	if err := a.createUser(newUser); err != nil {
 		http.Error(w, "Error creating user", http.StatusInternalServerError)
@@ -285,6 +294,32 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 		"message": fmt.Sprintf("Admin '%s' registered successfully", req.Username),
 	})
 }
+func (a *App) updateUserStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+	var req UpdateUserStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+	// Update the user's active status in the database.
+	_, err := a.DB.Exec("UPDATE users SET active = $1 WHERE username = $2", req.Active, req.Username)
+	if err != nil {
+		http.Error(w, "Error updating user status", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": fmt.Sprintf("User '%s' status updated successfully", req.Username),
+	})
+}
 
 func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -305,6 +340,13 @@ func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{
 			"message": "Invalid username or password",
 		})
+		return
+	}
+
+	// Update the user's active status in the database
+	_, err = a.DB.Exec("UPDATE users SET active = $1 WHERE username = $2", true, user.Username)
+	if err != nil {
+		http.Error(w, "Error updating user status", http.StatusInternalServerError)
 		return
 	}
 
@@ -332,6 +374,17 @@ func (a *App) logoutHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// Retrieve the user from the session and mark them inactive.
+	user, err := a.getUserFromSession(r)
+	if err == nil && user.Username != "" {
+		if _, updateErr := a.DB.Exec("UPDATE users SET active = $1 WHERE username = $2", false, user.Username); updateErr != nil {
+			http.Error(w, "Error updating user status", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Clear the session.
 	session, err := a.Store.Get(r, "session")
 	if err != nil {
 		http.Error(w, "Error retrieving session", http.StatusInternalServerError)
@@ -342,6 +395,7 @@ func (a *App) logoutHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error saving session", http.StatusInternalServerError)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Logout successful"})
 }
@@ -567,25 +621,37 @@ func (a *App) usersHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	rows, err := a.DB.Query("SELECT username, role FROM users")
+
+	rows, err := a.DB.Query(`
+  SELECT username, role, active
+  FROM users
+  ORDER BY
+    CASE WHEN role = 'admin' THEN 0 ELSE 1 END,
+    username ASC
+`)
+
 	if err != nil {
 		http.Error(w, "Error retrieving users", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-	type UserWithRole struct {
+
+	type UserWithRoleAndStatus struct {
 		Username string `json:"username"`
 		Role     string `json:"role"`
+		Active   bool   `json:"active"`
 	}
-	var userList []UserWithRole
+
+	var userList []UserWithRoleAndStatus
 	for rows.Next() {
-		var u UserWithRole
-		if err := rows.Scan(&u.Username, &u.Role); err != nil {
+		var u UserWithRoleAndStatus
+		if err := rows.Scan(&u.Username, &u.Role, &u.Active); err != nil {
 			http.Error(w, "Error scanning user", http.StatusInternalServerError)
 			return
 		}
 		userList = append(userList, u)
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(userList)
 }
@@ -841,6 +907,7 @@ func main() {
 	mux.HandleFunc("/delete-user", app.deleteUserHandler)
 	mux.HandleFunc("/assign-admin", app.assignAdminHandler)
 	mux.HandleFunc("/admin-status", app.adminStatusHandler)
+	mux.HandleFunc("/update-user-status", app.updateUserStatusHandler)
 
 	staticPath, err := filepath.Abs("static")
 	if err != nil {

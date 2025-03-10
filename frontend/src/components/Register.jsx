@@ -1,17 +1,11 @@
+// src/components/Register.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
-import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
+import { Form, Input, Button, message } from 'antd';
 
 const Register = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  // State for toggling password visibility
-  const [showPassword, setShowPassword] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
   const [isRegistrationClosed, setIsRegistrationClosed] = useState(false);
-
-  const navigate = useNavigate(); // Create the navigate instance
+  const navigate = useNavigate();
 
   // Check if an admin is already registered on mount
   useEffect(() => {
@@ -32,16 +26,9 @@ const Register = () => {
     checkAdminStatus();
   }, []);
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-
-    if (!username || !password) {
-      setError('Username and password are required.');
-      return;
-    }
-
+  // Handle form submission
+  const handleRegister = async (values) => {
+    const { username, password } = values;
     try {
       const response = await fetch('/register', {
         method: 'POST',
@@ -51,23 +38,21 @@ const Register = () => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        setError(errorText || 'Registration failed.');
+        message.error(errorText || 'Registration failed.');
       } else {
         const data = await response.json();
-        setMessage(data.message);
-        setUsername('');
-        setPassword('');
+        message.success(data.message);
         // Redirect to Login after a successful registration
         navigate('/login');
       }
     } catch (err) {
-      setError(`An error occurred: ${err.message}`);
+      message.error(`An error occurred: ${err.message}`);
     }
   };
 
   if (isRegistrationClosed) {
     return (
-      <div style={{ maxWidth: '400px', margin: 'auto' }}>
+      <div style={{ maxWidth: '400px', margin: 'auto', padding: '1rem' }}>
         <h2>Register</h2>
         <p style={{ color: 'red' }}>Admin already registered. Registration is closed.</p>
       </div>
@@ -75,50 +60,29 @@ const Register = () => {
   }
 
   return (
-    <div style={{ maxWidth: '400px', margin: 'auto' }}>
+    <div style={{ maxWidth: '400px', margin: 'auto', padding: '1rem' }}>
       <h2>Register</h2>
-      <form onSubmit={handleRegister}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="username">Username:</label>
-          <br />
-          <input
-            type="text"
-            id="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            style={{ width: '100%' }}
-          />
-        </div>
-        <div style={{ marginBottom: '1rem', position: 'relative' }}>
-          <label htmlFor="password">Password:</label>
-          <br />
-          <input
-            type={showPassword ? 'text' : 'password'}
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            style={{
-              position: 'absolute',
-              right: '10px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            {showPassword ? <FaEyeSlash /> : <FaEye />}
-          </button>
-        </div>
-        <button type="submit">Register</button>
-      </form>
-      {error && <p style={{ color: 'red', marginTop: '1rem' }}>{error}</p>}
-      {message && <p style={{ color: 'green', marginTop: '1rem' }}>{message}</p>}
+      <Form layout="vertical" onFinish={handleRegister}>
+        <Form.Item
+          label="Username"
+          name="username"
+          rules={[{ required: true, message: 'Please input your username!' }]}
+        >
+          <Input placeholder="Enter your username" />
+        </Form.Item>
+        <Form.Item
+          label="Password"
+          name="password"
+          rules={[{ required: true, message: 'Please input your password!' }]}
+        >
+          <Input.Password placeholder="Enter your password" />
+        </Form.Item>
+        <Form.Item>
+          <Button type="primary" htmlType="submit" block>
+            Register
+          </Button>
+        </Form.Item>
+      </Form>
     </div>
   );
 };

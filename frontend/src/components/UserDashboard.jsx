@@ -1,28 +1,35 @@
+// src/components/UserDashboard.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Spinner from './Spinner'; // Import your Spinner component
+import {
+  Layout,
+  Tabs,
+  Button,
+  Form,
+  Upload,
+  Spin,
+  List,
+  message,
+} from 'antd';
+import { UploadOutlined, DownloadOutlined, DeleteOutlined } from '@ant-design/icons';
+
+const { Header, Content } = Layout;
+const { TabPane } = Tabs;
 
 const UserDashboard = () => {
   const navigate = useNavigate();
-
-  // Tabs: "files" or "upload"
   const [activeTab, setActiveTab] = useState('files');
   const [files, setFiles] = useState([]);
   const [uploadFile, setUploadFile] = useState(null);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  
-  // Loading state
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Retrieve logged-in user from localStorage
   const [loggedInUser, setLoggedInUser] = useState(null);
 
+  // Retrieve logged-in user from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser) {
       const userObj = JSON.parse(storedUser);
-      // If the user has the admin role, redirect away from UserDashboard.
+      // If the user is admin, redirect away from UserDashboard.
       if (userObj.role && userObj.role === 'admin') {
         navigate('/admin-dashboard');
       } else {
@@ -30,12 +37,11 @@ const UserDashboard = () => {
       }
     }
   }, [navigate]);
-  
 
-  // Wrap fetchFiles in useCallback so it becomes a stable dependency.
+  // Fetch files from the back-end
   const fetchFiles = useCallback(async () => {
     if (!loggedInUser) {
-      setError('You must be logged in to view files.');
+      message.error('You must be logged in to view files.');
       return;
     }
     setIsLoading(true);
@@ -45,38 +51,31 @@ const UserDashboard = () => {
         throw new Error('Failed to fetch files');
       }
       const data = await response.json();
-      setFiles(data || []); // Default to empty array if data is null
+      setFiles(data || []);
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
     setIsLoading(false);
   }, [loggedInUser]);
 
-  // Fetch files on component mount and whenever fetchFiles changes
   useEffect(() => {
-    if (loggedInUser) { 
+    if (loggedInUser) {
       fetchFiles();
     }
   }, [loggedInUser, fetchFiles]);
 
-  // Handle file upload (with login check)
-  const handleUpload = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-
+  // Handle file upload using Ant Design's Form and Upload components
+  const handleUpload = async () => {
     if (!loggedInUser) {
-      setError('You must be logged in to upload a file.');
+      message.error('You must be logged in to upload a file.');
       return;
     }
-
     if (!uploadFile) {
-      setError('Please select a file to upload.');
+      message.error('Please select a file to upload.');
       return;
     }
     const formData = new FormData();
     formData.append('file', uploadFile);
-
     try {
       const response = await fetch('/upload', {
         method: 'POST',
@@ -86,19 +85,17 @@ const UserDashboard = () => {
         const errText = await response.text();
         throw new Error(errText || 'Failed to upload file');
       }
-      const data = await response.json();
-      setMessage(data.message);
+      await response.json();
+      message.success(`File "${uploadFile.name}" uploaded successfully`);
       setUploadFile(null);
-      fetchFiles(); // Refresh the file list after upload
+      fetchFiles();
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
 
   // Handle logout
   const handleLogout = async () => {
-    setError('');
-    setMessage('');
     try {
       const response = await fetch('/logout', { method: 'POST' });
       if (!response.ok) {
@@ -106,49 +103,40 @@ const UserDashboard = () => {
         throw new Error(errText || 'Failed to logout');
       }
       const data = await response.json();
-      setMessage(data.message);
-      
-      // Clear user data from localStorage
+      message.success(data.message);
       localStorage.removeItem('loggedInUser');
-  
       navigate('/login');
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
-  
 
   // Handle file download
   const handleDownload = async (fileName) => {
-    setError('');
-    setMessage('');
     try {
       const response = await fetch(`/download?filename=${encodeURIComponent(fileName)}`);
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(errText || 'Failed to download file');
       }
-      // Convert the response to a Blob for download
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = fileName; // Suggested filename
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setMessage(`File "${fileName}" downloaded successfully.`);
+      message.success(`File "${fileName}" downloaded successfully.`);
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
 
-  // Handle file deletion (with login check)
+  // Handle file deletion
   const handleDelete = async (fileName) => {
-    setError('');
-    setMessage('');
     if (!loggedInUser) {
-      setError('You must be logged in to delete a file.');
+      message.error('You must be logged in to delete a file.');
       return;
     }
     try {
@@ -162,68 +150,94 @@ const UserDashboard = () => {
         throw new Error(errText || 'Failed to delete file');
       }
       const data = await response.json();
-      setMessage(data.message);
-      fetchFiles(); // Refresh file list after deletion
+      message.success(data.message);
+      fetchFiles();
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <h2>User Dashboard</h2>
-      <button onClick={handleLogout}>Logout</button>
-
-      {/* Navigation for tabs */}
-      <nav style={{ margin: '1rem 0' }}>
-        <button onClick={() => setActiveTab('files')}>View Files</button>
-        <button onClick={() => setActiveTab('upload')}>Upload File</button>
-      </nav>
-
-      {/* Display errors or success messages */}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {message && <p style={{ color: 'green' }}>{message}</p>}
-
-      {/* Render content based on active tab */}
-      {activeTab === 'files' && (
-        <div>
-          <h3>Files</h3>
-          {isLoading ? (
-            <Spinner />  // Spinner displayed when loading
-          ) : files.length === 0 ? (
-            <p>No files found.</p>
-          ) : (
-            <ul>
-              {files.map((file, index) => (
-                <li key={index}>
-                  {file.file_name} - {file.size} bytes - Uploaded by: {file.uploader}{' '}
-                  <button onClick={() => handleDownload(file.file_name)}>Download</button>
-                  {loggedInUser && loggedInUser.username === file.uploader && (
-                    <button onClick={() => handleDelete(file.file_name)}>Delete</button>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          backgroundColor: '#001529',
+        }}
+      >
+        <h2 style={{ color: '#fff', margin: 0 }}>User Dashboard</h2>
+        <Button type="primary" onClick={handleLogout}>
+          Logout
+        </Button>
+      </Header>
+      <Content style={{ padding: '1rem' }}>
+        <Tabs activeKey={activeTab} onChange={(key) => setActiveTab(key)}>
+          <TabPane tab="View Files" key="files">
+            <Spin spinning={isLoading}>
+              {files.length === 0 ? (
+                <p>No files found.</p>
+              ) : (
+                <List
+                  dataSource={files}
+                  renderItem={(file) => (
+                    <List.Item
+                      actions={[
+                        <Button
+                          icon={<DownloadOutlined />}
+                          size="small"
+                          onClick={() => handleDownload(file.file_name)}
+                        >
+                          Download
+                        </Button>,
+                        loggedInUser &&
+                        loggedInUser.username === file.uploader ? (
+                          <Button
+                            icon={<DeleteOutlined />}
+                            size="small"
+                            danger
+                            onClick={() => handleDelete(file.file_name)}
+                          >
+                            Delete
+                          </Button>
+                        ) : null,
+                      ]}
+                    >
+                      <List.Item.Meta
+                        title={file.file_name}
+                        description={`Size: ${file.size} bytes - Uploaded by: ${file.uploader}`}
+                      />
+                    </List.Item>
                   )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'upload' && (
-        <div>
-          <h3>Upload a New File</h3>
-          <form onSubmit={handleUpload}>
-            <div>
-              <label>Select File: </label>
-              <input
-                type="file"
-                onChange={(e) => setUploadFile(e.target.files[0])}
-              />
-            </div>
-            <button type="submit">Upload</button>
-          </form>
-        </div>
-      )}
-    </div>
+                />
+              )}
+            </Spin>
+          </TabPane>
+          <TabPane tab="Upload File" key="upload">
+            <Form layout="vertical" onFinish={handleUpload}>
+              <Form.Item label="Select File">
+                <Upload
+                  beforeUpload={(file) => {
+                    setUploadFile(file);
+                    return false; // Prevent auto-upload
+                  }}
+                  fileList={uploadFile ? [uploadFile] : []}
+                  onRemove={() => setUploadFile(null)}
+                >
+                  <Button icon={<UploadOutlined />}>Select File</Button>
+                </Upload>
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit">
+                  Upload
+                </Button>
+              </Form.Item>
+            </Form>
+          </TabPane>
+        </Tabs>
+      </Content>
+    </Layout>
   );
 };
 

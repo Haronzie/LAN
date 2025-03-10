@@ -1,50 +1,49 @@
+// src/components/AdminDashboard.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Spinner from './Spinner'; // Make sure Spinner.jsx and Spinner.css exist in your project
+import {
+  Layout,
+  Tabs,
+  Button,
+  Table,
+  Form,
+  Input,
+  Upload,
+  Spin,
+  message,
+} from 'antd';
+import { UploadOutlined, DownloadOutlined, DeleteOutlined } from '@ant-design/icons';
+
+const { Header, Content } = Layout;
+const { TabPane } = Tabs;
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
 
+  // State declarations
   const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [files, setFiles] = useState([]);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // Loading state
-
-  // States for "Add User"
-  const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-
-  // States for "Update User" (only using old username, new username, and new password)
-  const [oldUsername, setOldUsername] = useState('');
-  const [updatedUsername, setUpdatedUsername] = useState('');
-  const [updatedPassword, setUpdatedPassword] = useState('');
-
-  // State for "Delete User"
-  const [deleteUsername, setDeleteUsername] = useState('');
-
-  // State for "Assign Admin"
-  const [assignUsername, setAssignUsername] = useState('');
-
-  // State for file upload
+  const [isLoading, setIsLoading] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
+  // Store the entire logged in user object (including role)
+  const [currentUser, setCurrentUser] = useState(null);
+  const [searchTerm, setSearchTerm] = useState(''); // search for users
+  const [fileSearchTerm, setFileSearchTerm] = useState(''); // search for files
 
-  // Current logged in user
-  const [currentUser, setCurrentUser] = useState('');
-
-  // Get username from localStorage
+  // Get current logged in user from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser) {
+      // Now store the whole object (e.g., { username, role })
       const userObj = JSON.parse(storedUser);
       if (userObj && userObj.username) {
-        setCurrentUser(userObj.username);
+        setCurrentUser(userObj);
       }
     }
   }, []);
 
-  // Fetch users from the back-end
+  // Fetch users from back-end
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -55,12 +54,12 @@ const AdminDashboard = () => {
       const data = await response.json();
       setUsers(data);
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
     setIsLoading(false);
   }, []);
 
-  // Fetch files from the back-end
+  // Fetch files from back-end
   const fetchFiles = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -69,17 +68,15 @@ const AdminDashboard = () => {
         throw new Error('Failed to fetch files');
       }
       const data = await response.json();
-      setFiles(data || []); // Default to empty array if no files
+      setFiles(data || []);
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
     setIsLoading(false);
   }, []);
 
   // Refresh data on tab change
   useEffect(() => {
-    setError('');
-    setMessage('');
     if (activeTab === 'users') {
       fetchUsers();
     }
@@ -88,86 +85,73 @@ const AdminDashboard = () => {
     }
   }, [activeTab, fetchUsers, fetchFiles]);
 
-  // Add User handler
-  const handleAddUser = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
+  // Handler for adding a user via Form (values: { newUsername, newPassword })
+  const handleAddUser = async (values) => {
     try {
       const response = await fetch('/add-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: newUsername, password: newPassword }),
+        body: JSON.stringify({
+          username: values.newUsername,
+          password: values.newPassword,
+        }),
       });
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(errText || 'Failed to add user');
       }
       const data = await response.json();
-      setMessage(data.message);
-      setNewUsername('');
-      setNewPassword('');
+      message.success(data.message);
       fetchUsers();
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
 
-  // Update User handler with additional error handling
-  const handleUpdateUser = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-
-    // Validate that all required fields are provided
+  // Handler for updating a user (values: { oldUsername, updatedUsername, updatedPassword })
+  const handleUpdateUser = async (values) => {
     if (
-      !oldUsername.trim() ||
-      !updatedUsername.trim() ||
-      !updatedPassword.trim()
+      !values.oldUsername.trim() ||
+      !values.updatedUsername.trim() ||
+      !values.updatedPassword.trim()
     ) {
-      setError("Old username, new username, and new password are required.");
+      message.error("Old username, new username, and new password are required.");
       return;
     }
-
-    // Check if the old username exists in the users array
-    const userExists = users.some((u) => {
-      const username = (typeof u === 'object' && u.username)
-        ? u.username.toLowerCase()
-        : "";
-      return username === oldUsername.trim().toLowerCase();
-    });
+    const userExists = users.some((u) =>
+      u.username
+        ? u.username.toLowerCase() === values.oldUsername.trim().toLowerCase()
+        : false
+    );
     if (!userExists) {
-      setError("User does not exist.");
+      message.error("User does not exist.");
       return;
     }
-
-    // If the new username is the same as the old username, reject the update.
-    if (oldUsername.trim().toLowerCase() === updatedUsername.trim().toLowerCase()) {
-      setError("New username must be different from the old username.");
+    if (
+      values.oldUsername.trim().toLowerCase() ===
+      values.updatedUsername.trim().toLowerCase()
+    ) {
+      message.error("New username must be different from the old username.");
       return;
     }
-
-    // Check if the new username is already taken by another user.
-    const usernameTaken = users.some((u) => {
-      const username = (typeof u === 'object' && u.username)
-        ? u.username.toLowerCase()
-        : "";
-      return username === updatedUsername.trim().toLowerCase() &&
-             username !== oldUsername.trim().toLowerCase();
-    });
+    const usernameTaken = users.some((u) =>
+      u.username
+        ? u.username.toLowerCase() === values.updatedUsername.trim().toLowerCase() &&
+          u.username.toLowerCase() !== values.oldUsername.trim().toLowerCase()
+        : false
+    );
     if (usernameTaken) {
-      setError("New username is already taken.");
+      message.error("New username is already taken.");
       return;
     }
-
     try {
       const response = await fetch('/update-user', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          old_username: oldUsername,
-          new_username: updatedUsername,
-          new_password: updatedPassword,
+          old_username: values.oldUsername,
+          new_username: values.updatedUsername,
+          new_password: values.updatedPassword,
         }),
       });
       if (!response.ok) {
@@ -175,105 +159,82 @@ const AdminDashboard = () => {
         throw new Error(errText || 'Failed to update user');
       }
       const data = await response.json();
-      setMessage(data.message);
-      setOldUsername('');
-      setUpdatedUsername('');
-      setUpdatedPassword('');
+      message.success(data.message);
       fetchUsers();
-
-      // If the admin updated their own credentials, log them out automatically.
-      if (oldUsername.trim().toLowerCase() === currentUser.trim().toLowerCase()) {
+      if (
+        values.oldUsername.trim().toLowerCase() === currentUser.username.trim().toLowerCase()
+      ) {
         localStorage.removeItem('loggedInUser');
         navigate('/login');
-        return;
       }
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
 
-  // Delete User handler with self-deletion check and graceful error handling
-  const handleDeleteUser = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-
-    const trimmedUsername = deleteUsername.trim().toLowerCase();
-
-    // Prevent deleting the current admin account.
-    if (trimmedUsername === currentUser.trim().toLowerCase()) {
-      setError("Cannot delete your own admin account. Please assign another admin before deleting your account.");
+  // Handler for deleting a user (values: { deleteUsername })
+  const handleDeleteUser = async (values) => {
+    const trimmedUsername = values.deleteUsername.trim().toLowerCase();
+    if (trimmedUsername === currentUser.username.trim().toLowerCase()) {
+      message.error("Cannot delete your own admin account. Please assign another admin first.");
       return;
     }
-
-    // Check if the users array is non-empty and contains the username.
     if (!users || users.length === 0) {
-      setError("No users available.");
+      message.error("No users available.");
       return;
     }
-
-    const userExists = users.some((u) => {
-      const username = typeof u === 'object' && u.username ? u.username.toLowerCase() : "";
-      return username === trimmedUsername;
-    });
-
+    const userExists = users.some((u) =>
+      u.username ? u.username.toLowerCase() === trimmedUsername : false
+    );
     if (!userExists) {
-      setError("User does not exist.");
+      message.error("User does not exist.");
       return;
     }
-
     try {
       const response = await fetch('/delete-user', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: deleteUsername }),
+        body: JSON.stringify({ username: values.deleteUsername }),
       });
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(errText || 'Failed to delete user');
       }
       const data = await response.json();
-      setMessage(data.message);
-      setDeleteUsername('');
+      message.success(data.message);
       fetchUsers();
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
 
-  // Assign Admin handler
-  const handleAssignAdmin = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
+  // Handler for assigning admin role (values: { assignUsername })
+  const handleAssignAdmin = async (values) => {
     try {
       const response = await fetch('/assign-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: assignUsername }),
+        body: JSON.stringify({ username: values.assignUsername }),
       });
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(errText || 'Failed to assign admin');
       }
       const data = await response.json();
-      setMessage(data.message);
-      setAssignUsername('');
+      message.success(data.message);
       fetchUsers();
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
 
-  // Upload File handler
-  const handleUpload = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
+  // Handler for uploading a file. Uses state uploadFile set via Upload component.
+  const handleFileUpload = async () => {
     if (!uploadFile) {
-      setError('Please select a file to upload.');
+      message.error('Please select a file to upload.');
       return;
     }
+    const fileName = uploadFile.name;
     const formData = new FormData();
     formData.append('file', uploadFile);
     try {
@@ -285,49 +246,21 @@ const AdminDashboard = () => {
         const errText = await response.text();
         throw new Error(errText || 'Failed to upload file');
       }
-      const data = await response.json();
-      setMessage(data.message);
+      await response.json();
+      message.success(`File "${fileName}" uploaded successfully`);
       setUploadFile(null);
       fetchFiles();
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
 
-  // Delete File handler
-  const handleDeleteFile = async (file) => {
-    setError('');
-    setMessage('');
-    if (currentUser.trim() !== file.uploader.trim()) {
-      setError('You are not allowed to delete this file.');
-      return;
-    }
-    try {
-      const response = await fetch('/delete-file', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_name: file.file_name }),
-      });
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText || 'Failed to delete file');
-      }
-      const data = await response.json();
-      setMessage(data.message);
-      fetchFiles();
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // Updated Download File handler using blob
+  // Handler for downloading a file
   const handleDownload = async (file) => {
-    setError('');
-    setMessage('');
     try {
       const response = await fetch(`/download?filename=${encodeURIComponent(file.file_name)}`, {
         method: 'GET',
-        credentials: 'include'
+        credentials: 'include',
       });
       if (!response.ok) {
         throw new Error('Download failed');
@@ -342,199 +275,280 @@ const AdminDashboard = () => {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
+    }
+  };
+
+  // Handler for deleting a file
+  const handleDeleteFile = async (file) => {
+    if (currentUser.role !== 'admin' && currentUser.username.trim() !== file.uploader.trim()) {
+      message.error('You are not allowed to delete this file.');
+      return;
+    }
+    try {
+      const response = await fetch('/delete-file', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: file.file_name }),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || 'Failed to delete file');
+      }
+      const data = await response.json();
+      message.success(data.message);
+      fetchFiles();
+    } catch (err) {
+      message.error(err.message);
     }
   };
 
   // Logout handler
   const handleLogout = async () => {
-    setError('');
-    setMessage('');
     try {
-      const response = await fetch('/logout', {
-        method: 'POST',
-      });
+      const response = await fetch('/logout', { method: 'POST' });
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(errText || 'Failed to logout');
       }
       const data = await response.json();
-      setMessage(data.message);
+      message.success(data.message);
       localStorage.removeItem('loggedInUser');
       navigate('/login');
     } catch (err) {
-      setError(err.message);
+      message.error(err.message);
     }
   };
 
+  // Define columns for the Users table
+  const userColumns = [
+    { title: 'Username', dataIndex: 'username', key: 'username' },
+    { title: 'Role', dataIndex: 'role', key: 'role' },
+    {
+      title: 'Status',
+      dataIndex: 'active',
+      key: 'active',
+      render: (active) => (active ? 'Active' : 'Inactive'),
+    },
+  ];
+  
+
+  // Define columns for the Files table
+  const fileColumns = [
+    { title: 'File Name', dataIndex: 'file_name', key: 'file_name' },
+    { title: 'Size (bytes)', dataIndex: 'size', key: 'size' },
+    { title: 'Uploader', dataIndex: 'uploader', key: 'uploader' },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, record) => (
+        <>
+          <Button
+            icon={<DownloadOutlined />}
+            size="small"
+            onClick={() => handleDownload(record)}
+            style={{ marginRight: 8 }}
+          >
+            Download
+          </Button>
+          {(currentUser && (currentUser.role === 'admin' || currentUser.username.trim() === record.uploader.trim())) && (
+            <Button
+              icon={<DeleteOutlined />}
+              size="small"
+              danger
+              onClick={() => handleDeleteFile(record)}
+            >
+              Delete
+            </Button>
+          )}
+        </>
+      ),
+    },
+  ];
+
+  // Filter users based on search term (case-insensitive)
+  const filteredUsers = users.filter(user =>
+    user.username.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Filter files based on file search term (case-insensitive)
+  const filteredFiles = files.filter(file =>
+    file.file_name.toLowerCase().includes(fileSearchTerm.toLowerCase())
+  );
+
   return (
-    <div style={{ padding: '1rem' }}>
-      <h2>Admin Dashboard</h2>
-      <nav style={{ marginBottom: '1rem' }}>
-        <button onClick={() => setActiveTab('users')}>View Users</button>
-        <button onClick={() => setActiveTab('addUser')}>Add User</button>
-        <button onClick={() => setActiveTab('updateUser')}>Update User</button>
-        <button onClick={() => setActiveTab('deleteUser')}>Delete User</button>
-        <button onClick={() => setActiveTab('assignAdmin')}>Assign Admin</button>
-        <button onClick={() => setActiveTab('files')}>View Files</button>
-        <button onClick={() => setActiveTab('uploadFile')}>Upload File</button>
-        <button onClick={handleLogout}>Logout</button>
-      </nav>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {message && <p style={{ color: 'green' }}>{message}</p>}
-
-      {activeTab === 'users' && (
-        <div>
-          <h3>User List</h3>
-          {isLoading ? (
-            <Spinner />
-          ) : users.length === 0 ? (
-            <p>No users found.</p>
-          ) : (
-            <ul>
-              {users.map((user, index) => (
-                <li key={index}>
-                  {typeof user === 'object'
-                    ? `${user.username} (${user.role})`
-                    : user}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'files' && (
-        <div>
-          <h3>Files</h3>
-          {isLoading ? (
-            <Spinner />
-          ) : files.length === 0 ? (
-            <p>No files found.</p>
-          ) : (
-            <ul>
-              {files.map((file, index) => (
-                <li key={index}>
-                  {file.file_name} - {file.size} bytes - Uploaded by: {file.uploader}{' '}
-                  <button onClick={() => handleDownload(file)}>Download</button>
-                  {currentUser.trim() === file.uploader.trim() && (
-                    <button onClick={() => handleDeleteFile(file)}>Delete</button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'addUser' && (
-        <div>
-          <h3>Add User</h3>
-          <form onSubmit={handleAddUser}>
-            <div>
-              <label>Username: </label>
-              <input
-                type="text"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-              />
-            </div>
-            <div>
-              <label>Password: </label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-            </div>
-            <button type="submit">Add User</button>
-          </form>
-        </div>
-      )}
-
-      {activeTab === 'updateUser' && (
-        <div>
-          <h3>Update User</h3>
-          <form onSubmit={handleUpdateUser}>
-            <div>
-              <label>Old Username: </label>
-              <input
-                type="text"
-                value={oldUsername}
-                onChange={(e) => setOldUsername(e.target.value)}
-              />
-            </div>
-            <div>
-              <label>New Username: </label>
-              <input
-                type="text"
-                value={updatedUsername}
-                onChange={(e) => setUpdatedUsername(e.target.value)}
-              />
-            </div>
-            <div>
-              <label>New Password: </label>
-              <input
-                type="password"
-                value={updatedPassword}
-                onChange={(e) => setUpdatedPassword(e.target.value)}
-              />
-            </div>
-            <button type="submit">Update User</button>
-          </form>
-        </div>
-      )}
-
-      {activeTab === 'deleteUser' && (
-        <div>
-          <h3>Delete User</h3>
-          <form onSubmit={handleDeleteUser}>
-            <div>
-              <label>Username: </label>
-              <input
-                type="text"
-                value={deleteUsername}
-                onChange={(e) => setDeleteUsername(e.target.value)}
-              />
-            </div>
-            <button type="submit">Delete User</button>
-          </form>
-        </div>
-      )}
-
-      {activeTab === 'assignAdmin' && (
-        <div>
-          <h3>Assign Admin Role</h3>
-          <form onSubmit={handleAssignAdmin}>
-            <div>
-              <label>Username: </label>
-              <input
-                type="text"
-                value={assignUsername}
-                onChange={(e) => setAssignUsername(e.target.value)}
-              />
-            </div>
-            <button type="submit">Assign Admin</button>
-          </form>
-        </div>
-      )}
-
-      {activeTab === 'uploadFile' && (
-        <div>
-          <h3>Upload File</h3>
-          <form onSubmit={handleUpload}>
-            <div>
-              <label>Select File: </label>
-              <input
-                type="file"
-                onChange={(e) => setUploadFile(e.target.files[0])}
-              />
-            </div>
-            <button type="submit">Upload</button>
-          </form>
-        </div>
-      )}
-    </div>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          backgroundColor: '#001529',
+        }}
+      >
+        <h2 style={{ color: '#fff', margin: 0 }}>Admin Dashboard</h2>
+        <Button type="primary" onClick={handleLogout}>
+          Logout
+        </Button>
+      </Header>
+      <Content style={{ padding: '1rem' }}>
+        <Tabs activeKey={activeTab} onChange={(key) => setActiveTab(key)}>
+          <TabPane tab="View Users" key="users">
+            <h3>User List</h3>
+            <Input.Search
+              placeholder="Search users by username"
+              allowClear
+              onSearch={(value) => setSearchTerm(value)}
+              style={{ marginBottom: 16, maxWidth: 300 }}
+            />
+            <Spin spinning={isLoading}>
+              {filteredUsers && filteredUsers.length > 0 ? (
+                <Table
+                  dataSource={filteredUsers}
+                  columns={userColumns}
+                  rowKey="username"
+                  pagination={false}
+                />
+              ) : (
+                <p>No users found.</p>
+              )}
+            </Spin>
+          </TabPane>
+          <TabPane tab="View Files" key="files">
+            <h3>Files</h3>
+            <Input.Search
+              placeholder="Search files by name"
+              allowClear
+              onSearch={(value) => setFileSearchTerm(value)}
+              style={{ marginBottom: 16, maxWidth: 300 }}
+            />
+            <Spin spinning={isLoading}>
+              {filteredFiles && filteredFiles.length > 0 ? (
+                <Table
+                  dataSource={filteredFiles}
+                  columns={fileColumns}
+                  rowKey="file_name"
+                  pagination={false}
+                />
+              ) : (
+                <p>No files found.</p>
+              )}
+            </Spin>
+          </TabPane>
+          <TabPane tab="Add User" key="addUser">
+            <h3>Add User</h3>
+            <Form layout="vertical" onFinish={handleAddUser}>
+              <Form.Item
+                label="Username"
+                name="newUsername"
+                rules={[{ required: true, message: 'Please input username' }]}
+              >
+                <Input placeholder="Enter username" />
+              </Form.Item>
+              <Form.Item
+                label="Password"
+                name="newPassword"
+                rules={[{ required: true, message: 'Please input password' }]}
+              >
+                <Input.Password placeholder="Enter password" />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit">
+                  Add User
+                </Button>
+              </Form.Item>
+            </Form>
+          </TabPane>
+          <TabPane tab="Update User" key="updateUser">
+            <h3>Update User</h3>
+            <Form layout="vertical" onFinish={handleUpdateUser}>
+              <Form.Item
+                label="Old Username"
+                name="oldUsername"
+                rules={[{ required: true, message: 'Please input old username' }]}
+              >
+                <Input placeholder="Enter old username" />
+              </Form.Item>
+              <Form.Item
+                label="New Username"
+                name="updatedUsername"
+                rules={[{ required: true, message: 'Please input new username' }]}
+              >
+                <Input placeholder="Enter new username" />
+              </Form.Item>
+              <Form.Item
+                label="New Password"
+                name="updatedPassword"
+                rules={[{ required: true, message: 'Please input new password' }]}
+              >
+                <Input.Password placeholder="Enter new password" />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit">
+                  Update User
+                </Button>
+              </Form.Item>
+            </Form>
+          </TabPane>
+          <TabPane tab="Delete User" key="deleteUser">
+            <h3>Delete User</h3>
+            <Form layout="vertical" onFinish={handleDeleteUser}>
+              <Form.Item
+                label="Username"
+                name="deleteUsername"
+                rules={[{ required: true, message: 'Please input username to delete' }]}
+              >
+                <Input placeholder="Enter username" />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" danger htmlType="submit">
+                  Delete User
+                </Button>
+              </Form.Item>
+            </Form>
+          </TabPane>
+          <TabPane tab="Assign Admin" key="assignAdmin">
+            <h3>Assign Admin Role</h3>
+            <Form layout="vertical" onFinish={handleAssignAdmin}>
+              <Form.Item
+                label="Username"
+                name="assignUsername"
+                rules={[{ required: true, message: 'Please input username' }]}
+              >
+                <Input placeholder="Enter username" />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit">
+                  Assign Admin
+                </Button>
+              </Form.Item>
+            </Form>
+          </TabPane>
+          <TabPane tab="Upload File" key="uploadFile">
+            <h3>Upload File</h3>
+            <Form layout="vertical" onFinish={handleFileUpload}>
+              <Form.Item label="Select File">
+                <Upload
+                  beforeUpload={(file) => {
+                    setUploadFile(file);
+                    return false; // Prevent auto-upload
+                  }}
+                  fileList={uploadFile ? [uploadFile] : []}
+                  onRemove={() => setUploadFile(null)}
+                >
+                  <Button icon={<UploadOutlined />}>Select File</Button>
+                </Upload>
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit">
+                  Upload
+                </Button>
+              </Form.Item>
+            </Form>
+          </TabPane>
+        </Tabs>
+      </Content>
+    </Layout>
   );
 };
 

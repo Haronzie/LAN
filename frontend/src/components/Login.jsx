@@ -1,29 +1,16 @@
+// src/components/Login.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import FocusableInput from './FocusableInput';
-import ClickableButton from './ClickableButton';
+import { Form, Input, Button, message } from 'antd';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [isForgotPassword, setIsForgotPassword] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  // New state for toggling password visibility
-  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-
-    if (!username || !password) {
-      setError('Username and password are required.');
-      return;
-    }
-
+  const handleLogin = async (values) => {
+    const { username, password } = values;
+    setLoading(true);
     try {
       const response = await fetch('/login', {
         method: 'POST',
@@ -32,16 +19,12 @@ const Login = () => {
       });
 
       if (!response.ok) {
-        setError('Invalid username or password.');
+        message.error('Invalid username or password.');
       } else {
         const data = await response.json();
-        setMessage(data.message);
-        setUsername('');
-        setPassword('');
-
+        message.success(data.message);
         // Store username and role in localStorage
         localStorage.setItem('loggedInUser', JSON.stringify({ username: data.username, role: data.role }));
-
         // Redirect based on role
         if (data.role === 'admin') {
           navigate('/admin-dashboard');
@@ -50,20 +33,15 @@ const Login = () => {
         }
       }
     } catch (err) {
-      setError(`An error occurred: ${err.message}`);
+      message.error(`An error occurred: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleForgotPassword = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-
-    if (!newPassword) {
-      setError('New password is required.');
-      return;
-    }
-
+  const handleForgotPassword = async (values) => {
+    const { newPassword } = values;
+    setLoading(true);
     try {
       const response = await fetch('/forgot-password', {
         method: 'POST',
@@ -73,115 +51,71 @@ const Login = () => {
 
       if (!response.ok) {
         const data = await response.json();
-        setError(data.message || 'Failed to reset password.');
+        message.error(data.message || 'Failed to reset password.');
       } else {
         const data = await response.json();
-        setMessage(data.message);
-        setNewPassword('');
+        message.success(data.message);
         // Optionally redirect back to login after a successful reset
         navigate('/');
       }
     } catch (err) {
-      setError(`An error occurred: ${err.message}`);
+      message.error(`An error occurred: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: 'auto' }}>
+    <div style={{ maxWidth: '400px', margin: 'auto', padding: '1rem' }}>
       <h2>Login</h2>
       {!isForgotPassword ? (
-        <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: '1rem' }}>
-            <label htmlFor="username">Username:</label>
-            <br />
-            <FocusableInput
-              id="username"
-              placeholder="Enter your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-          </div>
-          <div style={{ marginBottom: '1rem', position: 'relative' }}>
-            <label htmlFor="password">Password:</label>
-            <br />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              style={{
-                position: 'absolute',
-                right: '10px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              {showPassword ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          <ClickableButton type="submit" ariaLabel="Login">
-            Login
-          </ClickableButton>
-          <p style={{ marginTop: '1rem', textAlign: 'center' }}>
-            <button
-              type="button"
-              onClick={() => setIsForgotPassword(true)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'blue',
-                textDecoration: 'underline',
-                cursor: 'pointer'
-              }}
-            >
+        <Form layout="vertical" onFinish={handleLogin}>
+          <Form.Item
+            name="username"
+            label="Username"
+            rules={[{ required: true, message: 'Please input your username!' }]}
+          >
+            <Input placeholder="Enter your username" />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="Password"
+            rules={[{ required: true, message: 'Please input your password!' }]}
+          >
+            <Input.Password placeholder="Enter your password" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>
+              Login
+            </Button>
+          </Form.Item>
+          <Form.Item>
+            <Button type="link" onClick={() => setIsForgotPassword(true)} block>
               Forgot Password?
-            </button>
-          </p>
-        </form>
+            </Button>
+          </Form.Item>
+        </Form>
       ) : (
-        <form onSubmit={handleForgotPassword}>
-          <div style={{ marginBottom: '1rem' }}>
-            <label htmlFor="newPassword">New Password:</label>
-            <br />
-            <input
-              type="password"
-              id="newPassword"
-              placeholder="Enter your new password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-            />
-          </div>
-          <ClickableButton type="submit" ariaLabel="Reset Password">
-            Reset Password
-          </ClickableButton>
-          <p style={{ marginTop: '1rem', textAlign: 'center' }}>
-            <button
-              type="button"
-              onClick={() => setIsForgotPassword(false)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'blue',
-                textDecoration: 'underline',
-                cursor: 'pointer'
-              }}
-            >
+        <Form layout="vertical" onFinish={handleForgotPassword}>
+          <Form.Item
+            name="newPassword"
+            label="New Password"
+            rules={[{ required: true, message: 'Please input your new password!' }]}
+          >
+            <Input.Password placeholder="Enter your new password" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>
+              Reset Password
+            </Button>
+          </Form.Item>
+          <Form.Item>
+            <Button type="link" onClick={() => setIsForgotPassword(false)} block>
               Back to Login
-            </button>
-          </p>
-        </form>
+            </Button>
+          </Form.Item>
+        </Form>
       )}
-      {error && <p style={{ color: 'red', marginTop: '1rem' }}>{error}</p>}
-      {message && <p style={{ color: 'green', marginTop: '1rem' }}>{message}</p>}
     </div>
   );
 };
