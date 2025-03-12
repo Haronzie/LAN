@@ -195,13 +195,47 @@ func (a *App) adminExistsHandler(w http.ResponseWriter, r *http.Request) {
 func (a *App) getUserFromSession(r *http.Request) (User, error) {
 	session, err := a.Store.Get(r, "session")
 	if err != nil {
-		return User{}, err
+		log.Println("SESSION RETRIEVAL ERROR:", err)
+		return User{}, errors.New("session retrieval error")
 	}
+
+	// Debug: Log what session contains
+	log.Println("SESSION DATA:", session.Values)
+
 	username, ok := session.Values["username"].(string)
 	if !ok || username == "" {
+		log.Println("SESSION MISSING USERNAME")
 		return User{}, errors.New("session not found or username not set")
 	}
-	return a.getUserByUsername(username)
+
+	role, ok := session.Values["role"].(string)
+	if !ok || role == "" {
+		log.Println("SESSION MISSING ROLE for user:", username)
+		return User{}, errors.New("role not set in session")
+	}
+
+	// Fetch user from database
+	user, err := a.getUserByUsername(username)
+	if err != nil {
+		log.Println("USER NOT FOUND IN DB:", username)
+		return User{}, err
+	}
+
+	log.Println("SESSION VERIFIED - Username:", username, "Role:", user.Role)
+	return user, nil
+}
+
+func (a *App) userRoleHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := a.getUserFromSession(r)
+	if err != nil {
+		log.Println("AUTH CHECK FAILED:", err)
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	log.Println("USER ROLE CHECK:", user.Username, "Role:", user.Role)
+
+	respondJSON(w, http.StatusOK, map[string]string{"role": user.Role})
 }
 
 // getUserByUsername retrieves a user from the DB.
@@ -269,54 +303,64 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
+
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
+
 	if req.Username == "" || req.Password == "" {
 		respondError(w, http.StatusBadRequest, "Username and password cannot be empty")
 		return
 	}
-	// Check if user already exists.
+
+	// Check if user already exists
 	if _, err := a.getUserByUsername(req.Username); err == nil {
 		respondError(w, http.StatusBadRequest, "User already exists")
 		return
 	}
-	// Allow first user to be admin; if an admin exists, registration is closed.
-	if a.adminExists() {
-		respondError(w, http.StatusForbidden, "Admin already registered. Registration closed.")
-		return
-	}
+
+	// Check if an admin already exists
+	isFirstAdmin := !a.adminExists()
+
+	// Hash the password
 	hashedPass, err := hashPassword(req.Password)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error hashing password")
 		return
 	}
-	newUser := User{
-		Username: req.Username,
-		Password: hashedPass,
-		Role:     "admin",
-		Active:   true,
-	}
-	if err := a.createUser(newUser); err != nil {
-		respondError(w, http.StatusInternalServerError, "Error creating user")
+
+	// If it's the first admin, set active to TRUE, otherwise keep it FALSE
+	activeStatus := isFirstAdmin
+
+	// Insert the user
+	_, err = a.DB.Exec("INSERT INTO users (username, password, role, active) VALUES ($1, $2, $3, $4)",
+		req.Username, hashedPass, "admin", activeStatus)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Error registering admin")
 		return
 	}
-	// Set session using Gorilla sessions.
+
+	// Set session using Gorilla sessions for auto-login
 	session, err := a.Store.Get(r, "session")
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error getting session")
 		return
 	}
 	session.Values["username"] = req.Username
+	session.Values["role"] = "admin"
 	if err := session.Save(r, w); err != nil {
 		respondError(w, http.StatusInternalServerError, "Error saving session")
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("Admin '%s' registered successfully", req.Username)})
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Admin '%s' registered successfully", req.Username),
+	})
 }
 
 func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -324,34 +368,60 @@ func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
+
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
+
+	// Fetch user from database
 	user, err := a.getUserByUsername(req.Username)
-	if err != nil || !checkPasswordHash(req.Password, user.Password) {
-		respondJSON(w, http.StatusUnauthorized, map[string]string{"message": "Invalid username or password"})
-		return
-	}
-	// Update user active status.
-	_, err = a.DB.Exec("UPDATE users SET active = $1 WHERE username = $2", true, user.Username)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Error updating user status")
+		respondError(w, http.StatusUnauthorized, "Invalid username or password")
 		return
 	}
+
+	// ❌ Prevent login if user is not active
+	if !user.Active {
+		respondError(w, http.StatusForbidden, "Your account is not activated. Please contact an admin.")
+		return
+	}
+
+	// Verify password
+	if !checkPasswordHash(req.Password, user.Password) {
+		respondError(w, http.StatusUnauthorized, "Invalid username or password")
+		return
+	}
+
+	// Create session
 	session, err := a.Store.Get(r, "session")
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error getting session")
 		return
 	}
-	session.Values["username"] = req.Username
+
+	session.Values["username"] = user.Username
+	session.Values["role"] = user.Role
+
+	session.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400, // 1 day
+		HttpOnly: true,
+		Secure:   false, // Change to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode,
+	}
+
 	if err := session.Save(r, w); err != nil {
 		respondError(w, http.StatusInternalServerError, "Error saving session")
 		return
 	}
+
+	log.Println("SESSION STORED:", session.Values)
+
 	respondJSON(w, http.StatusOK, map[string]string{
 		"message":  "Login successful",
 		"username": user.Username,
@@ -364,25 +434,32 @@ func (a *App) logoutHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
-	// Mark user inactive.
+
+	// Get the user from the session
 	user, err := a.getUserFromSession(r)
 	if err == nil && user.Username != "" {
-		_, updateErr := a.DB.Exec("UPDATE users SET active = $1 WHERE username = $2", false, user.Username)
-		if updateErr != nil {
-			respondError(w, http.StatusInternalServerError, "Error updating user status")
-			return
+		// ❌ Only deactivate regular users, NOT admins
+		if user.Role != "admin" {
+			_, updateErr := a.DB.Exec("UPDATE users SET active = $1 WHERE username = $2", false, user.Username)
+			if updateErr != nil {
+				respondError(w, http.StatusInternalServerError, "Error updating user status")
+				return
+			}
 		}
 	}
+
+	// Destroy session
 	session, err := a.Store.Get(r, "session")
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error retrieving session")
 		return
 	}
-	session.Options.MaxAge = -1
+	session.Options.MaxAge = -1 // Expire session
 	if err := session.Save(r, w); err != nil {
 		respondError(w, http.StatusInternalServerError, "Error saving session")
 		return
 	}
+
 	respondJSON(w, http.StatusOK, map[string]string{"message": "Logout successful"})
 }
 
@@ -874,43 +951,52 @@ func (a *App) usersHandler(w http.ResponseWriter, r *http.Request) {
 func (a *App) addUserHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := a.getUserFromSession(r)
 	if err != nil || user.Role != "admin" {
-		respondError(w, http.StatusForbidden, "Forbidden")
+		respondError(w, http.StatusForbidden, "Forbidden: Only admins can add users")
 		return
 	}
+
 	if r.Method != http.MethodPost {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
+
 	var req AddUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
 	if req.Username == "" || req.Password == "" {
 		respondError(w, http.StatusBadRequest, "Username and password cannot be empty")
 		return
 	}
+
+	// Check if the user already exists
 	if _, err := a.getUserByUsername(req.Username); err == nil {
 		respondError(w, http.StatusBadRequest, "User already exists")
 		return
 	}
+
+	// Hash the password
 	hashedPass, err := hashPassword(req.Password)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error hashing password")
 		return
 	}
-	newUser := User{
-		Username: req.Username,
-		Password: hashedPass,
-		Role:     "user",
-	}
-	if err := a.createUser(newUser); err != nil {
+
+	// Insert the new user as INACTIVE by default
+	_, err = a.DB.Exec("INSERT INTO users (username, password, role, active) VALUES ($1, $2, $3, $4)",
+		req.Username, hashedPass, "user", false) // 🚨 Set active to false
+	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error adding user")
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("User '%s' has been added successfully", req.Username)})
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("User '%s' has been added successfully and is inactive.", req.Username),
+	})
 }
 
 func (a *App) updateUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -1080,12 +1166,16 @@ func (a *App) updateUserStatusHandler(w http.ResponseWriter, r *http.Request) {
 // --- CORS Middleware ---
 func enableCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000") // Match frontend origin
+		w.Header().Set("Access-Control-Allow-Credentials", "true")             // Allow cookies
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
 		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
 			return
 		}
+
 		h.ServeHTTP(w, r)
 	})
 }
@@ -1134,6 +1224,7 @@ func main() {
 	mux.HandleFunc("/login", app.loginHandler)
 	mux.HandleFunc("/logout", app.logoutHandler)
 	mux.HandleFunc("/forgot-password", app.forgotPasswordHandler)
+	mux.HandleFunc("/user-role", app.userRoleHandler)
 	// File endpoints.
 	mux.HandleFunc("/upload", app.uploadHandler)
 	mux.HandleFunc("/files", app.filesHandler)
