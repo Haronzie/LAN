@@ -18,9 +18,10 @@ const LoginForm = () => {
       hideLoading();
       message.success(res.data.message || 'Login successful');
 
-      // Redirect based on role
+      // If the logged-in user is an admin, store the username in localStorage
       if (res.data.role === 'admin') {
-        navigate('/dashboard'); // Admin dashboard
+        localStorage.setItem("username", res.data.username);
+        navigate('/admin'); // Admin dashboard
       } else {
         navigate('/user'); // Regular user dashboard
       }

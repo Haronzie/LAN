@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Button, Typography, message } from 'antd';
-import { Link } from 'react-router-dom';
+import { Layout, Menu, Button, Typography, message, Modal } from 'antd';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './Home.css';
 
@@ -9,6 +9,7 @@ const { Title, Paragraph } = Typography;
 
 const Home = () => {
   const [adminExists, setAdminExists] = useState(false);
+  const navigate = useNavigate();
 
   // Check if an admin exists
   useEffect(() => {
@@ -23,6 +24,27 @@ const Home = () => {
     checkAdmin();
   }, []);
 
+  // Handler for Login button click
+  const handleLoginClick = () => {
+    if (!adminExists) {
+      // Show a modal alerting the user that no admin exists yet
+      Modal.info({
+        title: 'No Admin Account Found',
+        content: (
+          <div>
+            <p>No admin account has been created yet.</p>
+            <p>Please register as the first admin before logging in.</p>
+          </div>
+        ),
+        onOk() {
+          navigate('/register');
+        },
+      });
+    } else {
+      navigate('/login');
+    }
+  };
+
   return (
     <Layout className="home-layout">
       <Header className="home-header">
@@ -34,8 +56,9 @@ const Home = () => {
           <Menu.Item key="1">
             <Link to="/">Home</Link>
           </Menu.Item>
-          <Menu.Item key="2">
-            <Link to="/login">Login</Link>
+          <Menu.Item key="2" onClick={handleLoginClick}>
+            {/* Instead of wrapping Link, we handle click directly */}
+            Login
           </Menu.Item>
           {!adminExists && (
             <Menu.Item key="3">
@@ -52,9 +75,9 @@ const Home = () => {
             Please log in or register to access your dashboard and manage your documents.
           </Paragraph>
           <div className="button-group" style={{ marginTop: 24 }}>
-            <Link to="/login">
-              <Button type="primary" size="large" style={{ marginRight: '10px' }}>Login</Button>
-            </Link>
+            <Button type="primary" size="large" style={{ marginRight: '10px' }} onClick={handleLoginClick}>
+              Login
+            </Button>
             {!adminExists && (
               <Link to="/register">
                 <Button type="default" size="large">Register</Button>
@@ -64,7 +87,7 @@ const Home = () => {
         </div>
       </Content>
       <Footer style={{ textAlign: 'center' }}>
-        © {new Date().getFullYear()} CDRMO Official. All rights reserved.
+        © {new Date().getFullYear()} CDRRMO Official. All rights reserved.
       </Footer>
     </Layout>
   );

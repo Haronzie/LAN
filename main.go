@@ -180,6 +180,24 @@ func (a *App) createTables() {
 	if err != nil {
 		log.Fatal("Error creating directories table:", err)
 	}
+
+	// Activity Log table.
+	activityTable := `
+    CREATE TABLE IF NOT EXISTS activity_log (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        event TEXT NOT NULL
+    );`
+	_, err = a.DB.Exec(activityTable)
+	if err != nil {
+		log.Fatal("Error creating activity_log table:", err)
+	}
+}
+func (a *App) logActivity(event string) {
+	_, err := a.DB.Exec("INSERT INTO activity_log (event) VALUES ($1)", event)
+	if err != nil {
+		log.Println("Error logging activity:", err)
+	}
 }
 func (a *App) adminExistsHandler(w http.ResponseWriter, r *http.Request) {
 	var exists bool
@@ -435,20 +453,17 @@ func (a *App) logoutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the user from the session
+	// Retrieve the user from the session for logging purposes.
 	user, err := a.getUserFromSession(r)
-	if err == nil && user.Username != "" {
-		// ❌ Only deactivate regular users, NOT admins
-		if user.Role != "admin" {
-			_, updateErr := a.DB.Exec("UPDATE users SET active = $1 WHERE username = $2", false, user.Username)
-			if updateErr != nil {
-				respondError(w, http.StatusInternalServerError, "Error updating user status")
-				return
-			}
-		}
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
 	}
 
-	// Destroy session
+	// Log the logout event in the audit log table.
+	a.logActivity(fmt.Sprintf("User '%s' logged out.", user.Username))
+
+	// Destroy the session without changing the user's active status in the database.
 	session, err := a.Store.Get(r, "session")
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error retrieving session")
@@ -569,6 +584,10 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Error saving file")
 		return
 	}
+
+	// Log the file upload activity.
+	a.logActivity(fmt.Sprintf("File '%s' uploaded by '%s'.", handler.Filename, currentUser.Username))
+
 	respondJSON(w, http.StatusOK, map[string]string{"message": msg})
 }
 
@@ -601,7 +620,8 @@ func (a *App) downloadHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
-	_, err := a.getUserFromSession(r)
+	// Retrieve the current user from session
+	user, err := a.getUserFromSession(r)
 	if err != nil {
 		respondError(w, http.StatusForbidden, "Forbidden")
 		return
@@ -625,9 +645,39 @@ func (a *App) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	w.Header().Set("Content-Type", fr.ContentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+
 	if _, err := io.Copy(w, f); err != nil {
 		log.Println("Error sending file:", err)
+		return
 	}
+
+	// Log the file download activity
+	a.logActivity(fmt.Sprintf("User '%s' downloaded file '%s'.", user.Username, fileName))
+}
+
+func (a *App) activitiesHandler(w http.ResponseWriter, r *http.Request) {
+	rows, err := a.DB.Query("SELECT id, timestamp, event FROM activity_log ORDER BY timestamp DESC LIMIT 50")
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Error retrieving activity logs")
+		return
+	}
+	defer rows.Close()
+
+	type Activity struct {
+		ID        int       `json:"id"`
+		Timestamp time.Time `json:"timestamp"`
+		Event     string    `json:"event"`
+	}
+	var activities []Activity
+	for rows.Next() {
+		var act Activity
+		if err := rows.Scan(&act.ID, &act.Timestamp, &act.Event); err != nil {
+			respondError(w, http.StatusInternalServerError, "Error scanning activity log")
+			return
+		}
+		activities = append(activities, act)
+	}
+	respondJSON(w, http.StatusOK, activities)
 }
 
 // createResourceHandler creates files or directories.
@@ -739,13 +789,16 @@ func (a *App) deleteResourceHandler(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "Error deleting file record")
 			return
 		}
+		// Log file deletion
+		a.logActivity(fmt.Sprintf("Admin '%s' deleted file '%s'.", user.Username, req.Name))
 		respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("File '%s' deleted successfully", req.Name)})
 	case "directory":
 		if err := os.RemoveAll(resourcePath); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error deleting directory")
 			return
 		}
-		// Optionally remove directory metadata from DB.
+		// Log directory deletion
+		a.logActivity(fmt.Sprintf("Admin '%s' deleted directory '%s'.", user.Username, req.Name))
 		respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("Directory '%s' deleted successfully", req.Name)})
 	default:
 		respondError(w, http.StatusBadRequest, "Invalid resource type")
@@ -988,11 +1041,14 @@ func (a *App) addUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Insert the new user as INACTIVE by default
 	_, err = a.DB.Exec("INSERT INTO users (username, password, role, active) VALUES ($1, $2, $3, $4)",
-		req.Username, hashedPass, "user", false) // 🚨 Set active to false
+		req.Username, hashedPass, "user", false)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error adding user")
 		return
 	}
+
+	// Log the activity for adding a user
+	a.logActivity(fmt.Sprintf("User '%s' was added.", req.Username))
 
 	respondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("User '%s' has been added successfully and is inactive.", req.Username),
@@ -1055,14 +1111,8 @@ func (a *App) updateUserHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Invalidate session if needed.
-	if req.OldUsername == user.Username {
-		session, err := a.Store.Get(r, "session")
-		if err == nil {
-			session.Options.MaxAge = -1
-			session.Save(r, w)
-		}
-	}
+	// Log the update activity with admin info
+	a.logActivity(fmt.Sprintf("Admin '%s' updated user '%s' to '%s'.", user.Username, req.OldUsername, req.NewUsername))
 	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("User '%s' has been updated to '%s' with new password", req.OldUsername, req.NewUsername)})
 }
 
@@ -1090,6 +1140,8 @@ func (a *App) deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusNotFound, "User does not exist or error deleting user")
 		return
 	}
+	// Log the deletion activity
+	a.logActivity(fmt.Sprintf("Admin '%s' deleted user '%s'.", user.Username, req.Username))
 	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("User '%s' has been deleted successfully", req.Username)})
 }
 
@@ -1127,6 +1179,8 @@ func (a *App) assignAdminHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Error updating user role")
 		return
 	}
+	// Log admin assignment activity
+	a.logActivity(fmt.Sprintf("Admin '%s' assigned admin role to user '%s'.", user.Username, req.Username))
 	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("User '%s' is now an admin", req.Username)})
 }
 
@@ -1245,6 +1299,8 @@ func main() {
 	mux.HandleFunc("/admin-status", app.adminStatusHandler)
 	mux.HandleFunc("/update-user-status", app.updateUserStatusHandler)
 	mux.HandleFunc("/admin-exists", app.adminExistsHandler)
+	// New Activities endpoint.
+	mux.HandleFunc("/activities", app.activitiesHandler)
 
 	handler := enableCORS(mux)
 	log.Println("Starting HTTP server on port 9090...")
