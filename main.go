@@ -975,8 +975,7 @@ func main() {
 	mux.HandleFunc("/admin-status", app.adminStatusHandler)
 	mux.HandleFunc("/update-user-status", app.updateUserStatusHandler)
 
-	handler := mux
-
+	handler := enableCORS(mux)
 	// Start HTTP redirect server on port 80.
 	// go func() {
 	// 	httpServer := &http.Server{
