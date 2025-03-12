@@ -181,6 +181,15 @@ func (a *App) createTables() {
 		log.Fatal("Error creating directories table:", err)
 	}
 }
+func (a *App) adminExistsHandler(w http.ResponseWriter, r *http.Request) {
+	var exists bool
+	err := a.DB.QueryRow("SELECT EXISTS (SELECT 1 FROM users WHERE role = 'admin')").Scan(&exists)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]bool{"exists": exists})
+}
 
 // getUserFromSession retrieves the current user.
 func (a *App) getUserFromSession(r *http.Request) (User, error) {
@@ -1144,10 +1153,11 @@ func main() {
 	mux.HandleFunc("/assign-admin", app.assignAdminHandler)
 	mux.HandleFunc("/admin-status", app.adminStatusHandler)
 	mux.HandleFunc("/update-user-status", app.updateUserStatusHandler)
+	mux.HandleFunc("/admin-exists", app.adminExistsHandler)
 
 	handler := enableCORS(mux)
-	log.Println("Starting HTTP server on port 8080...")
-	if err := http.ListenAndServe(":8080", handler); err != nil {
+	log.Println("Starting HTTP server on port 9090...")
+	if err := http.ListenAndServe(":9090", handler); err != nil {
 		log.Fatal("HTTP server error:", err)
 	}
 }
