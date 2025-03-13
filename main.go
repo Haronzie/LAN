@@ -1177,7 +1177,10 @@ func (a *App) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if the user already exists
+	// Convert the username to lowercase for case-insensitive comparison
+	req.Username = strings.ToLower(req.Username)
+
+	// Check if the user already exists (case-insensitive check)
 	if _, err := a.getUserByUsername(req.Username); err == nil {
 		respondError(w, http.StatusBadRequest, "User already exists")
 		return
