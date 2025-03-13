@@ -59,8 +59,9 @@ func sanitizeName(name string) string {
 
 type User struct {
 	Username  string    `json:"username"`
+	Email     string    `json:"email"` // Added Email field
 	Password  string    `json:"password"`
-	Role      string    `json:"role"` // "admin" or "user"
+	Role      string    `json:"role"`
 	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -199,6 +200,63 @@ func (a *App) logActivity(event string) {
 		log.Println("Error logging activity:", err)
 	}
 }
+func (a *App) userProfileHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := a.getUserFromSession(r)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"username":   user.Username,
+			"email":      user.Email, // Make sure your User struct is updated to include Email.
+			"role":       user.Role,
+			"active":     user.Active,
+			"created_at": user.CreatedAt,
+			"updated_at": user.UpdatedAt,
+		})
+	case http.MethodPut:
+		var req struct {
+			Username string `json:"username"`
+			Email    string `json:"email"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+		req.Username = strings.TrimSpace(req.Username)
+		req.Email = strings.TrimSpace(req.Email)
+		if req.Username == "" || req.Email == "" {
+			respondError(w, http.StatusBadRequest, "Username and Email cannot be empty")
+			return
+		}
+		// Update both username and email
+		_, err := a.DB.Exec("UPDATE users SET username = $1, email = $2, updated_at = CURRENT_TIMESTAMP WHERE username = $3", req.Username, req.Email, user.Username)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Error updating profile")
+			return
+		}
+		session, err := a.Store.Get(r, "session")
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Error retrieving session")
+			return
+		}
+		session.Values["username"] = req.Username
+		if err := session.Save(r, w); err != nil {
+			respondError(w, http.StatusInternalServerError, "Error saving session")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]string{
+			"message":  "Profile updated successfully",
+			"username": req.Username,
+		})
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	}
+}
+
 func (a *App) adminExistsHandler(w http.ResponseWriter, r *http.Request) {
 	var exists bool
 	err := a.DB.QueryRow("SELECT EXISTS (SELECT 1 FROM users WHERE role = 'admin')").Scan(&exists)
@@ -691,7 +749,8 @@ func (a *App) createResourceHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ResourceType string `json:"resource_type"` // "file" or "directory"
 		Name         string `json:"name"`
-		Content      string `json:"content"` // optional for files
+		Content      string `json:"content"`   // optional for files
+		Directory    string `json:"directory"` // optional for files
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -704,10 +763,22 @@ func (a *App) createResourceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	basePath := "uploads"
-	resourcePath := filepath.Join(basePath, req.Name)
-
-	switch req.ResourceType {
-	case "file":
+	// For file resource, check if an optional directory was provided.
+	if req.ResourceType == "file" {
+		targetDir := basePath
+		req.Directory = strings.TrimSpace(req.Directory)
+		if req.Directory != "" {
+			// Sanitize the directory name and join with basePath.
+			targetDir = filepath.Join(basePath, sanitizeName(req.Directory))
+			// Create the target directory if it does not exist.
+			if _, err := os.Stat(targetDir); os.IsNotExist(err) {
+				if err := os.MkdirAll(targetDir, 0755); err != nil {
+					respondError(w, http.StatusInternalServerError, "Error creating target directory")
+					return
+				}
+			}
+		}
+		resourcePath := filepath.Join(targetDir, req.Name)
 		file, err := os.Create(resourcePath)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "Error creating file")
@@ -721,7 +792,12 @@ func (a *App) createResourceHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		respondJSON(w, http.StatusOK, map[string]string{"message": "File created successfully"})
-	case "directory":
+		return
+	}
+
+	// The directory branch remains unchanged.
+	if req.ResourceType == "directory" {
+		resourcePath := filepath.Join(basePath, req.Name)
 		err := os.Mkdir(resourcePath, 0755)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "Error creating directory")
@@ -736,10 +812,12 @@ func (a *App) createResourceHandler(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "Error saving directory record")
 			return
 		}
+		a.logActivity(fmt.Sprintf("User '%s' created directory '%s'.", user.Username, req.Name))
 		respondJSON(w, http.StatusOK, map[string]string{"message": "Directory created successfully"})
-	default:
-		respondError(w, http.StatusBadRequest, "Invalid resource type")
+		return
 	}
+
+	respondError(w, http.StatusBadRequest, "Invalid resource type")
 }
 
 // deleteResourceHandler deletes files or directories.
@@ -965,6 +1043,79 @@ func (a *App) userHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "Welcome user")
+}
+
+// uploadProfileHandler handles uploading a user's profile picture.
+func (a *App) uploadProfileHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	// Get the current user from the session.
+	user, err := a.getUserFromSession(r)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Limit upload size to 5 MB.
+	err = r.ParseMultipartForm(5 << 20)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Error parsing form data")
+		return
+	}
+
+	// Retrieve the file from the form data.
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Error retrieving the file")
+		return
+	}
+	defer file.Close()
+
+	// Sanitize the original file name.
+	originalName := sanitizeName(handler.Filename)
+
+	// Generate a unique token to prepend to the filename for uniqueness.
+	token, err := generateToken()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Error generating file token")
+		return
+	}
+	// Construct the new filename.
+	newFileName := fmt.Sprintf("%s_%s", token, originalName)
+
+	// Define the destination path (ensure the "uploads" folder exists).
+	dstPath := filepath.Join("uploads", newFileName)
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Error saving file")
+		return
+	}
+	defer dst.Close()
+
+	// Copy the uploaded file to the destination.
+	if _, err := io.Copy(dst, file); err != nil {
+		respondError(w, http.StatusInternalServerError, "Error saving file")
+		return
+	}
+
+	// Construct the file URL. Adjust the host/port as needed.
+	fileURL := fmt.Sprintf("http://%s/uploads/%s", r.Host, newFileName)
+
+	// Update the user's profile_picture field in the database.
+	_, err = a.DB.Exec("UPDATE users SET profile_picture = $1, updated_at = CURRENT_TIMESTAMP WHERE username = $2", fileURL, user.Username)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Error updating user profile")
+		return
+	}
+
+	// Optionally, log this activity.
+	a.logActivity(fmt.Sprintf("User '%s' uploaded a profile picture.", user.Username))
+
+	// Respond with the file URL.
+	respondJSON(w, http.StatusOK, map[string]string{"url": fileURL})
 }
 
 func (a *App) usersHandler(w http.ResponseWriter, r *http.Request) {
@@ -1279,6 +1430,9 @@ func main() {
 	mux.HandleFunc("/logout", app.logoutHandler)
 	mux.HandleFunc("/forgot-password", app.forgotPasswordHandler)
 	mux.HandleFunc("/user-role", app.userRoleHandler)
+	mux.HandleFunc("/api/user/profile", app.userProfileHandler)
+	mux.HandleFunc("/api/user/upload-profile", app.uploadProfileHandler)
+
 	// File endpoints.
 	mux.HandleFunc("/upload", app.uploadHandler)
 	mux.HandleFunc("/files", app.filesHandler)

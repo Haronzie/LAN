@@ -3,6 +3,7 @@ import { Layout, Menu, Button, Row, Col, Card, Statistic, List, message, Input, 
 import { DashboardOutlined, UserOutlined, SettingOutlined, FileOutlined } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import AddResourceModal from './AddResourceModal'; // Import the modal component
 
 const { Header, Content, Footer, Sider } = Layout;
 const { Text } = Typography;
@@ -17,6 +18,7 @@ const AdminDashboard = () => {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [adminName, setAdminName] = useState("Admin");
+  const [modalVisible, setModalVisible] = useState(false); // New state for modal visibility
 
   const navigate = useNavigate();
 
@@ -184,6 +186,10 @@ const AdminDashboard = () => {
                   <Button type="primary" block onClick={() => navigate('/admin/files')}>
                     Manage Files
                   </Button>
+                  {/* New button to open the Add Resource Modal */}
+                  <Button type="primary" block style={{ marginTop: 8 }} onClick={() => setModalVisible(true)}>
+                    Add Resource
+                  </Button>
                 </Card>
               </Col>
             </Row>
@@ -202,6 +208,12 @@ const AdminDashboard = () => {
           © {new Date().getFullYear()} CDRRMO Official Admin Dashboard
         </Footer>
       </Layout>
+      {/* AddResourceModal component integration */}
+      <AddResourceModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        refreshResources={fetchFiles}
+      />
     </Layout>
   );
 };
