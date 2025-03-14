@@ -22,10 +22,30 @@
   justify-content: center;
   font-size: calc(10px + 2vmin);
   color: white;
+  padding: 20px;
 }
 
 .App-link {
   color: #61dafb;
+}
+
+/* Responsive adjustments for small screens */
+@media (max-width: 600px) {
+  .App-logo {
+    height: 30vmin;
+  }
+  .App-header {
+    font-size: calc(8px + 2vmin);
+    min-height: auto;
+    padding: 10px;
+  }
+}
+
+/* Additional responsive adjustments for medium screens */
+@media (min-width: 601px) and (max-width: 1024px) {
+  .App-header {
+    font-size: calc(9px + 2vmin);
+  }
 }
 
 @keyframes App-logo-spin {
