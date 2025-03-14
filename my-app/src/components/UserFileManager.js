@@ -6,11 +6,12 @@ import axios from 'axios';
 
 const { Content } = Layout;
 
-const FileManager = () => {
+const UserFileManager = () => {
   const [files, setFiles] = useState([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredFiles, setFilteredFiles] = useState([]);
+  const [currentUsername, setCurrentUsername] = useState('');
 
   // New state variables for Rename and Move modals
   const [renameModalVisible, setRenameModalVisible] = useState(false);
@@ -34,8 +35,19 @@ const FileManager = () => {
     }
   };
 
+  // Fetch current user's profile to get username
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await axios.get('/api/user/profile', { withCredentials: true });
+      setCurrentUsername(res.data.username);
+    } catch (error) {
+      console.error("Error fetching user profile", error);
+    }
+  };
+
   useEffect(() => {
     fetchFiles();
+    fetchCurrentUser();
   }, []);
 
   useEffect(() => {
@@ -53,7 +65,7 @@ const FileManager = () => {
     }
   };
 
-  // New function to handle renaming a file
+  // Function to handle renaming a file
   const handleRenameConfirm = async () => {
     try {
       await axios.put('/rename-resource', {
@@ -69,7 +81,7 @@ const FileManager = () => {
     }
   };
 
-  // New function to handle moving a file
+  // Function to handle moving a file
   const handleMoveConfirm = async () => {
     try {
       await axios.put('/move-resource', {
@@ -105,39 +117,49 @@ const FileManager = () => {
     {
       title: 'Actions',
       key: 'actions',
-      render: (record) => (
-        <>
-          <Button icon={<DownloadOutlined />} onClick={() => window.open(`/download?filename=${record.file_name}`, '_blank')}>
-            Download
-          </Button>
-          <Button danger icon={<DeleteOutlined />} onClick={() => handleDeleteFile(record.file_name)}>
-            Delete
-          </Button>
-          {/* New Rename button */}
-          <Button
-            onClick={() => {
-              setSelectedFile(record.file_name);
-              setRenameNewName(record.file_name);
-              setRenameModalVisible(true);
-            }}
-            style={{ marginLeft: 8 }}
-          >
-            Rename
-          </Button>
-          {/* New Move button */}
-          <Button
-            onClick={() => {
-              setSelectedFile(record.file_name);
-              // Set a default destination (root) initially
-              setMoveDestination(record.file_name);
-              setMoveModalVisible(true);
-            }}
-            style={{ marginLeft: 8 }}
-          >
-            Move
-          </Button>
-        </>
-      )
+      render: (record) => {
+        // Only the uploader gets to see additional buttons.
+        const isUploader = record.uploader === currentUsername;
+        return (
+          <>
+            <Button icon={<DownloadOutlined />} onClick={() => window.open(`/download?filename=${record.file_name}`, '_blank')}>
+              Download
+            </Button>
+            {isUploader && (
+              <>
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => handleDeleteFile(record.file_name)}
+                  style={{ marginLeft: 8 }}
+                >
+                  Delete
+                </Button>
+                <Button
+                  onClick={() => {
+                    setSelectedFile(record.file_name);
+                    setRenameNewName(record.file_name);
+                    setRenameModalVisible(true);
+                  }}
+                  style={{ marginLeft: 8 }}
+                >
+                  Rename
+                </Button>
+                <Button
+                  onClick={() => {
+                    setSelectedFile(record.file_name);
+                    setMoveDestination(record.file_name);
+                    setMoveModalVisible(true);
+                  }}
+                  style={{ marginLeft: 8 }}
+                >
+                  Move
+                </Button>
+              </>
+            )}
+          </>
+        );
+      }
     }
   ];
 
@@ -163,7 +185,7 @@ const FileManager = () => {
     <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
       <Row justify="space-between" style={{ marginBottom: 16 }}>
         <Col>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin')}>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/dashboard')}>
             Back to Dashboard
           </Button>
         </Col>
@@ -211,7 +233,6 @@ const FileManager = () => {
           placeholder="Select destination directory"
           style={{ width: '100%' }}
           onChange={(value) => {
-            // If "root" is selected, move to the root (uploads folder) with the original file name.
             if (value === 'root') {
               setMoveDestination(selectedFile);
             } else {
@@ -229,4 +250,4 @@ const FileManager = () => {
   );
 };
 
-export default FileManager;
+export default UserFileManager;

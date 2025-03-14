@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Button, Typography, message, Modal } from 'antd';
+import { Layout, Menu, Button, Typography, message, Modal, Tooltip } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './Home.css';
@@ -57,12 +57,15 @@ const Home = () => {
             <Link to="/">Home</Link>
           </Menu.Item>
           <Menu.Item key="2" onClick={handleLoginClick}>
-            {/* Instead of wrapping Link, we handle click directly */}
-            Login
+            <Tooltip title="Click here to log in">
+              <span>Login</span>
+            </Tooltip>
           </Menu.Item>
           {!adminExists && (
             <Menu.Item key="3">
-              <Link to="/register">Register</Link>
+              <Tooltip title="Click here to register">
+                <Link to="/register">Register</Link>
+              </Tooltip>
             </Menu.Item>
           )}
         </Menu>
@@ -75,13 +78,17 @@ const Home = () => {
             Please log in or register to access your dashboard and manage your documents.
           </Paragraph>
           <div className="button-group" style={{ marginTop: 24 }}>
-            <Button type="primary" size="large" style={{ marginRight: '10px' }} onClick={handleLoginClick}>
-              Login
-            </Button>
+            <Tooltip title="Click here to log in">
+              <Button type="primary" size="large" style={{ marginRight: '10px' }} onClick={handleLoginClick}>
+                Login
+              </Button>
+            </Tooltip>
             {!adminExists && (
-              <Link to="/register">
-                <Button type="default" size="large">Register</Button>
-              </Link>
+              <Tooltip title="Click here to register">
+                <Link to="/register">
+                  <Button type="default" size="large">Register</Button>
+                </Link>
+              </Tooltip>
             )}
           </div>
         </div>
