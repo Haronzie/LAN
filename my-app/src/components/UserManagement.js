@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Table, Button, Input, message, Modal, Form, Space } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import AddUserForm from './AddUserForm'; // Reuse your AddUserForm component
+import AddUserForm from './AddUserForm';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -42,6 +42,9 @@ const UserManagement = () => {
   // Calculate the number of admin users
   const adminCount = users.filter(u => u.role === 'admin').length;
 
+  // Get the currently logged-in admin's username (stored in localStorage)
+  const adminName = localStorage.getItem("username") || "Admin";
+
   // Toggle active status for a user
   const handleToggleActive = async (username, isActive) => {
     try {
@@ -73,7 +76,7 @@ const UserManagement = () => {
     }
   };
 
-  // Delete user using the API
+  // Delete user using the API (hide delete for the currently logged-in admin)
   const handleDeleteUser = (username) => {
     Modal.confirm({
       title: 'Delete User',
@@ -166,36 +169,32 @@ const UserManagement = () => {
       key: 'actions',
       render: (record) => (
         <Space>
-          { 
-            // Show toggle active only if user is not admin OR if admin and there's more than one admin
-            (record.role !== 'admin' || (record.role === 'admin' && adminCount > 1)) && (
-              <Button
-                size="small"
-                onClick={() => handleToggleActive(record.username, record.active)}
-              >
-                {record.active ? 'Deactivate' : 'Activate'}
-              </Button>
-            )
-          }
+          {(record.role !== 'admin' || (record.role === 'admin' && adminCount > 1)) && (
+            <Button
+              size="small"
+              onClick={() => handleToggleActive(record.username, record.active)}
+            >
+              {record.active ? 'Deactivate' : 'Activate'}
+            </Button>
+          )}
           <Button size="small" icon={<EditOutlined />} onClick={() => openUpdateModal(record)}>
             Edit
           </Button>
-          <Button
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDeleteUser(record.username)}
-          >
-            Delete
-          </Button>
-          { 
-            // For non-admin users, show the "Make Admin" button
-            record.role !== 'admin' && (
-              <Button size="small" type="default" onClick={() => handleAssignAdmin(record.username)}>
-                Make Admin
-              </Button>
-            )
-          }
+          {record.username !== adminName && (
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDeleteUser(record.username)}
+            >
+              Delete
+            </Button>
+          )}
+          {record.role !== 'admin' && (
+            <Button size="small" type="default" onClick={() => handleAssignAdmin(record.username)}>
+              Make Admin
+            </Button>
+          )}
         </Space>
       )
     }
