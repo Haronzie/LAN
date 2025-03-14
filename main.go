@@ -683,16 +683,21 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
+
 	currentUser, err := a.getUserFromSession(r)
 	if err != nil {
 		respondError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	err = r.ParseMultipartForm(10 << 20) // 10 MB limit
+
+	// Parse the multipart form with a 10 MB limit
+	err = r.ParseMultipartForm(10 << 20)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "Error parsing form data")
 		return
 	}
+
+	// Retrieve the file from the form data
 	file, handler, err := r.FormFile("file")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "Error retrieving the file")
@@ -700,12 +705,43 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	// Get the optional "directory" field from the form data.
+	// This field can be used to specify a target folder (e.g. "operation", "training/subfolder", etc.)
+	targetDir := r.FormValue("directory")
+	if targetDir != "" {
+		// Clean the path to remove any .. segments.
+		targetDir = filepath.Clean(targetDir)
+		// Prevent directory traversal (disallow paths starting with "..")
+		if strings.HasPrefix(targetDir, "..") {
+			respondError(w, http.StatusBadRequest, "Invalid directory path")
+			return
+		}
+	}
+
+	// Determine destination path and the file record name.
+	var fileRecordName, dstPath string
+	if targetDir != "" {
+		// Create the target directory if it does not exist.
+		dstDir := filepath.Join("uploads", targetDir)
+		if _, err := os.Stat(dstDir); os.IsNotExist(err) {
+			if err := os.MkdirAll(dstDir, 0755); err != nil {
+				respondError(w, http.StatusInternalServerError, "Error creating target directory")
+				return
+			}
+		}
+		fileRecordName = filepath.Join(targetDir, handler.Filename)
+		dstPath = filepath.Join("uploads", targetDir, handler.Filename)
+	} else {
+		fileRecordName = handler.Filename
+		dstPath = filepath.Join("uploads", handler.Filename)
+	}
+
 	var msg string
-	if _, err := a.getFileRecord(handler.Filename); err == nil {
+	if _, err := a.getFileRecord(fileRecordName); err == nil {
 		msg = fmt.Sprintf("File '%s' overwritten successfully", handler.Filename)
 	} else {
 		fr := FileRecord{
-			FileName:    handler.Filename,
+			FileName:    fileRecordName,
 			Size:        handler.Size,
 			ContentType: handler.Header.Get("Content-Type"),
 			Uploader:    currentUser.Username,
@@ -718,19 +754,20 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 		msg = fmt.Sprintf("File '%s' uploaded successfully", handler.Filename)
 	}
 
-	dstPath := filepath.Join("uploads", handler.Filename)
+	// Create the destination file
 	dst, err := os.Create(dstPath)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error saving file")
 		return
 	}
 	defer dst.Close()
+
 	if _, err := io.Copy(dst, file); err != nil {
 		respondError(w, http.StatusInternalServerError, "Error saving file")
 		return
 	}
 
-	a.logActivity(fmt.Sprintf("File '%s' uploaded by '%s'.", handler.Filename, currentUser.Username))
+	a.logActivity(fmt.Sprintf("File '%s' uploaded by '%s'.", fileRecordName, currentUser.Username))
 
 	respondJSON(w, http.StatusOK, map[string]string{"message": msg})
 }
@@ -1579,6 +1616,76 @@ func (a *App) assignAdminHandler(w http.ResponseWriter, r *http.Request) {
 	a.logActivity(fmt.Sprintf("Admin '%s' assigned admin role to user '%s'.", user.Username, req.Username))
 	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("User '%s' is now an admin", req.Username)})
 }
+func (a *App) listResourceHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	// Verify authentication and log the user accessing the resource.
+	user, err := a.getUserFromSession(r)
+	if err != nil {
+		respondError(w, http.StatusForbidden, "Forbidden")
+		return
+	}
+	log.Printf("User %s is listing resources\n", user.Username)
+
+	// e.g. GET /list-resource?directory=operation
+	directory := r.URL.Query().Get("directory")
+	directory = sanitizeName(strings.TrimSpace(directory))
+
+	basePath := "uploads"
+	targetPath := filepath.Join(basePath, directory)
+
+	// If no directory provided, default to top-level "uploads".
+	if directory == "" {
+		targetPath = basePath
+	}
+
+	// Check if the folder exists.
+	fileInfo, err := os.Stat(targetPath)
+	if os.IsNotExist(err) {
+		respondError(w, http.StatusNotFound, "Directory does not exist")
+		return
+	}
+	if !fileInfo.IsDir() {
+		respondError(w, http.StatusBadRequest, "Not a directory")
+		return
+	}
+
+	// Read directory contents.
+	entries, err := os.ReadDir(targetPath)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Cannot read directory")
+		return
+	}
+
+	// Build a list of items.
+	type DirItem struct {
+		Name string `json:"name"`
+		Type string `json:"type"` // "file" or "directory"
+		Size int64  `json:"size,omitempty"`
+	}
+	var results []DirItem
+
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		itemType := "file"
+		if entry.IsDir() {
+			itemType = "directory"
+		}
+		results = append(results, DirItem{
+			Name: entry.Name(),
+			Type: itemType,
+			Size: info.Size(),
+		})
+	}
+
+	respondJSON(w, http.StatusOK, results)
+}
 
 func (a *App) adminStatusHandler(w http.ResponseWriter, r *http.Request) {
 	exists := false
@@ -1611,6 +1718,19 @@ func (a *App) updateUserStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("User '%s' status updated successfully", req.Username)})
+}
+func createBaseFolders() {
+	baseFolders := []string{"operation", "training", "research"}
+	for _, folderName := range baseFolders {
+		folderPath := filepath.Join("uploads", folderName)
+		if _, err := os.Stat(folderPath); os.IsNotExist(err) {
+			if err := os.MkdirAll(folderPath, 0755); err != nil {
+				log.Printf("Error creating folder %s: %v\n", folderPath, err)
+			} else {
+				log.Printf("Created folder %s\n", folderPath)
+			}
+		}
+	}
 }
 
 // --- CORS Middleware ---
@@ -1657,6 +1777,7 @@ func main() {
 			log.Fatal("Failed to create uploads folder:", err)
 		}
 	}
+	createBaseFolders()
 
 	app := &App{
 		DB:        db,
@@ -1688,6 +1809,8 @@ func main() {
 	mux.HandleFunc("/rename-resource", app.renameResourceHandler)
 	mux.HandleFunc("/share-file", app.shareFileHandler)
 	mux.HandleFunc("/download-share", app.downloadShareHandler)
+	// New list resource endpoint.
+	mux.HandleFunc("/list-resource", app.listResourceHandler)
 	// Admin endpoints.
 	mux.HandleFunc("/admin", app.adminHandler)
 	mux.HandleFunc("/user", app.userHandler)
