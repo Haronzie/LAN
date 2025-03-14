@@ -151,7 +151,30 @@ func (a *App) createTables() {
 	if err != nil {
 		log.Fatal("Error creating index on users table:", err)
 	}
-
+	// Equipment (Inventory) table.
+	equipmentTable := `
+		CREATE TABLE IF NOT EXISTS equipment (
+			id SERIAL PRIMARY KEY,
+			name TEXT NOT NULL,
+			total_quantity INTEGER NOT NULL,
+			remaining_quantity INTEGER NOT NULL,
+			reorder_level INTEGER NOT NULL DEFAULT 0,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);`
+	_, err = a.DB.Exec(equipmentTable)
+	if err != nil {
+		log.Fatal("Error creating equipment table:", err)
+	}
+	// Create index on lower(name) for case-insensitive searches.
+	_, err = a.DB.Exec("CREATE INDEX IF NOT EXISTS idx_equipment_lower_name ON equipment (LOWER(name))")
+	if err != nil {
+		log.Fatal("Error creating equipment name index:", err)
+	}
+	// Create index on reorder_level for fast filtering.
+	_, err = a.DB.Exec("CREATE INDEX IF NOT EXISTS idx_equipment_reorder_level ON equipment (reorder_level)")
+	if err != nil {
+		log.Fatal("Error creating equipment reorder level index:", err)
+	}
 	// Files table.
 	fileTable := `
     CREATE TABLE IF NOT EXISTS files (
@@ -231,6 +254,108 @@ func (a *App) getUserFromSession(r *http.Request) (User, error) {
 
 	log.Println("SESSION VERIFIED - Username:", username, "Role:", user.Role)
 	return user, nil
+}
+
+// inventoryHandler handles inventory operations: GET to list, POST to add,
+// PUT to update, and DELETE to remove an equipment item.
+func (a *App) inventoryHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		// List all equipment
+		rows, err := a.DB.Query("SELECT id, name, total_quantity, remaining_quantity, reorder_level, updated_at FROM equipment")
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Error retrieving inventory")
+			return
+		}
+		defer rows.Close()
+		type Equipment struct {
+			ID                int       `json:"id"`
+			Name              string    `json:"name"`
+			TotalQuantity     int       `json:"total_quantity"`
+			RemainingQuantity int       `json:"remaining_quantity"`
+			ReorderLevel      int       `json:"reorder_level"`
+			UpdatedAt         time.Time `json:"updated_at"`
+		}
+		var items []Equipment
+		for rows.Next() {
+			var eq Equipment
+			if err := rows.Scan(&eq.ID, &eq.Name, &eq.TotalQuantity, &eq.RemainingQuantity, &eq.ReorderLevel, &eq.UpdatedAt); err != nil {
+				respondError(w, http.StatusInternalServerError, "Error scanning inventory record")
+				return
+			}
+			items = append(items, eq)
+		}
+		respondJSON(w, http.StatusOK, items)
+	case http.MethodPost:
+		// Add new equipment
+		var req struct {
+			Name              string `json:"name"`
+			TotalQuantity     int    `json:"total_quantity"`
+			RemainingQuantity int    `json:"remaining_quantity"`
+			ReorderLevel      int    `json:"reorder_level"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+		req.Name = strings.TrimSpace(req.Name)
+		if req.Name == "" || req.TotalQuantity <= 0 || req.RemainingQuantity < 0 {
+			respondError(w, http.StatusBadRequest, "Invalid equipment data")
+			return
+		}
+		_, err := a.DB.Exec("INSERT INTO equipment (name, total_quantity, remaining_quantity, reorder_level) VALUES ($1, $2, $3, $4)",
+			req.Name, req.TotalQuantity, req.RemainingQuantity, req.ReorderLevel)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Error adding equipment")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]string{"message": "Equipment added successfully"})
+	case http.MethodPut:
+		// Update equipment record
+		var req struct {
+			ID                int    `json:"id"`
+			Name              string `json:"name"`
+			TotalQuantity     int    `json:"total_quantity"`
+			RemainingQuantity int    `json:"remaining_quantity"`
+			ReorderLevel      int    `json:"reorder_level"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+		if req.ID <= 0 {
+			respondError(w, http.StatusBadRequest, "Invalid equipment ID")
+			return
+		}
+		_, err := a.DB.Exec("UPDATE equipment SET name=$1, total_quantity=$2, remaining_quantity=$3, reorder_level=$4, updated_at=CURRENT_TIMESTAMP WHERE id=$5",
+			req.Name, req.TotalQuantity, req.RemainingQuantity, req.ReorderLevel, req.ID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Error updating equipment")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]string{"message": "Equipment updated successfully"})
+	case http.MethodDelete:
+		// Delete equipment record
+		var req struct {
+			ID int `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+		if req.ID <= 0 {
+			respondError(w, http.StatusBadRequest, "Invalid equipment ID")
+			return
+		}
+		_, err := a.DB.Exec("DELETE FROM equipment WHERE id=$1", req.ID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Error deleting equipment")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]string{"message": "Equipment deleted successfully"})
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	}
 }
 
 func (a *App) userProfileHandler(w http.ResponseWriter, r *http.Request) {
@@ -1576,6 +1701,8 @@ func main() {
 	mux.HandleFunc("/admin-exists", app.adminExistsHandler)
 	// Activities endpoint.
 	mux.HandleFunc("/activities", app.activitiesHandler)
+	// Inventory endpoint.
+	mux.HandleFunc("/inventory", app.inventoryHandler)
 
 	handler := enableCORS(mux)
 	log.Println("Starting HTTP server on port 9090...")

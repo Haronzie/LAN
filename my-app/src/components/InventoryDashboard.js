@@ -5,33 +5,20 @@ import axios from 'axios';
 const { Content } = Layout;
 
 const InventoryDashboard = () => {
-  const [inventoryData, setInventoryData] = useState({
-    totalEquipment: 0,
-    remainingEquipment: 0,
-    equipment: [],
-  });
+  const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
 
-  // Fetch inventory metrics and equipment list from backend
+  // Fetch equipment list from backend
   const fetchInventory = async () => {
     setLoading(true);
     try {
       const res = await axios.get('/inventory', { withCredentials: true });
-      // Expected response structure: { totalEquipment, remainingEquipment, equipment: [{ id, name, count }] }
-      setInventoryData(res.data);
+      // res.data is expected to be an array of equipment objects.
+      setEquipment(res.data);
     } catch (error) {
       message.error('Error fetching inventory data');
-      // Fallback dummy data for demonstration purposes
-      setInventoryData({
-        totalEquipment: 10,
-        remainingEquipment: 7,
-        equipment: [
-          { id: 1, name: 'Laptop', count: 5 },
-          { id: 2, name: 'Projector', count: 2 },
-          { id: 3, name: 'Tablet', count: 3 },
-        ],
-      });
+      setEquipment([]); // Set to empty array if error occurs.
     } finally {
       setLoading(false);
     }
@@ -41,10 +28,20 @@ const InventoryDashboard = () => {
     fetchInventory();
   }, []);
 
-  // Handle form submission to add new equipment
+  // Compute totals from the equipment array.
+  const totalEquipment = equipment.reduce((sum, item) => sum + item.total_quantity, 0);
+  const remainingEquipment = equipment.reduce((sum, item) => sum + item.remaining_quantity, 0);
+
+  // Handle form submission to add new equipment.
   const onFinish = async (values) => {
     try {
-      await axios.post('/inventory', values, { withCredentials: true });
+      const payload = {
+        name: values.name,
+        total_quantity: values.total_quantity,
+        remaining_quantity: values.total_quantity, // Initially, remaining equals total.
+        reorder_level: values.reorder_level || 0,
+      };
+      await axios.post('/inventory', payload, { withCredentials: true });
       message.success('Equipment added successfully');
       form.resetFields();
       fetchInventory();
@@ -59,12 +56,12 @@ const InventoryDashboard = () => {
         <Row gutter={[16, 16]} justify="center">
           <Col xs={24} sm={12}>
             <Card>
-              <Statistic title="Total Equipment" value={inventoryData.totalEquipment} />
+              <Statistic title="Total Equipment" value={totalEquipment} />
             </Card>
           </Col>
           <Col xs={24} sm={12}>
             <Card>
-              <Statistic title="Remaining Equipment" value={inventoryData.remainingEquipment} />
+              <Statistic title="Remaining Equipment" value={remainingEquipment} />
             </Card>
           </Col>
         </Row>
@@ -77,12 +74,12 @@ const InventoryDashboard = () => {
               <List
                 loading={loading}
                 itemLayout="horizontal"
-                dataSource={inventoryData.equipment}
+                dataSource={equipment}
                 renderItem={(item) => (
                   <List.Item>
                     <List.Item.Meta
                       title={item.name}
-                      description={`Count: ${item.count}`}
+                      description={`Total: ${item.total_quantity}, Remaining: ${item.remaining_quantity}, Reorder Level: ${item.reorder_level}`}
                     />
                   </List.Item>
                 )}
@@ -103,11 +100,14 @@ const InventoryDashboard = () => {
               <Input placeholder="Enter equipment name" />
             </Form.Item>
             <Form.Item
-              name="count"
-              label="Count"
-              rules={[{ required: true, message: 'Please input the count' }]}
+              name="total_quantity"
+              label="Total Quantity"
+              rules={[{ required: true, message: 'Please input the total quantity' }]}
             >
-              <Input type="number" placeholder="Enter count" />
+              <Input type="number" placeholder="Enter total quantity" />
+            </Form.Item>
+            <Form.Item name="reorder_level" label="Reorder Level">
+              <Input type="number" placeholder="Enter reorder level (optional)" />
             </Form.Item>
             <Form.Item>
               <Button type="primary" htmlType="submit">
