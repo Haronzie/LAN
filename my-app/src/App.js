@@ -6,13 +6,14 @@ import RegisterForm from './components/RegisterForm';
 import AdminDashboard from './components/AdminDashboard';
 import UserManagement from './components/UserManagement';
 import FileManager from './components/FileManager';
-import ActivityLog from './components/ActivityLog'; // <-- New Activity Log component
+import ActivityLog from './components/ActivityLog';
 import UserDashboard from './components/UserDashboard';
 import UserDashboardHome from './components/UserDashboardHome';
 import OperationDashboard from './components/OperationDashboard';
 import TrainingDashboard from './components/TrainingDashboard';
 import ResearchDashboard from './components/ResearchDashboard';
 import InventoryDashboard from './components/InventoryDashboard';
+import UserSettings from './components/UserSettings';  // Import your UserSettings component
 import axios from 'axios';
 
 function App() {
@@ -47,18 +48,18 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/admin/files" element={<FileManager />} />
-        {/* New Activities route */}
         <Route path="/admin/activities" element={<ActivityLog />} />
 
         {/* User Routes with Nested Routes */}
         <Route path="/user/*" element={<UserDashboard />}>
-          <Route index element={<UserDashboardHome />} />
-          <Route path="home" element={<UserDashboardHome />} />
-          <Route path="operation" element={<OperationDashboard />} />
-          <Route path="training" element={<TrainingDashboard />} />
-          <Route path="research" element={<ResearchDashboard />} />
-          <Route path="inventory/*" element={<InventoryDashboard />} />
-        </Route>
+  <Route index element={<UserDashboardHome />} />
+  <Route path="home" element={<UserDashboardHome />} />
+  <Route path="operation" element={<OperationDashboard />} />
+  <Route path="training" element={<TrainingDashboard />} />
+  <Route path="research" element={<ResearchDashboard />} />
+  <Route path="inventory/*" element={<InventoryDashboard />} />
+  <Route path="settings" element={<UserSettings />} /> {/* <-- Add this */}
+</Route>
 
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

@@ -7,12 +7,14 @@ import TrainingDashboard from './TrainingDashboard';
 import OperationDashboard from './OperationDashboard';
 import ResearchDashboard from './ResearchDashboard';
 import InventoryDashboard from './InventoryDashboard';
+// Make sure to import your UserSettings component:
+import UserSettings from './UserSettings';
 
 const { Header, Content, Sider } = Layout;
 
 const UserDashboard = () => {
   const navigate = useNavigate();
-  const location = useLocation();     // <-- Import from react-router-dom
+  const location = useLocation();
   const [userRole, setUserRole] = useState(null);
 
   useEffect(() => {
@@ -48,13 +50,9 @@ const UserDashboard = () => {
     return <p>Loading...</p>;
   }
 
-  // Determine which menu item should be selected based on the current path.
-  // Example: /user/home => split("/") -> ["", "user", "home"]
-  // The third element (index 2) is the route segment, e.g. "home" or "operation".
-  // If there's no segment (e.g. just "/user"), default to "home".
+  // Determine which menu item should be highlighted based on the current path
   const pathParts = location.pathname.split('/');
-  // pathParts[2] might be undefined if the user is at "/user" with no sub-path
-  const currentRoute = pathParts[2] || 'home';
+  const currentRoute = pathParts[2] || 'home';  // e.g. "/user/home" => pathParts[2] is "home"
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -65,9 +63,8 @@ const UserDashboard = () => {
         <Menu
           theme="dark"
           mode="inline"
-          // selectedKeys sets which item is highlighted in the sidebar
-          selectedKeys={[currentRoute]}  
-          defaultSelectedKeys={['home']}   // Fallback for first render
+          selectedKeys={[currentRoute]}
+          defaultSelectedKeys={['home']}
         >
           <Menu.Item key="home">
             <Link to="/user/home">Home</Link>
@@ -83,6 +80,11 @@ const UserDashboard = () => {
           </Menu.Item>
           <Menu.Item key="inventory">
             <Link to="/user/inventory">Inventory</Link>
+          </Menu.Item>
+
+          {/* NEW: Settings menu item */}
+          <Menu.Item key="settings">
+            <Link to="/user/settings">Settings</Link>
           </Menu.Item>
         </Menu>
       </Sider>
@@ -102,6 +104,10 @@ const UserDashboard = () => {
               <Route path="training" element={<TrainingDashboard />} />
               <Route path="research" element={<ResearchDashboard />} />
               <Route path="inventory" element={<InventoryDashboard />} />
+
+              {/* NEW: Settings route */}
+              <Route path="settings" element={<UserSettings />} />
+
               <Route index element={<UserDashboardHome />} />
               <Route path="*" element={<div>Page not found</div>} />
             </Routes>

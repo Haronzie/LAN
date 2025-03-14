@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AddResourceModal from './AddResourceModal';
 import { Column } from '@ant-design/charts';
+import Settings from './Settings'; // Import your Settings component
 
 const { Header, Content, Footer, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -95,7 +96,7 @@ const AdminDashboard = () => {
     xField: 'type',
     yField: 'count',
     label: {
-      position: 'inside', // Changed from "middle" to "inside" to fix the error.
+      position: 'inside', // use inside instead of middle
       style: {
         fill: '#FFFFFF',
         opacity: 0.6,

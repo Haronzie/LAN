@@ -1,29 +1,26 @@
-import React, { useEffect, useState } from 'react';
-import { Layout, Row, Col, Card, Typography } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Layout, Row, Col, Card, Typography, Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { BarChartOutlined, ReadOutlined, BookOutlined, DatabaseOutlined } from '@ant-design/icons';
+import { BarChartOutlined, ReadOutlined, BookOutlined, DatabaseOutlined, SettingOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const { Content } = Layout;
 
 const UserDashboardHome = () => {
   const [username, setUsername] = useState('');
   const navigate = useNavigate();
 
-  // Fetch the user's profile to get the username
   useEffect(() => {
-    const fetchUserProfile = async () => {
+    const fetchProfile = async () => {
       try {
         const res = await axios.get('/api/user/profile', { withCredentials: true });
-        if (res.data.username) {
-          setUsername(res.data.username);
-        }
+        setUsername(res.data.username);
       } catch (error) {
         console.error('Error fetching user profile:', error);
       }
     };
-    fetchUserProfile();
+    fetchProfile();
   }, []);
 
   const dashboards = [
@@ -54,34 +51,32 @@ const UserDashboardHome = () => {
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-      <Content style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
-        
-        {/* Top "Header" Section */}
-        <div
-          style={{
-            marginBottom: 24,
-            padding: '16px',
-            background: '#fff',
-            borderRadius: '8px',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-          }}
-        >
-          <Row justify="space-between" align="middle">
-            <Col>
-              <Title level={2} style={{ margin: 0 }}>
-                User Dashboard
-              </Title>
-            </Col>
-            <Col>
-              {username && (
-                <Text style={{ fontSize: '16px' }}>
+    <Layout style={{ padding: '24px', background: '#f0f2f5', minHeight: '100vh' }}>
+      <Content style={{ maxWidth: 1200, margin: '0 auto' }}>
+        {/* Header row with title, welcome message, and Settings button */}
+        <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
+          <Col>
+            <Title level={2} style={{ margin: 0 }}>
+              User Dashboard
+            </Title>
+          </Col>
+          <Col>
+            {username && (
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <Title level={5} style={{ margin: 0, marginRight: 16 }}>
                   Welcome, <strong>{username}</strong>!
-                </Text>
-              )}
-            </Col>
-          </Row>
-        </div>
+                </Title>
+                <Button
+                  type="primary"
+                  icon={<SettingOutlined />}
+                  onClick={() => navigate('/user/settings')}
+                >
+                  Settings
+                </Button>
+              </div>
+            )}
+          </Col>
+        </Row>
 
         {/* Dashboard Cards */}
         <Row gutter={[24, 24]} justify="center">
@@ -90,10 +85,10 @@ const UserDashboardHome = () => {
               <Card
                 hoverable
                 onClick={() => navigate(dashboard.route)}
-                style={{ textAlign: 'center', borderRadius: '8px' }}
+                style={{ textAlign: 'center' }}
               >
                 {dashboard.icon}
-                <Title level={4} style={{ marginTop: 16, marginBottom: 0 }}>
+                <Title level={4} style={{ marginTop: 16 }}>
                   {dashboard.title}
                 </Title>
               </Card>
