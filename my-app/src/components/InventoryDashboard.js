@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Row, Col, Card, Statistic, List, Input, Button, Form, message, Divider } from 'antd';
+import { ArrowLeftOutlined } from '@ant-design/icons';  // Import the arrow icon
+import { useNavigate } from 'react-router-dom';          // For navigation
 import axios from 'axios';
 
 const { Content } = Layout;
@@ -8,17 +10,18 @@ const InventoryDashboard = () => {
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
+  const navigate = useNavigate();
 
   // Fetch equipment list from backend
   const fetchInventory = async () => {
     setLoading(true);
     try {
       const res = await axios.get('/inventory', { withCredentials: true });
-      // res.data is expected to be an array of equipment objects.
-      setEquipment(res.data);
+      // Ensure that the equipment state is always an array
+      setEquipment(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       message.error('Error fetching inventory data');
-      setEquipment([]); // Set to empty array if error occurs.
+      setEquipment([]);
     } finally {
       setLoading(false);
     }
@@ -28,17 +31,17 @@ const InventoryDashboard = () => {
     fetchInventory();
   }, []);
 
-  // Compute totals from the equipment array.
+  // Compute totals from the equipment array
   const totalEquipment = equipment.reduce((sum, item) => sum + item.total_quantity, 0);
   const remainingEquipment = equipment.reduce((sum, item) => sum + item.remaining_quantity, 0);
 
-  // Handle form submission to add new equipment.
+  // Handle form submission to add new equipment
   const onFinish = async (values) => {
     try {
       const payload = {
         name: values.name,
         total_quantity: values.total_quantity,
-        remaining_quantity: values.total_quantity, // Initially, remaining equals total.
+        remaining_quantity: values.total_quantity, // Initially, remaining equals total
         reorder_level: values.reorder_level || 0,
       };
       await axios.post('/inventory', payload, { withCredentials: true });
@@ -53,6 +56,20 @@ const InventoryDashboard = () => {
   return (
     <Content style={{ padding: '24px', background: '#f0f2f5' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+
+        {/* Row for "Back to Dashboard" button */}
+        <Row style={{ marginBottom: 16 }}>
+          <Col>
+            <Button
+              icon={<ArrowLeftOutlined />}
+              onClick={() => navigate('/user/home')}
+            >
+              Back to Dashboard
+            </Button>
+          </Col>
+        </Row>
+
+        {/* Statistics */}
         <Row gutter={[16, 16]} justify="center">
           <Col xs={24} sm={12}>
             <Card>
@@ -68,6 +85,7 @@ const InventoryDashboard = () => {
 
         <Divider />
 
+        {/* Equipment List */}
         <Row>
           <Col span={24}>
             <Card title="Equipment List">
@@ -90,6 +108,7 @@ const InventoryDashboard = () => {
 
         <Divider />
 
+        {/* Add Equipment Form */}
         <Card title="Add Equipment">
           <Form form={form} layout="vertical" onFinish={onFinish}>
             <Form.Item
@@ -116,6 +135,7 @@ const InventoryDashboard = () => {
             </Form.Item>
           </Form>
         </Card>
+
       </div>
     </Content>
   );

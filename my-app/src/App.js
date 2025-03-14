@@ -48,8 +48,9 @@ function App() {
         <Route path="/admin/files" element={<FileManager />} />
 
         {/* User Routes with Nested Routes */}
-        <Route path="/user" element={<UserDashboard />}>
+        <Route path="/user/*" element={<UserDashboard />}>
           <Route index element={<UserDashboardHome />} />
+          <Route path="home" element={<UserDashboardHome />} />
           <Route path="operation" element={<OperationDashboard />} />
           <Route path="training" element={<TrainingDashboard />} />
           <Route path="research" element={<ResearchDashboard />} />
