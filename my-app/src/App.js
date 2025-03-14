@@ -6,6 +6,7 @@ import RegisterForm from './components/RegisterForm';
 import AdminDashboard from './components/AdminDashboard';
 import UserManagement from './components/UserManagement';
 import FileManager from './components/FileManager';
+import ActivityLog from './components/ActivityLog'; // <-- New Activity Log component
 import UserDashboard from './components/UserDashboard';
 import UserDashboardHome from './components/UserDashboardHome';
 import OperationDashboard from './components/OperationDashboard';
@@ -46,6 +47,8 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/admin/files" element={<FileManager />} />
+        {/* New Activities route */}
+        <Route path="/admin/activities" element={<ActivityLog />} />
 
         {/* User Routes with Nested Routes */}
         <Route path="/user/*" element={<UserDashboard />}>
