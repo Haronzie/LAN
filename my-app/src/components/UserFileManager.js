@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Table, Button, Upload, message, Input, Row, Col, Modal, Select } from 'antd';
-import { UploadOutlined, DeleteOutlined, DownloadOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { UploadOutlined, DeleteOutlined, DownloadOutlined, ArrowLeftOutlined, CopyOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -13,12 +13,15 @@ const UserFileManager = () => {
   const [filteredFiles, setFilteredFiles] = useState([]);
   const [currentUsername, setCurrentUsername] = useState('');
 
-  // New state variables for Rename and Move modals
+  // New state variables for Rename, Move, and Copy modals
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
+  const [copyModalVisible, setCopyModalVisible] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
   const [moveDestination, setMoveDestination] = useState('');
+  const [copyNewName, setCopyNewName] = useState('');
+  const [copyDestination, setCopyDestination] = useState('');
 
   const navigate = useNavigate();
 
@@ -97,6 +100,22 @@ const UserFileManager = () => {
     }
   };
 
+  // Function to handle copying a file
+  const handleCopyConfirm = async () => {
+    try {
+      await axios.post('/copy-resource', {
+        file_name: selectedFile,
+        new_name: copyNewName,         // if empty, backend will use original name
+        destination: copyDestination,  // required: destination directory for the copy
+      }, { withCredentials: true });
+      message.success('File copied successfully');
+      setCopyModalVisible(false);
+      fetchFiles();
+    } catch (error) {
+      message.error('Error copying file');
+    }
+  };
+
   const columns = [
     {
       title: 'File Name',
@@ -124,6 +143,19 @@ const UserFileManager = () => {
           <>
             <Button icon={<DownloadOutlined />} onClick={() => window.open(`/download?filename=${record.file_name}`, '_blank')}>
               Download
+            </Button>
+            {/* Copy button visible to all users */}
+            <Button
+              icon={<CopyOutlined />}
+              onClick={() => {
+                setSelectedFile(record.file_name);
+                setCopyNewName('');
+                setCopyDestination('');
+                setCopyModalVisible(true);
+              }}
+              style={{ marginLeft: 8 }}
+            >
+              Copy
             </Button>
             {isUploader && (
               <>
@@ -185,7 +217,7 @@ const UserFileManager = () => {
     <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
       <Row justify="space-between" style={{ marginBottom: 16 }}>
         <Col>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/dashboard')}>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/user')}>
             Back to Dashboard
           </Button>
         </Col>
@@ -245,6 +277,26 @@ const UserFileManager = () => {
           <Select.Option value="Images">Images</Select.Option>
           <Select.Option value="Archives">Archives</Select.Option>
         </Select>
+      </Modal>
+
+      {/* Copy Modal */}
+      <Modal
+        title="Copy File"
+        visible={copyModalVisible}
+        onOk={handleCopyConfirm}
+        onCancel={() => setCopyModalVisible(false)}
+      >
+        <Input
+          placeholder="Enter new file name (optional; leave empty to keep original)"
+          value={copyNewName}
+          onChange={e => setCopyNewName(e.target.value)}
+          style={{ marginBottom: 16 }}
+        />
+        <Input
+          placeholder="Enter destination directory (required)"
+          value={copyDestination}
+          onChange={e => setCopyDestination(e.target.value)}
+        />
       </Modal>
     </div>
   );

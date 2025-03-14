@@ -1132,6 +1132,118 @@ func (a *App) uploadProfileHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"url": fileURL})
 }
 
+// copyResourceHandler handles copying a file.
+// copyResourceHandler handles copying a file.
+// copyResourceHandler handles copying a file with a destination directory.
+func (a *App) copyResourceHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	// Require authentication.
+	currentUser, err := a.getUserFromSession(r)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Parse input JSON; now includes a required "destination" field.
+	var req struct {
+		FileName    string `json:"file_name"`
+		NewName     string `json:"new_name"`    // Optional; if empty, use original name.
+		Destination string `json:"destination"` // Required: destination directory (relative to "uploads")
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	req.FileName = sanitizeName(strings.TrimSpace(req.FileName))
+	req.NewName = sanitizeName(strings.TrimSpace(req.NewName))
+	req.Destination = strings.TrimSpace(req.Destination)
+
+	if req.FileName == "" {
+		respondError(w, http.StatusBadRequest, "Original file name is required")
+		return
+	}
+	if req.Destination == "" {
+		respondError(w, http.StatusBadRequest, "Destination directory is required when copying a file")
+		return
+	}
+
+	// Determine new file name: if NewName is empty, use the original file name.
+	newFileName := req.NewName
+	if newFileName == "" {
+		newFileName = req.FileName
+	}
+
+	// Check if the original file exists.
+	origRecord, err := a.getFileRecord(req.FileName)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "Original file not found")
+		return
+	}
+
+	basePath := "uploads"
+	// Prepare the destination directory.
+	destDir := filepath.Join(basePath, req.Destination)
+	// Create the destination directory if it doesn't exist.
+	if _, err := os.Stat(destDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			respondError(w, http.StatusInternalServerError, "Error creating destination directory")
+			return
+		}
+	}
+	// New file path: destination directory joined with the new file name.
+	newPath := filepath.Join(destDir, newFileName)
+
+	// Ensure a file with the new name doesn't already exist at the destination.
+	if _, err := os.Stat(newPath); err == nil {
+		respondError(w, http.StatusBadRequest, "A file with the same name already exists in the destination directory")
+		return
+	}
+
+	// Open the original file for reading.
+	origPath := filepath.Join(basePath, req.FileName)
+	origFile, err := os.Open(origPath)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Error opening original file")
+		return
+	}
+	defer origFile.Close()
+
+	// Create the new file.
+	newFile, err := os.Create(newPath)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Error creating new file")
+		return
+	}
+	defer newFile.Close()
+
+	// Copy contents.
+	if _, err := io.Copy(newFile, origFile); err != nil {
+		respondError(w, http.StatusInternalServerError, "Error copying file contents")
+		return
+	}
+
+	// Create new file record with uploader set to the current user.
+	// Here, we store the file's relative path (destination folder + newFileName).
+	newRecord := FileRecord{
+		FileName:    filepath.Join(req.Destination, newFileName),
+		Size:        origRecord.Size,
+		ContentType: origRecord.ContentType,
+		Uploader:    currentUser.Username,
+	}
+	if err := a.createFileRecord(newRecord); err != nil {
+		respondError(w, http.StatusInternalServerError, "Error saving new file record")
+		return
+	}
+	a.cacheFileRecord(newRecord)
+
+	a.logActivity(fmt.Sprintf("User '%s' copied file '%s' to '%s' in destination '%s'.", currentUser.Username, req.FileName, newFileName, req.Destination))
+	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("File copied successfully to '%s'", filepath.Join(req.Destination, newFileName))})
+}
+
 func (a *App) usersHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := a.getUserFromSession(r)
 	if err != nil || user.Role != "admin" {
@@ -1447,6 +1559,7 @@ func main() {
 	mux.HandleFunc("/delete-resource", app.deleteResourceHandler)
 	// Separate move and rename endpoints.
 	mux.HandleFunc("/move-resource", app.moveResourceHandler)
+	mux.HandleFunc("/copy-resource", app.copyResourceHandler) // <-- New copy endpoint
 	mux.HandleFunc("/rename-resource", app.renameResourceHandler)
 	mux.HandleFunc("/share-file", app.shareFileHandler)
 	mux.HandleFunc("/download-share", app.downloadShareHandler)

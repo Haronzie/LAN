@@ -12,12 +12,14 @@ const FileManager = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredFiles, setFilteredFiles] = useState([]);
 
-  // New state variables for Rename and Move modals
+  // New state variables for Rename, Move, and Copy modals
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
+  const [copyModalVisible, setCopyModalVisible] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
   const [moveDestination, setMoveDestination] = useState('');
+  const [copyNewName, setCopyNewName] = useState('');
 
   const navigate = useNavigate();
 
@@ -53,7 +55,7 @@ const FileManager = () => {
     }
   };
 
-  // New function to handle renaming a file
+  // Function to handle renaming a file
   const handleRenameConfirm = async () => {
     try {
       await axios.put('/rename-resource', {
@@ -69,7 +71,7 @@ const FileManager = () => {
     }
   };
 
-  // New function to handle moving a file
+  // Function to handle moving a file
   const handleMoveConfirm = async () => {
     try {
       await axios.put('/move-resource', {
@@ -85,6 +87,23 @@ const FileManager = () => {
     }
   };
 
+  // Function to handle copying a file
+  const handleCopyConfirm = async () => {
+    try {
+      await axios.post('/copy-resource', {
+        file_name: selectedFile,
+        new_name: copyNewName,         // if empty, backend will use original file name
+        destination: moveDestination,  // must be provided by the user
+      }, { withCredentials: true });
+      message.success('File copied successfully');
+      setCopyModalVisible(false);
+      fetchFiles();
+    } catch (error) {
+      message.error('Error copying file');
+    }
+  };
+  
+  
   const columns = [
     {
       title: 'File Name',
@@ -128,13 +147,23 @@ const FileManager = () => {
           <Button
             onClick={() => {
               setSelectedFile(record.file_name);
-              // Set a default destination (root) initially
               setMoveDestination(record.file_name);
               setMoveModalVisible(true);
             }}
             style={{ marginLeft: 8 }}
           >
             Move
+          </Button>
+          {/* New Copy button */}
+          <Button
+            onClick={() => {
+              setSelectedFile(record.file_name);
+              setCopyNewName('');
+              setCopyModalVisible(true);
+            }}
+            style={{ marginLeft: 8 }}
+          >
+            Copy
           </Button>
         </>
       )
@@ -211,7 +240,6 @@ const FileManager = () => {
           placeholder="Select destination directory"
           style={{ width: '100%' }}
           onChange={(value) => {
-            // If "root" is selected, move to the root (uploads folder) with the original file name.
             if (value === 'root') {
               setMoveDestination(selectedFile);
             } else {
@@ -225,6 +253,27 @@ const FileManager = () => {
           <Select.Option value="Archives">Archives</Select.Option>
         </Select>
       </Modal>
+
+      {/* Copy Modal */}
+      {/* Copy Modal */}
+<Modal
+  title="Copy File"
+  visible={copyModalVisible}
+  onOk={handleCopyConfirm}
+  onCancel={() => setCopyModalVisible(false)}
+>
+  <Input
+    placeholder="Enter new file name (optional; leave empty to keep original)"
+    value={copyNewName}
+    onChange={e => setCopyNewName(e.target.value)}
+    style={{ marginBottom: 16 }}
+  />
+  <Input
+    placeholder="Enter destination directory (e.g., Archives/2025)"
+    onChange={e => setMoveDestination(e.target.value)}
+  />
+</Modal>
+
     </div>
   );
 };

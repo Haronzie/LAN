@@ -4,9 +4,14 @@ import Home from './components/Home';
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 import AdminDashboard from './components/AdminDashboard';
-import UserDashboard from './components/UserDashboard';
 import UserManagement from './components/UserManagement';
 import FileManager from './components/FileManager';
+import UserDashboard from './components/UserDashboard';
+import UserDashboardHome from './components/UserDashboardHome';
+import OperationDashboard from './components/OperationDashboard';
+import TrainingDashboard from './components/TrainingDashboard';
+import ResearchDashboard from './components/ResearchDashboard';
+import InventoryDashboard from './components/InventoryDashboard';
 import axios from 'axios';
 
 function App() {
@@ -32,15 +37,25 @@ function App() {
   return (
     <Router>
       <Routes>
+        {/* Public Routes */}
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<LoginForm />} />
         {!adminExists && <Route path="/register" element={<RegisterForm />} />}
-        {/* Admin routes */}
+
+        {/* Admin Routes */}
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/admin/files" element={<FileManager />} />
-        {/* Other routes */}
-        <Route path="/user/*" element={<UserDashboard />} />
+
+        {/* User Routes with Nested Routes */}
+        <Route path="/user" element={<UserDashboard />}>
+          <Route index element={<UserDashboardHome />} />
+          <Route path="operation" element={<OperationDashboard />} />
+          <Route path="training" element={<TrainingDashboard />} />
+          <Route path="research" element={<ResearchDashboard />} />
+          <Route path="inventory/*" element={<InventoryDashboard />} />
+        </Route>
+
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
