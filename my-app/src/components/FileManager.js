@@ -3,7 +3,6 @@ import {
   Layout,
   Table,
   Button,
-  Upload,
   message,
   Input,
   Row,
@@ -13,7 +12,9 @@ import {
   Tooltip,
   Form,
   Select,
-  Card
+  Card,
+  Breadcrumb,
+  Upload
 } from 'antd';
 import {
   UploadOutlined,
@@ -33,11 +34,15 @@ import path from 'path-browserify';
 
 const { Content } = Layout;
 
+// Helper to split a path (e.g. "Operation/Reports") into segments
+function getPathSegments(p) {
+  if (!p) return [];
+  return p.split('/').filter(Boolean);
+}
+
 const FileManager = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  // "" indicates root. For subfolders, e.g. "Operation/Subfolder"
   const [currentPath, setCurrentPath] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -45,9 +50,9 @@ const FileManager = () => {
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
-  // For uploading
-  const [selectedFolder, setSelectedFolder] = useState('');
-  const [fileToUpload, setFileToUpload] = useState(null);
+  // Upload
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(null);
 
   // Rename / Move / Copy
   const [renameModalVisible, setRenameModalVisible] = useState(false);
@@ -68,7 +73,6 @@ const FileManager = () => {
     setLoading(true);
     try {
       const directoryParam = encodeURIComponent(currentPath);
-      // GET /list-resource?directory=<subfolder>
       const res = await axios.get(
         `http://localhost:9090/list-resource?directory=${directoryParam}`,
         { withCredentials: true }
@@ -76,11 +80,9 @@ const FileManager = () => {
       setItems(res.data || []);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
-      if (error.response?.data?.error) {
-        message.error(error.response.data.error);
-      } else {
-        message.error('Error fetching directory contents');
-      }
+      message.error(
+        error.response?.data?.error || 'Error fetching directory contents'
+      );
     } finally {
       setLoading(false);
     }
@@ -105,8 +107,6 @@ const FileManager = () => {
       return;
     }
     try {
-      // POST /create-directory
-      // Body: { name: newFolderName, parent: currentPath }
       await axios.post(
         '/create-directory',
         {
@@ -121,11 +121,9 @@ const FileManager = () => {
       fetchItems();
     } catch (error) {
       console.error('Create folder error:', error);
-      if (error.response?.data?.error) {
-        message.error(error.response.data.error);
-      } else {
-        message.error('Error creating folder');
-      }
+      message.error(
+        error.response?.data?.error || 'Error creating folder'
+      );
     }
   };
 
@@ -133,8 +131,6 @@ const FileManager = () => {
   // 3) NAVIGATE
   // ===========================
   const handleFolderClick = (folderName) => {
-    // If at root, newPath = folderName
-    // else newPath = "currentPath/folderName"
     const newPath = isRoot
       ? folderName
       : path.join(currentPath, folderName);
@@ -147,22 +143,31 @@ const FileManager = () => {
     setCurrentPath(parent === '.' ? '' : parent);
   };
 
-  // ===========================
-  // 4) UPLOAD FILE
-  // ===========================
-  const customUpload = async ({ file, onSuccess, onError }) => {
-    // If you want to force user to pick a folder from dropdown:
-    // if (!selectedFolder && !currentPath) {
-    //   message.error('Please select or navigate to a folder first');
-    //   onError(new Error('No folder selected'));
-    //   return;
-    // }
+  // Breadcrumb click
+  const handleBreadcrumbClick = (index) => {
+    // If user clicks the nth breadcrumb, rebuild path from 0..n
+    const segments = getPathSegments(currentPath);
+    const newPath = segments.slice(0, index + 1).join('/');
+    setCurrentPath(newPath);
+  };
 
-    const targetFolder = selectedFolder || currentPath;
+  // ===========================
+  // 4) UPLOAD
+  // ===========================
+  const handleOpenUploadModal = () => {
+    setUploadingFile(null);
+    setUploadModalVisible(true);
+  };
 
+  const handleUpload = async () => {
+    if (!uploadingFile) {
+      message.error('Please select a file first');
+      return;
+    }
+    // Upload to currentPath
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('directory', targetFolder);
+    formData.append('file', uploadingFile);
+    formData.append('directory', currentPath);
 
     try {
       const res = await axios.post('/upload', formData, {
@@ -170,11 +175,11 @@ const FileManager = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       message.success(res.data.message || 'File uploaded successfully');
-      onSuccess(null, file);
+      setUploadModalVisible(false);
+      setUploadingFile(null);
       fetchItems();
     } catch (error) {
       console.error('Upload error:', error);
-      onError(error);
       message.error('Error uploading file');
     }
   };
@@ -184,8 +189,6 @@ const FileManager = () => {
   // ===========================
   const handleDelete = async (record) => {
     try {
-      // DELETE /delete-resource
-      // Body: { resource_type, name: "currentPath/record.name" }
       await axios.delete('/delete-resource', {
         data: {
           resource_type: record.type,
@@ -197,11 +200,7 @@ const FileManager = () => {
       fetchItems();
     } catch (error) {
       console.error('Delete error:', error);
-      if (error.response?.data?.error) {
-        message.error(error.response.data.error);
-      } else {
-        message.error(`Error deleting ${record.name}`);
-      }
+      message.error(error.response?.data?.error || `Error deleting ${record.name}`);
     }
   };
 
@@ -209,7 +208,6 @@ const FileManager = () => {
   // 6) DOWNLOAD
   // ===========================
   const handleDownload = (fileName) => {
-    // GET /download?filename=<currentPath/fileName>
     const fullPath = path.join(currentPath, fileName);
     window.open(`/download?filename=${encodeURIComponent(fullPath)}`, '_blank');
   };
@@ -223,8 +221,6 @@ const FileManager = () => {
       return;
     }
     try {
-      // PUT /rename-resource
-      // Body: { resource_type, old_name: currentPath/item.name, new_name: currentPath/renameNewName }
       await axios.put(
         '/rename-resource',
         {
@@ -253,8 +249,6 @@ const FileManager = () => {
       return;
     }
     try {
-      // PUT /move-resource
-      // Body: { resource_type, source, destination }
       await axios.put(
         '/move-resource',
         {
@@ -283,9 +277,6 @@ const FileManager = () => {
       return;
     }
     try {
-      // POST /copy-resource
-      // Body: { file_name, new_name (optional), destination }
-      // Because the backend expects "file_name" not "source"
       await axios.post(
         '/copy-resource',
         {
@@ -318,9 +309,7 @@ const FileManager = () => {
           return (
             <Space>
               <FolderOpenOutlined />
-              <a onClick={() => handleFolderClick(record.name)}>
-                {name}
-              </a>
+              <a onClick={() => handleFolderClick(record.name)}>{name}</a>
             </Space>
           );
         }
@@ -382,7 +371,9 @@ const FileManager = () => {
               }}
             />
           </Tooltip>
-          <Tooltip title={record.type === 'file' ? 'Delete File' : 'Delete Folder'}>
+          <Tooltip
+            title={record.type === 'file' ? 'Delete File' : 'Delete Folder'}
+          >
             <Button
               danger
               icon={<DeleteOutlined />}
@@ -394,9 +385,36 @@ const FileManager = () => {
     }
   ];
 
+  // Build breadcrumb items
+  const segments = getPathSegments(currentPath);
+  // Example: if currentPath="Operation/Reports", segments=["Operation","Reports"]
+  // We'll add a "Root" link if currentPath is not empty.
+  const breadcrumbItems = [
+    <Breadcrumb.Item key="root">
+      {isRoot ? (
+        'Root'
+      ) : (
+        <a onClick={() => setCurrentPath('')}>Root</a>
+      )}
+    </Breadcrumb.Item>
+  ];
+
+  segments.forEach((seg, index) => {
+    breadcrumbItems.push(
+      <Breadcrumb.Item key={index}>
+        {index === segments.length - 1 ? (
+          seg
+        ) : (
+          <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>
+        )}
+      </Breadcrumb.Item>
+    );
+  });
+
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
+        {/* Top row with back button, title, and upload */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin')}>
@@ -407,26 +425,20 @@ const FileManager = () => {
             <h2 style={{ margin: 0 }}>File Manager</h2>
           </Col>
           <Col>
-            <Upload
-              customRequest={customUpload}
-              showUploadList={false}
-              onChange={({ file }) => setFileToUpload(file)}
-            >
-              <Button type="primary" icon={<UploadOutlined />}>
-                Upload File
-              </Button>
-            </Upload>
+            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+              Upload File
+            </Button>
           </Col>
         </Row>
 
-        {/* Display selected file */}
-        {fileToUpload && (
-          <Card title="Selected File" bordered={false} style={{ marginBottom: 16 }}>
-            <p><strong>File Name:</strong> {fileToUpload.name}</p>
-            <p><strong>Folder:</strong> {selectedFolder || currentPath || 'Root'}</p>
-          </Card>
-        )}
+        {/* Breadcrumb row */}
+        <Row style={{ marginBottom: 16 }}>
+          <Col>
+            <Breadcrumb>{breadcrumbItems}</Breadcrumb>
+          </Col>
+        </Row>
 
+        {/* Create folder / Go Up / Search row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
             <Button
@@ -446,26 +458,6 @@ const FileManager = () => {
             </Button>
           </Col>
           <Col>
-            {/* Optional dropdown to pick folder for uploading */}
-            <Select
-              value={selectedFolder}
-              onChange={setSelectedFolder}
-              placeholder="Select Folder"
-              style={{ width: 200 }}
-            >
-              {items
-                .filter((item) => item.type === 'directory')
-                .map((folder, index) => {
-                  const folderPath = path.join(currentPath, folder.name);
-                  return (
-                    <Select.Option key={index} value={folderPath}>
-                      {folder.name}
-                    </Select.Option>
-                  );
-                })}
-            </Select>
-          </Col>
-          <Col>
             <Input
               placeholder="Search..."
               value={searchTerm}
@@ -475,6 +467,7 @@ const FileManager = () => {
           </Col>
         </Row>
 
+        {/* Main table */}
         <Table
           columns={columns}
           dataSource={filteredItems}
@@ -557,6 +550,32 @@ const FileManager = () => {
               />
             </Form.Item>
           </Form>
+        </Modal>
+
+        {/* Upload Modal */}
+        <Modal
+          title="Upload File"
+          visible={uploadModalVisible}
+          onOk={handleUpload}
+          onCancel={() => setUploadModalVisible(false)}
+          okText="Upload"
+        >
+          <p>Target Folder: {currentPath || 'Root'}</p>
+          <Upload
+            beforeUpload={(file) => {
+              setUploadingFile(file);
+              // Prevent antd's default upload
+              return false;
+            }}
+            maxCount={1}
+          >
+            <Button icon={<UploadOutlined />}>Select File</Button>
+          </Upload>
+          {uploadingFile && (
+            <Card size="small" style={{ marginTop: 16 }}>
+              <strong>Selected File:</strong> {uploadingFile.name}
+            </Card>
+          )}
         </Modal>
       </Content>
     </Layout>

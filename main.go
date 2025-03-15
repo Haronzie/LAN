@@ -836,6 +836,8 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("File '%s' uploaded successfully", handler.Filename),
 	})
+	a.logActivity(fmt.Sprintf("User '%s' uploaded file '%s' to directory '%s'.", currentUser.Username, handler.Filename, targetDir))
+
 }
 
 func (a *App) filesHandler(w http.ResponseWriter, r *http.Request) {
@@ -1092,6 +1094,8 @@ func (a *App) deleteResourceHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		respondError(w, http.StatusBadRequest, "Invalid resource type")
 	}
+	a.logActivity(fmt.Sprintf("User '%s' deleted file '%s'.", user.Username, safeName))
+
 }
 
 // =======================
@@ -1174,6 +1178,8 @@ func (a *App) renameResourceHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		respondError(w, http.StatusBadRequest, "Invalid resource type")
 	}
+	a.logActivity(fmt.Sprintf("User '%s' renamed %s from '%s' to '%s'.", user.Username, req.ResourceType, req.OldName, req.NewName))
+
 }
 
 // moveResourceHandler handles moving a file or directory to a new location (destination can include subdirectories).
