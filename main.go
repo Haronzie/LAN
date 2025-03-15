@@ -370,9 +370,10 @@ func (a *App) createDirectoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Define the expected request structure.
+	// Define the expected request structure, including parent directory path
 	var req struct {
-		Name string `json:"name"`
+		Name   string `json:"name"`
+		Parent string `json:"parent"` // Optional: parent directory
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -381,29 +382,41 @@ func (a *App) createDirectoryHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Sanitize and validate the directory name.
 	req.Name = sanitizeName(strings.TrimSpace(req.Name))
+	req.Parent = sanitizeName(strings.TrimSpace(req.Parent)) // Optional
+
 	if req.Name == "" {
 		respondError(w, http.StatusBadRequest, "Directory name cannot be empty")
 		return
 	}
 
-	// Define the base path and compute the new directory's path.
-	basePath := "uploads"
-	resourcePath := filepath.Join(basePath, req.Name)
+	// Define the base path for directories and compute the new directory's path.
+	basePath := "Cdrrmo files" // Root directory
+	var resourcePath string
+
+	// If a parent directory is provided, create inside it.
+	if req.Parent != "" {
+		resourcePath = filepath.Join(basePath, req.Parent, req.Name)
+	} else {
+		// Otherwise, create the directory at the root level.
+		resourcePath = filepath.Join(basePath, req.Name)
+	}
 
 	// Create the directory on disk.
-	if err := os.Mkdir(resourcePath, 0755); err != nil {
+	if err := os.MkdirAll(resourcePath, 0755); err != nil {
 		respondError(w, http.StatusInternalServerError, "Error creating directory")
 		return
 	}
 
-	// Insert a record into the directories table.
-	_, err = a.DB.Exec("INSERT INTO directories (directory_name, created_by) VALUES ($1, $2)", req.Name, user.Username)
+	// Insert a record into the directories table (add the parent directory too).
+	_, err = a.DB.Exec("INSERT INTO directories (directory_name, parent_directory, created_by) VALUES ($1, $2, $3)", req.Name, req.Parent, user.Username)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error saving directory record")
 		return
 	}
 
-	a.logActivity(fmt.Sprintf("User '%s' created directory '%s'.", user.Username, req.Name))
+	// Log the activity
+	a.logActivity(fmt.Sprintf("User '%s' created directory '%s' inside '%s'.", user.Username, req.Name, req.Parent))
+
 	respondJSON(w, http.StatusOK, map[string]string{"message": "Directory created successfully"})
 }
 
