@@ -1,9 +1,24 @@
-import React, { useRef } from 'react';
-import { Modal, Form, Input } from 'antd';
+import React, { useRef, useEffect } from 'react';
+import { Modal, Form, Input, Typography } from 'antd';
+
+const { Title } = Typography;
 
 const AddUserForm = ({ visible, onCancel, onAddUser }) => {
   const [form] = Form.useForm();
-  const passwordInputRef = useRef(null);
+
+  // Refs for username/password fields
+  const usernameRef = useRef(null);
+  const passwordRef = useRef(null);
+
+  // Whenever the modal goes from hidden to visible, focus the username input.
+  useEffect(() => {
+    if (visible && usernameRef.current) {
+      // A short delay can help if the modal is animating into view
+      setTimeout(() => {
+        usernameRef.current.focus({ cursor: 'end' });
+      }, 50);
+    }
+  }, [visible]);
 
   const handleOk = () => {
     form.validateFields()
@@ -19,11 +34,15 @@ const AddUserForm = ({ visible, onCancel, onAddUser }) => {
   return (
     <Modal
       visible={visible}
-      title="Add New User"
-      onCancel={onCancel}
+      title={<Title level={4}>Add New User</Title>}
+      onCancel={() => {
+        form.resetFields();
+        onCancel();
+      }}
       onOk={handleOk}
       destroyOnClose
       okText="Add"
+      centered
     >
       <Form form={form} layout="vertical">
         <Form.Item
@@ -32,12 +51,12 @@ const AddUserForm = ({ visible, onCancel, onAddUser }) => {
           rules={[{ required: true, message: 'Please input a username!' }]}
         >
           <Input
+            ref={usernameRef}
             placeholder="Enter new username"
-            autoFocus
             onPressEnter={() => {
-              // Shift focus to the password input when Enter is pressed.
-              if (passwordInputRef.current) {
-                passwordInputRef.current.focus();
+              // Move focus to password input when Enter is pressed in username.
+              if (passwordRef.current) {
+                passwordRef.current.focus({ cursor: 'end' });
               }
             }}
           />
@@ -48,9 +67,9 @@ const AddUserForm = ({ visible, onCancel, onAddUser }) => {
           rules={[{ required: true, message: 'Please input a password!' }]}
         >
           <Input.Password
+            ref={passwordRef}
             placeholder="Enter new user password"
-            ref={passwordInputRef}
-            onPressEnter={handleOk}  // Submit the form on Enter
+            onPressEnter={handleOk} // Pressing Enter here submits the form
           />
         </Form.Item>
       </Form>

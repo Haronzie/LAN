@@ -1,23 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Table, Button, Input, message, Modal, Form, Space } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  ArrowLeftOutlined
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import AddUserForm from './AddUserForm';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isAddUserModalVisible, setIsAddUserModalVisible] = useState(false);
-  const [isUpdateUserModalVisible, setIsUpdateUserModalVisible] = useState(false);
-  const [currentUserToUpdate, setCurrentUserToUpdate] = useState(null);
 
-  const navigate = useNavigate();
+  // Modal state for adding user
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [addUserForm] = Form.useForm();
+
+  // Refs for auto-focusing
+  const usernameRef = useRef(null);
+  const passwordRef = useRef(null);
+
+  // Modal state for updating user
+  const [isUpdateUserModalOpen, setIsUpdateUserModalOpen] = useState(false);
+  const [currentUserToUpdate, setCurrentUserToUpdate] = useState(null);
   const [updateForm] = Form.useForm();
 
-  // Fetch all users from your API
+  const navigate = useNavigate();
+
+  // Fetch users
   const fetchUsers = async () => {
     setLoading(true);
     try {
@@ -36,16 +49,14 @@ const UserManagement = () => {
 
   useEffect(() => {
     const term = searchTerm.toLowerCase();
-    setFilteredUsers(term ? users.filter(u => u.username.toLowerCase().includes(term)) : users);
+    setFilteredUsers(
+      term ? users.filter(u => u.username.toLowerCase().includes(term)) : users
+    );
   }, [searchTerm, users]);
 
-  // Calculate the number of admin users
   const adminCount = users.filter(u => u.role === 'admin').length;
+  const adminName = localStorage.getItem('username') || 'Admin';
 
-  // Get the currently logged-in admin's username (stored in localStorage)
-  const adminName = localStorage.getItem("username") || "Admin";
-
-  // Toggle active status for a user
   const handleToggleActive = async (username, isActive) => {
     try {
       await axios.put(
@@ -60,23 +71,24 @@ const UserManagement = () => {
     }
   };
 
-  // Add user using the API
-  const handleAddUser = async (values) => {
+  // Handler for adding a user
+  const handleAddUserOk = async () => {
     try {
+      const values = await addUserForm.validateFields();
       await axios.post(
         '/add-user',
         { username: values.username, password: values.password },
         { withCredentials: true }
       );
       message.success(`User '${values.username}' has been added successfully`);
-      setIsAddUserModalVisible(false);
+      setIsAddUserModalOpen(false);
+      addUserForm.resetFields();
       fetchUsers();
     } catch (error) {
       message.error('Error adding user');
     }
   };
 
-  // Delete user using the API (hide delete for the currently logged-in admin)
   const handleDeleteUser = (username) => {
     Modal.confirm({
       title: 'Delete User',
@@ -86,10 +98,7 @@ const UserManagement = () => {
       cancelText: 'No',
       onOk: async () => {
         try {
-          await axios.delete(
-            '/delete-user',
-            { data: { username }, withCredentials: true }
-          );
+          await axios.delete('/delete-user', { data: { username }, withCredentials: true });
           message.success(`User '${username}' has been deleted successfully`);
           fetchUsers();
         } catch (error) {
@@ -99,7 +108,6 @@ const UserManagement = () => {
     });
   };
 
-  // Open the update modal and populate with current user data
   const openUpdateModal = (record) => {
     setCurrentUserToUpdate(record);
     updateForm.setFieldsValue({
@@ -107,38 +115,28 @@ const UserManagement = () => {
       new_username: record.username,
       new_password: ''
     });
-    setIsUpdateUserModalVisible(true);
+    setIsUpdateUserModalOpen(true);
   };
 
-  // Update user using the API
   const handleUpdateUser = async () => {
     try {
       const values = await updateForm.validateFields();
       await axios.put(
         '/update-user',
-        {
-          old_username: values.old_username,
-          new_username: values.new_username,
-          new_password: values.new_password
-        },
+        { old_username: values.old_username, new_username: values.new_username, new_password: values.new_password },
         { withCredentials: true }
       );
       message.success(`User '${values.old_username}' updated successfully`);
-      setIsUpdateUserModalVisible(false);
+      setIsUpdateUserModalOpen(false);
       fetchUsers();
     } catch (error) {
       message.error('Error updating user');
     }
   };
 
-  // Assign admin role using the API
   const handleAssignAdmin = async (username) => {
     try {
-      await axios.post(
-        '/assign-admin',
-        { username },
-        { withCredentials: true }
-      );
+      await axios.post('/assign-admin', { username }, { withCredentials: true });
       message.success(`User '${username}' is now an admin`);
       fetchUsers();
     } catch (error) {
@@ -146,7 +144,6 @@ const UserManagement = () => {
     }
   };
 
-  // Table columns including action buttons for toggle, edit, delete, and assign admin
   const columns = [
     {
       title: 'Username',
@@ -207,7 +204,11 @@ const UserManagement = () => {
           Back to Dashboard
         </Button>
         <h2>User Management</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsAddUserModalVisible(true)}>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setIsAddUserModalOpen(true)}
+        >
           Add User
         </Button>
       </div>
@@ -225,18 +226,62 @@ const UserManagement = () => {
         pagination={{ pageSize: 10 }}
       />
 
-      {/* Modal for Adding a New User */}
-      <AddUserForm
-        visible={isAddUserModalVisible}
-        onCancel={() => setIsAddUserModalVisible(false)}
-        onAddUser={handleAddUser}
-      />
-
-      {/* Modal for Updating a User */}
+      {/* Add User Modal */}
       <Modal
-        visible={isUpdateUserModalVisible}
+        open={isAddUserModalOpen}
+        title="Add New User"
+        onCancel={() => {
+          addUserForm.resetFields();
+          setIsAddUserModalOpen(false);
+        }}
+        onOk={handleAddUserOk}
+        okText="Add"
+        destroyOnClose
+        centered
+        afterOpenChange={(open) => {
+          if (open && usernameRef.current) {
+            // Focus username input after modal is fully open
+            setTimeout(() => {
+              usernameRef.current.focus({ cursor: 'end' });
+            }, 50);
+          }
+        }}
+      >
+        <Form form={addUserForm} layout="vertical">
+          <Form.Item
+            label="Username"
+            name="username"
+            rules={[{ required: true, message: 'Please input a username!' }]}
+          >
+            <Input
+              ref={usernameRef}
+              placeholder="Enter new username"
+              onPressEnter={() => {
+                if (passwordRef.current) {
+                  passwordRef.current.focus({ cursor: 'end' });
+                }
+              }}
+            />
+          </Form.Item>
+          <Form.Item
+            label="Password"
+            name="password"
+            rules={[{ required: true, message: 'Please input a password!' }]}
+          >
+            <Input.Password
+              ref={passwordRef}
+              placeholder="Enter new user password"
+              onPressEnter={handleAddUserOk}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Update User Modal */}
+      <Modal
+        open={isUpdateUserModalOpen}
         title="Update User"
-        onCancel={() => setIsUpdateUserModalVisible(false)}
+        onCancel={() => setIsUpdateUserModalOpen(false)}
         onOk={handleUpdateUser}
         okText="Update"
         destroyOnClose

@@ -78,7 +78,8 @@ const LoginForm = () => {
             name="username"
             rules={[{ required: true, message: 'Please input your username!' }]}
           >
-            <Input placeholder="Enter your username" />
+            {/* autoFocus ensures the username field is focused immediately */}
+            <Input placeholder="Enter your username" autoFocus />
           </Form.Item>
           <Form.Item
             label="Password"
