@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, List, Button, message, Typography } from 'antd';
+import { Layout, Table, Button, message, Typography, Space } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -15,7 +15,6 @@ const ActivityLog = () => {
     setLoading(true);
     try {
       const res = await axios.get('/activities', { withCredentials: true });
-      // Ensure the response is an array; otherwise fallback to an empty array.
       setActivities(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       message.error('Error fetching activity logs');
@@ -28,31 +27,54 @@ const ActivityLog = () => {
     fetchActivities();
   }, []);
 
+  const columns = [
+    {
+      title: 'Timestamp',
+      dataIndex: 'timestamp',
+      key: 'timestamp',
+      render: (timestamp) => new Date(timestamp).toLocaleString(),
+      width: 250,
+      sorter: (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
+    },
+    {
+      title: 'Event',
+      dataIndex: 'event',
+      key: 'event',
+      render: (event) => <span style={{ fontSize: '16px' }}>{event}</span>,
+    },
+  ];
+
   return (
-    <Layout style={{ minHeight: '100vh', padding: '24px', background: '#f0f2f5' }}>
-      <Content style={{ maxWidth: 1200, margin: '0 auto', background: '#fff', padding: '24px', borderRadius: '8px' }}>
-        <Title level={2}>Activity Log</Title>
-        <List
+    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Content
+        style={{
+          margin: '24px',
+          padding: '24px',
+          background: '#fff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        }}
+      >
+        <Title level={2} style={{ marginBottom: '24px' }}>
+          Activity Log
+        </Title>
+        <Table
           loading={loading}
-          itemLayout="vertical"
+          columns={columns}
+          dataSource={activities}
+          rowKey="id"
           pagination={{
             pageSize: 10,
             showSizeChanger: true,
             pageSizeOptions: ['5', '10', '20'],
           }}
-          dataSource={activities}
-          renderItem={(item) => (
-            <List.Item>
-              <List.Item.Meta
-                title={new Date(item.timestamp).toLocaleString()}
-                description={item.event}
-              />
-            </List.Item>
-          )}
+          style={{ marginBottom: '24px' }}
         />
-        <Button type="primary" onClick={() => navigate('/admin')} style={{ marginTop: '16px' }}>
-          Back to Dashboard
-        </Button>
+        <Space>
+          <Button type="primary" onClick={() => navigate('/admin')}>
+            Back to Dashboard
+          </Button>
+        </Space>
       </Content>
     </Layout>
   );

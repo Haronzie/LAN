@@ -1,280 +1,331 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Table, Button, Upload, message, Input, Row, Col, Modal, Select } from 'antd';
-import { UploadOutlined, DeleteOutlined, DownloadOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import {
+  Layout,
+  Table,
+  Button,
+  Upload,
+  message,
+  Input,
+  Row,
+  Col,
+  Modal,
+  Space,
+  Tooltip,
+  Form
+} from 'antd';
+import {
+  UploadOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  FolderOpenOutlined,
+  ArrowLeftOutlined,
+  FolderAddOutlined,
+  ArrowUpOutlined
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import path from 'path-browserify'; 
+// "path-browserify" helps manipulate paths in the browser. 
+// Install with: npm install path-browserify
 
 const { Content } = Layout;
 
 const FileManager = () => {
-  const [files, setFiles] = useState([]);
-  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [items, setItems] = useState([]);        // Contains files + directories
+  const [loading, setLoading] = useState(false);
+  const [currentPath, setCurrentPath] = useState(''); // Track which folder we’re in
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredFiles, setFilteredFiles] = useState([]);
 
-  // New state variables for Rename, Move, and Copy modals
-  const [renameModalVisible, setRenameModalVisible] = useState(false);
-  const [moveModalVisible, setMoveModalVisible] = useState(false);
-  const [copyModalVisible, setCopyModalVisible] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [renameNewName, setRenameNewName] = useState('');
-  const [moveDestination, setMoveDestination] = useState('');
-  const [copyNewName, setCopyNewName] = useState('');
+  const [createFolderModal, setCreateFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
 
   const navigate = useNavigate();
 
-  // Fetch files from the API
-  const fetchFiles = async () => {
-    setLoadingFiles(true);
+  // Fetch items in the currentPath
+  const fetchItems = async () => {
+    setLoading(true);
     try {
-      const res = await axios.get('/files', { withCredentials: true });
-      setFiles(Array.isArray(res.data) ? res.data : []);
+      // If currentPath is empty, we fetch top-level
+      const res = await axios.get(`/list-resource?directory=${currentPath}`, {
+        withCredentials: true
+      });
+      if (Array.isArray(res.data)) {
+        setItems(res.data);
+      } else {
+        setItems([]);
+      }
     } catch (error) {
-      message.error('Error fetching files');
+      message.error('Error fetching directory contents');
     } finally {
-      setLoadingFiles(false);
+      setLoading(false);
     }
   };
 
+  // On mount or whenever currentPath changes, fetch items
   useEffect(() => {
-    fetchFiles();
-  }, []);
+    fetchItems();
+  }, [currentPath]);
 
-  useEffect(() => {
-    const term = searchTerm.toLowerCase();
-    setFilteredFiles(term ? files.filter(f => f.file_name.toLowerCase().includes(term)) : files);
-  }, [searchTerm, files]);
+  // Filter by searchTerm (applies to both files and directories)
+  const filteredItems = items.filter((item) =>
+    item.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const handleDeleteFile = async (fileName) => {
-    try {
-      await axios.delete('/delete-resource', { data: { resource_type: 'file', name: fileName }, withCredentials: true });
-      message.success(`File '${fileName}' deleted successfully`);
-      fetchFiles();
-    } catch (error) {
-      message.error('Error deleting file');
+  // Helper to determine if we’re at root or not
+  const isRoot = currentPath === '';
+
+  // Go up one directory
+  const handleGoUp = () => {
+    if (isRoot) return; // already at root
+    // E.g., if currentPath = "operation/training", 
+    // path.dirname(...) => "operation"
+    const parent = path.dirname(currentPath);
+    if (parent === '.') {
+      // Means we were in something like "folder" => go to root
+      setCurrentPath('');
+    } else {
+      setCurrentPath(parent);
     }
   };
 
-  // Function to handle renaming a file
-  const handleRenameConfirm = async () => {
+  // Delete item (file or directory)
+  const handleDelete = async (record) => {
     try {
-      await axios.put('/rename-resource', {
-        resource_type: 'file',
-        old_name: selectedFile,
-        new_name: renameNewName,
-      }, { withCredentials: true });
-      message.success(`File renamed successfully`);
-      setRenameModalVisible(false);
-      fetchFiles();
+      await axios.delete('/delete-resource', {
+        data: {
+          resource_type: record.type, // "file" or "directory"
+          // The name is relative to root, e.g. "operation/file.txt"
+          name: path.join(currentPath, record.name),
+        },
+        withCredentials: true,
+      });
+      message.success(`${record.name} deleted successfully`);
+      fetchItems();
     } catch (error) {
-      message.error('Error renaming file');
+      message.error(`Error deleting ${record.name}`);
     }
   };
 
-  // Function to handle moving a file
-  const handleMoveConfirm = async () => {
+  // Download file
+  const handleDownload = (fileName) => {
+    // Just open a new tab that points to /download?filename=...
+    window.open(`/download?filename=${encodeURIComponent(fileName)}`, '_blank');
+  };
+
+  // Create folder
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) {
+      message.error('Folder name cannot be empty');
+      return;
+    }
     try {
-      await axios.put('/move-resource', {
-        resource_type: 'file',
-        source: selectedFile,
-        destination: moveDestination,
-      }, { withCredentials: true });
-      message.success(`File moved successfully`);
-      setMoveModalVisible(false);
-      fetchFiles();
+      // If we’re in "operation", the new folder path is "operation/newFolderName"
+      const folderPath = currentPath
+        ? path.join(currentPath, newFolderName)
+        : newFolderName;
+
+      await axios.post(
+        '/create-resource',
+        {
+          resource_type: 'directory',
+          name: folderPath,
+        },
+        { withCredentials: true }
+      );
+      message.success('Folder created successfully');
+      setCreateFolderModal(false);
+      setNewFolderName('');
+      fetchItems();
     } catch (error) {
-      message.error('Error moving file');
+      message.error('Error creating folder');
     }
   };
 
-  // Function to handle copying a file
-  const handleCopyConfirm = async () => {
-    try {
-      await axios.post('/copy-resource', {
-        file_name: selectedFile,
-        new_name: copyNewName,         // if empty, backend will use original file name
-        destination: moveDestination,  // must be provided by the user
-      }, { withCredentials: true });
-      message.success('File copied successfully');
-      setCopyModalVisible(false);
-      fetchFiles();
-    } catch (error) {
-      message.error('Error copying file');
-    }
-  };
-  
-  
-  const columns = [
-    {
-      title: 'File Name',
-      dataIndex: 'file_name',
-      key: 'file_name'
-    },
-    {
-      title: 'Size (KB)',
-      dataIndex: 'size',
-      key: 'size',
-      render: size => (size / 1024).toFixed(2)
-    },
-    {
-      title: 'Uploader',
-      dataIndex: 'uploader',
-      key: 'uploader'
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (record) => (
-        <>
-          <Button icon={<DownloadOutlined />} onClick={() => window.open(`/download?filename=${record.file_name}`, '_blank')}>
-            Download
-          </Button>
-          <Button danger icon={<DeleteOutlined />} onClick={() => handleDeleteFile(record.file_name)}>
-            Delete
-          </Button>
-          {/* New Rename button */}
-          <Button
-            onClick={() => {
-              setSelectedFile(record.file_name);
-              setRenameNewName(record.file_name);
-              setRenameModalVisible(true);
-            }}
-            style={{ marginLeft: 8 }}
-          >
-            Rename
-          </Button>
-          {/* New Move button */}
-          <Button
-            onClick={() => {
-              setSelectedFile(record.file_name);
-              setMoveDestination(record.file_name);
-              setMoveModalVisible(true);
-            }}
-            style={{ marginLeft: 8 }}
-          >
-            Move
-          </Button>
-          {/* New Copy button */}
-          <Button
-            onClick={() => {
-              setSelectedFile(record.file_name);
-              setCopyNewName('');
-              setCopyModalVisible(true);
-            }}
-            style={{ marginLeft: 8 }}
-          >
-            Copy
-          </Button>
-        </>
-      )
-    }
-  ];
-
-  // Custom upload function
+  // Custom upload function (uploads to the current directory)
   const customUpload = async ({ file, onSuccess, onError }) => {
     const formData = new FormData();
     formData.append('file', file);
+    // Pass the currentPath as "directory"
+    formData.append('directory', currentPath);
+
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       message.success(res.data.message || 'File uploaded successfully');
       onSuccess(null, file);
-      fetchFiles();
+      fetchItems();
     } catch (error) {
       message.error('Error uploading file');
       onError(error);
     }
   };
 
+  // Table columns
+  const columns = [
+    {
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name, record) => {
+        // If it's a directory, make it clickable to navigate inside
+        if (record.type === 'directory') {
+          return (
+            <Space>
+              <FolderOpenOutlined />
+              <a
+                onClick={() => {
+                  // e.g. if currentPath = 'operation'
+                  // then we set new path to 'operation/record.name'
+                  const newPath = isRoot
+                    ? record.name
+                    : path.join(currentPath, record.name);
+                  setCurrentPath(newPath);
+                }}
+              >
+                {name}
+              </a>
+            </Space>
+          );
+        }
+        // Otherwise, it's a file
+        return name;
+      },
+    },
+    {
+      title: 'Type',
+      dataIndex: 'type',
+      key: 'type',
+      render: (type) => (type === 'directory' ? 'Folder' : 'File'),
+    },
+    {
+      title: 'Size (KB)',
+      dataIndex: 'size',
+      key: 'size',
+      render: (size, record) =>
+        record.type === 'directory' ? '--' : (size / 1024).toFixed(2),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (record) => {
+        if (record.type === 'file') {
+          return (
+            <Space>
+              <Tooltip title="Download">
+                <Button
+                  icon={<DownloadOutlined />}
+                  onClick={() =>
+                    handleDownload(path.join(currentPath, record.name))
+                  }
+                />
+              </Tooltip>
+              <Tooltip title="Delete File">
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => handleDelete(record)}
+                />
+              </Tooltip>
+            </Space>
+          );
+        }
+        // For directories, just show Delete (or any other action you want)
+        return (
+          <Space>
+            <Tooltip title="Delete Folder">
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDelete(record)}
+              />
+            </Tooltip>
+          </Space>
+        );
+      },
+    },
+  ];
+
   return (
-    <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
-      <Row justify="space-between" style={{ marginBottom: 16 }}>
-        <Col>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin')}>
-            Back to Dashboard
-          </Button>
-        </Col>
-        <Col>
-          <h2>File Manager</h2>
-        </Col>
-        <Col>
-          <Button type="primary">
+    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
+        <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+          <Col>
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin')}>
+              Back to Dashboard
+            </Button>
+          </Col>
+          <Col>
+            <h2 style={{ margin: 0 }}>File Manager</h2>
+          </Col>
+          <Col>
             <Upload customRequest={customUpload} showUploadList={false}>
-              <UploadOutlined /> Upload File
+              <Button type="primary" icon={<UploadOutlined />}>
+                Upload File
+              </Button>
             </Upload>
-          </Button>
-        </Col>
-      </Row>
-      <Input
-        placeholder="Search files"
-        value={searchTerm}
-        onChange={e => setSearchTerm(e.target.value)}
-        style={{ width: 300, marginBottom: 16 }}
-      />
-      <Table columns={columns} dataSource={filteredFiles} rowKey="file_name" loading={loadingFiles} pagination={{ pageSize: 10 }} />
+          </Col>
+        </Row>
 
-      {/* Rename Modal */}
-      <Modal
-        title="Rename File"
-        visible={renameModalVisible}
-        onOk={handleRenameConfirm}
-        onCancel={() => setRenameModalVisible(false)}
-      >
-        <Input
-          placeholder="Enter new file name"
-          value={renameNewName}
-          onChange={e => setRenameNewName(e.target.value)}
+        {/* Row for path navigation, create folder, and search */}
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col>
+            <Button
+              icon={<ArrowUpOutlined />}
+              disabled={isRoot}
+              onClick={handleGoUp}
+            >
+              Go Up
+            </Button>
+          </Col>
+          <Col>
+            <Button
+              icon={<FolderAddOutlined />}
+              onClick={() => setCreateFolderModal(true)}
+            >
+              Create Folder
+            </Button>
+          </Col>
+          <Col>
+            <Input
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              allowClear
+            />
+          </Col>
+        </Row>
+
+        {/* Table of files & folders */}
+        <Table
+          columns={columns}
+          dataSource={filteredItems}
+          rowKey={(record) => record.name}
+          loading={loading}
+          pagination={{ pageSize: 10 }}
         />
-      </Modal>
 
-      {/* Move Modal */}
-      <Modal
-        title="Move File"
-        visible={moveModalVisible}
-        onOk={handleMoveConfirm}
-        onCancel={() => setMoveModalVisible(false)}
-      >
-        <Select
-          placeholder="Select destination directory"
-          style={{ width: '100%' }}
-          onChange={(value) => {
-            if (value === 'root') {
-              setMoveDestination(selectedFile);
-            } else {
-              setMoveDestination(`${value}/${selectedFile}`);
-            }
-          }}
+        {/* Create Folder Modal */}
+        <Modal
+          title="Create New Folder"
+          visible={createFolderModal}
+          onOk={handleCreateFolder}
+          onCancel={() => setCreateFolderModal(false)}
+          okText="Create"
         >
-          <Select.Option value="root">Root (uploads)</Select.Option>
-          <Select.Option value="Documents">Documents</Select.Option>
-          <Select.Option value="Images">Images</Select.Option>
-          <Select.Option value="Archives">Archives</Select.Option>
-        </Select>
-      </Modal>
-
-      {/* Copy Modal */}
-      {/* Copy Modal */}
-<Modal
-  title="Copy File"
-  visible={copyModalVisible}
-  onOk={handleCopyConfirm}
-  onCancel={() => setCopyModalVisible(false)}
->
-  <Input
-    placeholder="Enter new file name (optional; leave empty to keep original)"
-    value={copyNewName}
-    onChange={e => setCopyNewName(e.target.value)}
-    style={{ marginBottom: 16 }}
-  />
-  <Input
-    placeholder="Enter destination directory (e.g., Archives/2025)"
-    onChange={e => setMoveDestination(e.target.value)}
-  />
-</Modal>
-
-    </div>
+          <Form layout="vertical">
+            <Form.Item label="Folder Name" required>
+              <Input
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="e.g. Reports2025"
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
+      </Content>
+    </Layout>
   );
 };
 

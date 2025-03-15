@@ -357,6 +357,55 @@ func (a *App) inventoryHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
+func (a *App) createDirectoryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	// Ensure the user is authenticated.
+	user, err := a.getUserFromSession(r)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Define the expected request structure.
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Sanitize and validate the directory name.
+	req.Name = sanitizeName(strings.TrimSpace(req.Name))
+	if req.Name == "" {
+		respondError(w, http.StatusBadRequest, "Directory name cannot be empty")
+		return
+	}
+
+	// Define the base path and compute the new directory's path.
+	basePath := "uploads"
+	resourcePath := filepath.Join(basePath, req.Name)
+
+	// Create the directory on disk.
+	if err := os.Mkdir(resourcePath, 0755); err != nil {
+		respondError(w, http.StatusInternalServerError, "Error creating directory")
+		return
+	}
+
+	// Insert a record into the directories table.
+	_, err = a.DB.Exec("INSERT INTO directories (directory_name, created_by) VALUES ($1, $2)", req.Name, user.Username)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Error saving directory record")
+		return
+	}
+
+	a.logActivity(fmt.Sprintf("User '%s' created directory '%s'.", user.Username, req.Name))
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Directory created successfully"})
+}
 
 func (a *App) userProfileHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := a.getUserFromSession(r)
@@ -1720,9 +1769,10 @@ func (a *App) updateUserStatusHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("User '%s' status updated successfully", req.Username)})
 }
 func createBaseFolders() {
+	baseFolder := "Cdrrmo files"
 	baseFolders := []string{"operation", "training", "research"}
 	for _, folderName := range baseFolders {
-		folderPath := filepath.Join("uploads", folderName)
+		folderPath := filepath.Join(baseFolder, folderName)
 		if _, err := os.Stat(folderPath); os.IsNotExist(err) {
 			if err := os.MkdirAll(folderPath, 0755); err != nil {
 				log.Printf("Error creating folder %s: %v\n", folderPath, err)
@@ -1771,10 +1821,10 @@ func main() {
 	}
 	log.Println("Database connected successfully")
 
-	if _, err := os.Stat("uploads"); os.IsNotExist(err) {
-		err := os.Mkdir("uploads", 0755)
+	if _, err := os.Stat("Cdrrmo files"); os.IsNotExist(err) {
+		err := os.Mkdir("Cdrrmo files", 0755)
 		if err != nil {
-			log.Fatal("Failed to create uploads folder:", err)
+			log.Fatal("Failed to create Cdrrmo files folder:", err)
 		}
 	}
 	createBaseFolders()
@@ -1803,6 +1853,8 @@ func main() {
 	mux.HandleFunc("/download", app.downloadHandler)
 	mux.HandleFunc("/create-resource", app.createResourceHandler)
 	mux.HandleFunc("/delete-resource", app.deleteResourceHandler)
+	mux.HandleFunc("/create-directory", app.createDirectoryHandler)
+
 	// Separate move and rename endpoints.
 	mux.HandleFunc("/move-resource", app.moveResourceHandler)
 	mux.HandleFunc("/copy-resource", app.copyResourceHandler) // <-- New copy endpoint
