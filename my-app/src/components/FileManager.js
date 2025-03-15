@@ -31,57 +31,56 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
 
-// ======= 1) ADD HELPER FUNCTION =======
-function getBackendPath(currentPath) {
-  return currentPath === '' ? 'Cdrrmo files' : currentPath;
-}
-
 const { Content } = Layout;
 
 const FileManager = () => {
-  const [items, setItems] = useState([]); 
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [currentPath, setCurrentPath] = useState(''); // root = ''
+
+  // "" indicates root. For subfolders, e.g. "Operation/Subfolder"
+  const [currentPath, setCurrentPath] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Folder creation modal states
+  // Folder creation
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
-  
-  // Folder selection for uploading
-  const [selectedFolder, setSelectedFolder] = useState(''); // Selected folder for upload
-  const [fileToUpload, setFileToUpload] = useState(null); // Store file to upload
 
-  // Rename & Move states
+  // For uploading
+  const [selectedFolder, setSelectedFolder] = useState('');
+  const [fileToUpload, setFileToUpload] = useState(null);
+
+  // Rename / Move / Copy
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
-  const [copyModalVisible, setCopyModalVisible] = useState(false); // Modal for copying files
+  const [copyModalVisible, setCopyModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
   const [moveDestination, setMoveDestination] = useState('');
   const [copyDestination, setCopyDestination] = useState('');
 
   const navigate = useNavigate();
+  const isRoot = currentPath === '';
 
-  // =========== 2A) USE HELPER IN fetchItems ============  
+  // ===========================
+  // 1) FETCH ITEMS
+  // ===========================
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const directoryParam = encodeURIComponent(currentPath || '');
-      const res = await axios.get(`http://localhost:9090/list-resource?directory=${directoryParam}`, {
-        withCredentials: true
-      });
-
-      // Filter out the 'Cdrrmo files' folder from being displayed in the table
-      const filteredItems = res.data.filter(item => item.name !== 'Cdrrmo files');
-      if (Array.isArray(filteredItems)) {
-        setItems(filteredItems);
-      } else {
-        setItems([]);
-      }
+      const directoryParam = encodeURIComponent(currentPath);
+      // GET /list-resource?directory=<subfolder>
+      const res = await axios.get(
+        `http://localhost:9090/list-resource?directory=${directoryParam}`,
+        { withCredentials: true }
+      );
+      setItems(res.data || []);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
-      message.error('Error fetching directory contents');
+      if (error.response?.data?.error) {
+        message.error(error.response.data.error);
+      } else {
+        message.error('Error fetching directory contents');
+      }
     } finally {
       setLoading(false);
     }
@@ -89,60 +88,30 @@ const FileManager = () => {
 
   useEffect(() => {
     fetchItems();
+    // eslint-disable-next-line
   }, [currentPath]);
 
+  // Filter for search
   const filteredItems = items.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const isRoot = currentPath === '';
-
-  // Up one level
-  const handleGoUp = () => {
-    if (isRoot) return;
-    const parent = path.dirname(currentPath);
-    setCurrentPath(parent === '.' ? '' : parent);
-  };
-
-  // Delete file or folder
-  const handleDelete = async (record) => {
-    try {
-      await axios.delete('/delete-resource', {
-        data: {
-          resource_type: record.type,
-          name: path.join(currentPath, record.name),
-        },
-        withCredentials: true,
-      });
-      message.success(`${record.name} deleted successfully`);
-      fetchItems();
-    } catch (error) {
-      message.error(`Error deleting ${record.name}`);
-    }
-  };
-
-  // Download file
-  const handleDownload = (fileName) => {
-    const fullPath = path.join(getBackendPath(currentPath), fileName);
-    window.open(`/download?filename=${encodeURIComponent(fullPath)}`, '_blank');
-  };
-
-  // Create folder
+  // ===========================
+  // 2) CREATE FOLDER
+  // ===========================
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
       return;
     }
     try {
-      const parentPath = getBackendPath(currentPath);
-      const folderPath = path.join(parentPath, newFolderName);
-
+      // POST /create-directory
+      // Body: { name: newFolderName, parent: currentPath }
       await axios.post(
-        '/create-resource',
+        '/create-directory',
         {
-          resource_type: 'directory',
-          name: folderPath,
-          parent: selectedFolder || currentPath,  // Use selected folder if available
+          name: newFolderName,
+          parent: currentPath
         },
         { withCredentials: true }
       );
@@ -151,54 +120,117 @@ const FileManager = () => {
       setNewFolderName('');
       fetchItems();
     } catch (error) {
-      message.error('Error creating folder');
+      console.error('Create folder error:', error);
+      if (error.response?.data?.error) {
+        message.error(error.response.data.error);
+      } else {
+        message.error('Error creating folder');
+      }
     }
   };
 
-  // Upload file
+  // ===========================
+  // 3) NAVIGATE
+  // ===========================
+  const handleFolderClick = (folderName) => {
+    // If at root, newPath = folderName
+    // else newPath = "currentPath/folderName"
+    const newPath = isRoot
+      ? folderName
+      : path.join(currentPath, folderName);
+    setCurrentPath(newPath);
+  };
+
+  const handleGoUp = () => {
+    if (isRoot) return;
+    const parent = path.dirname(currentPath);
+    setCurrentPath(parent === '.' ? '' : parent);
+  };
+
+  // ===========================
+  // 4) UPLOAD FILE
+  // ===========================
   const customUpload = async ({ file, onSuccess, onError }) => {
-    if (!selectedFolder && currentPath === '') {
-      // If no folder is selected and we're in the root, show an error
-      message.error('Please select a folder to upload the file');
-      return;
-    }
+    // If you want to force user to pick a folder from dropdown:
+    // if (!selectedFolder && !currentPath) {
+    //   message.error('Please select or navigate to a folder first');
+    //   onError(new Error('No folder selected'));
+    //   return;
+    // }
+
+    const targetFolder = selectedFolder || currentPath;
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('directory', selectedFolder || currentPath); // Use selected folder if any
+    formData.append('directory', targetFolder);
 
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       message.success(res.data.message || 'File uploaded successfully');
       onSuccess(null, file);
       fetchItems();
     } catch (error) {
-      message.error('Error uploading file');
+      console.error('Upload error:', error);
       onError(error);
+      message.error('Error uploading file');
     }
   };
 
-  // Set the file to upload
-  const handleFileChange = (file) => {
-    setFileToUpload(file);  // Store file info
+  // ===========================
+  // 5) DELETE
+  // ===========================
+  const handleDelete = async (record) => {
+    try {
+      // DELETE /delete-resource
+      // Body: { resource_type, name: "currentPath/record.name" }
+      await axios.delete('/delete-resource', {
+        data: {
+          resource_type: record.type,
+          name: path.join(currentPath, record.name)
+        },
+        withCredentials: true
+      });
+      message.success(`${record.name} deleted successfully`);
+      fetchItems();
+    } catch (error) {
+      console.error('Delete error:', error);
+      if (error.response?.data?.error) {
+        message.error(error.response.data.error);
+      } else {
+        message.error(`Error deleting ${record.name}`);
+      }
+    }
   };
 
-  // Rename
+  // ===========================
+  // 6) DOWNLOAD
+  // ===========================
+  const handleDownload = (fileName) => {
+    // GET /download?filename=<currentPath/fileName>
+    const fullPath = path.join(currentPath, fileName);
+    window.open(`/download?filename=${encodeURIComponent(fullPath)}`, '_blank');
+  };
+
+  // ===========================
+  // 7) RENAME
+  // ===========================
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
       message.error('New name cannot be empty');
       return;
     }
     try {
+      // PUT /rename-resource
+      // Body: { resource_type, old_name: currentPath/item.name, new_name: currentPath/renameNewName }
       await axios.put(
         '/rename-resource',
         {
           resource_type: selectedItem.type,
           old_name: path.join(currentPath, selectedItem.name),
-          new_name: path.join(currentPath, renameNewName),
+          new_name: path.join(currentPath, renameNewName)
         },
         { withCredentials: true }
       );
@@ -207,23 +239,28 @@ const FileManager = () => {
       setSelectedItem(null);
       fetchItems();
     } catch (error) {
+      console.error('Rename error:', error);
       message.error('Error renaming item');
     }
   };
 
-  // Move
+  // ===========================
+  // 8) MOVE
+  // ===========================
   const handleMoveConfirm = async () => {
     if (!moveDestination.trim()) {
       message.error('Destination cannot be empty');
       return;
     }
     try {
+      // PUT /move-resource
+      // Body: { resource_type, source, destination }
       await axios.put(
         '/move-resource',
         {
           resource_type: selectedItem.type,
           source: path.join(currentPath, selectedItem.name),
-          destination: moveDestination,
+          destination: moveDestination
         },
         { withCredentials: true }
       );
@@ -232,23 +269,29 @@ const FileManager = () => {
       setSelectedItem(null);
       fetchItems();
     } catch (error) {
+      console.error('Move error:', error);
       message.error('Error moving item');
     }
   };
 
-  // Copy
+  // ===========================
+  // 9) COPY
+  // ===========================
   const handleCopyConfirm = async () => {
     if (!copyDestination.trim()) {
       message.error('Destination cannot be empty');
       return;
     }
     try {
-      await axios.put(
+      // POST /copy-resource
+      // Body: { file_name, new_name (optional), destination }
+      // Because the backend expects "file_name" not "source"
+      await axios.post(
         '/copy-resource',
         {
-          resource_type: selectedItem.type,
-          source: path.join(currentPath, selectedItem.name),
-          destination: copyDestination,
+          file_name: path.join(currentPath, selectedItem.name),
+          new_name: '',
+          destination: copyDestination
         },
         { withCredentials: true }
       );
@@ -257,10 +300,14 @@ const FileManager = () => {
       setSelectedItem(null);
       fetchItems();
     } catch (error) {
+      console.error('Copy error:', error);
       message.error('Error copying item');
     }
   };
 
+  // ===========================
+  // 10) TABLE COLUMNS
+  // ===========================
   const columns = [
     {
       title: 'Name',
@@ -271,34 +318,27 @@ const FileManager = () => {
           return (
             <Space>
               <FolderOpenOutlined />
-              <a
-                onClick={() => {
-                  const newPath = isRoot
-                    ? record.name
-                    : path.join(currentPath, record.name);
-                  setCurrentPath(newPath);
-                }}
-              >
+              <a onClick={() => handleFolderClick(record.name)}>
                 {name}
               </a>
             </Space>
           );
         }
         return name;
-      },
+      }
     },
     {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
-      render: (type) => (type === 'directory' ? 'Folder' : 'File'),
+      render: (type) => (type === 'directory' ? 'Folder' : 'File')
     },
     {
       title: 'Size (KB)',
       dataIndex: 'size',
       key: 'size',
       render: (size, record) =>
-        record.type === 'directory' ? '--' : (size / 1024).toFixed(2),
+        record.type === 'directory' ? '--' : (size / 1024).toFixed(2)
     },
     {
       title: 'Actions',
@@ -309,9 +349,7 @@ const FileManager = () => {
             <Tooltip title="Download">
               <Button
                 icon={<DownloadOutlined />}
-                onClick={() =>
-                  handleDownload(record.name) // or pass path.join(currentPath, record.name)
-                }
+                onClick={() => handleDownload(record.name)}
               />
             </Tooltip>
           )}
@@ -344,7 +382,7 @@ const FileManager = () => {
               }}
             />
           </Tooltip>
-          <Tooltip title={record.type === 'file' ? "Delete File" : "Delete Folder"}>
+          <Tooltip title={record.type === 'file' ? 'Delete File' : 'Delete Folder'}>
             <Button
               danger
               icon={<DeleteOutlined />}
@@ -352,8 +390,8 @@ const FileManager = () => {
             />
           </Tooltip>
         </Space>
-      ),
-    },
+      )
+    }
   ];
 
   return (
@@ -369,7 +407,11 @@ const FileManager = () => {
             <h2 style={{ margin: 0 }}>File Manager</h2>
           </Col>
           <Col>
-            <Upload customRequest={customUpload} showUploadList={false} onChange={({ file }) => handleFileChange(file)}>
+            <Upload
+              customRequest={customUpload}
+              showUploadList={false}
+              onChange={({ file }) => setFileToUpload(file)}
+            >
               <Button type="primary" icon={<UploadOutlined />}>
                 Upload File
               </Button>
@@ -377,15 +419,11 @@ const FileManager = () => {
           </Col>
         </Row>
 
-        {/* Display the selected file */}
+        {/* Display selected file */}
         {fileToUpload && (
-          <Card
-            title="Selected File"
-            bordered={false}
-            style={{ marginBottom: 16 }}
-          >
+          <Card title="Selected File" bordered={false} style={{ marginBottom: 16 }}>
             <p><strong>File Name:</strong> {fileToUpload.name}</p>
-            <p><strong>Folder:</strong> {selectedFolder || 'Root'}</p>
+            <p><strong>Folder:</strong> {selectedFolder || currentPath || 'Root'}</p>
           </Card>
         )}
 
@@ -408,6 +446,7 @@ const FileManager = () => {
             </Button>
           </Col>
           <Col>
+            {/* Optional dropdown to pick folder for uploading */}
             <Select
               value={selectedFolder}
               onChange={setSelectedFolder}
@@ -416,11 +455,14 @@ const FileManager = () => {
             >
               {items
                 .filter((item) => item.type === 'directory')
-                .map((folder, index) => (
-                  <Select.Option key={index} value={folder.name}>
-                    {folder.name}
-                  </Select.Option>
-                ))}
+                .map((folder, index) => {
+                  const folderPath = path.join(currentPath, folder.name);
+                  return (
+                    <Select.Option key={index} value={folderPath}>
+                      {folder.name}
+                    </Select.Option>
+                  );
+                })}
             </Select>
           </Col>
           <Col>
@@ -492,7 +534,7 @@ const FileManager = () => {
               <Input
                 value={moveDestination}
                 onChange={(e) => setMoveDestination(e.target.value)}
-                placeholder="Enter destination path (e.g., training/reports)"
+                placeholder="e.g. Operation/Reports"
               />
             </Form.Item>
           </Form>
@@ -508,20 +550,11 @@ const FileManager = () => {
         >
           <Form layout="vertical">
             <Form.Item label="Destination Folder" required>
-              <Select
+              <Input
                 value={copyDestination}
-                onChange={setCopyDestination}
-                placeholder="Select Folder"
-                style={{ width: '100%' }}
-              >
-                {items
-                  .filter((item) => item.type === 'directory')
-                  .map((folder, index) => (
-                    <Select.Option key={index} value={folder.name}>
-                      {folder.name}
-                    </Select.Option>
-                  ))}
-              </Select>
+                onChange={(e) => setCopyDestination(e.target.value)}
+                placeholder="e.g. Training"
+              />
             </Form.Item>
           </Form>
         </Modal>

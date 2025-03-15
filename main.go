@@ -51,8 +51,21 @@ func respondError(w http.ResponseWriter, code int, message string) {
 
 // sanitizeName cleans file/directory names to avoid path traversal.
 func sanitizeName(name string) string {
-	// filepath.Base strips directory components.
+	// If you truly only want the last segment (filename), keep it:
+	// return filepath.Base(name)
+
+	// Otherwise, remove or rename this function entirely if you prefer safePath.
 	return filepath.Base(name)
+}
+func safePath(p string) (string, error) {
+	p = strings.TrimSpace(p)
+	if strings.Contains(p, "..") {
+		return "", fmt.Errorf("invalid path: contains '..'")
+	}
+	if filepath.IsAbs(p) {
+		return "", fmt.Errorf("invalid path: cannot be absolute")
+	}
+	return p, nil
 }
 
 // --- Data Structures ---
@@ -372,39 +385,44 @@ func (a *App) createDirectoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Sanitize inputs
-	req.Name = sanitizeName(strings.TrimSpace(req.Name))
-	req.Parent = sanitizeName(strings.TrimSpace(req.Parent))
+	// CHANGED HERE: no more sanitizeName
+	// Instead, allow subfolders but forbid ".."
+	nameSafe, err := safePath(req.Name)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	parentSafe, err := safePath(req.Parent)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
-	if req.Name == "" {
+	if nameSafe == "" {
 		respondError(w, http.StatusBadRequest, "Directory name cannot be empty")
 		return
 	}
 
-	basePath := "uploads" // Set base path for directories
+	basePath := "uploads"
 	var resourcePath string
-
-	// Create folder inside parent directory if specified
-	if req.Parent != "" {
-		resourcePath = filepath.Join(basePath, req.Parent, req.Name)
+	if parentSafe != "" {
+		resourcePath = filepath.Join(basePath, parentSafe, nameSafe)
 	} else {
-		resourcePath = filepath.Join(basePath, req.Name)
+		resourcePath = filepath.Join(basePath, nameSafe)
 	}
 
-	// Check if the directory already exists
 	if _, err := os.Stat(resourcePath); !os.IsNotExist(err) {
 		respondError(w, http.StatusConflict, "Directory already exists")
 		return
 	}
-
-	// Create the directory
-	err := os.MkdirAll(resourcePath, 0755)
-	if err != nil {
+	if err := os.MkdirAll(resourcePath, 0755); err != nil {
 		respondError(w, http.StatusInternalServerError, "Error creating directory")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{"message": "Directory created successfully"})
+	respondJSON(w, http.StatusOK, map[string]string{
+		"message": "Directory created successfully",
+	})
 }
 
 func (a *App) userProfileHandler(w http.ResponseWriter, r *http.Request) {
@@ -755,7 +773,7 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Optionally, retrieve the directory for uploading (if any)
+	// Retrieve the directory for uploading (if any), e.g. "Operation" or "Operation/Subfolder"
 	targetDir := r.FormValue("directory")
 	if targetDir != "" {
 		// Clean the path to avoid directory traversal
@@ -769,7 +787,13 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	// Determine the destination path
 	var fileRecordName, dstPath string
 	if targetDir != "" {
-		// Ensure target directory exists
+		// e.g. fileRecordName = "Operation/123.jpg"
+		fileRecordName = filepath.Join(targetDir, handler.Filename)
+
+		// e.g. dstPath = "uploads/Operation/123.jpg"
+		dstPath = filepath.Join("uploads", targetDir, handler.Filename)
+
+		// Ensure target directory exists on disk
 		dstDir := filepath.Join("uploads", targetDir)
 		if _, err := os.Stat(dstDir); os.IsNotExist(err) {
 			if err := os.MkdirAll(dstDir, 0755); err != nil {
@@ -777,9 +801,8 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		fileRecordName = filepath.Join(targetDir, handler.Filename)
-		dstPath = filepath.Join("uploads", targetDir, handler.Filename)
 	} else {
+		// No subfolder, store it at top-level in "uploads/"
 		fileRecordName = handler.Filename
 		dstPath = filepath.Join("uploads", handler.Filename)
 	}
@@ -798,19 +821,21 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Optionally, save the file details to the database
+	// Save the file details to the database
 	fr := FileRecord{
-		FileName:    fileRecordName,
+		FileName:    fileRecordName, // "Operation/123.jpg"
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
-		Uploader:    currentUser.Username, // Get the username from the session
+		Uploader:    currentUser.Username,
 	}
 	if err := a.createFileRecord(fr); err != nil {
 		respondError(w, http.StatusInternalServerError, "Error saving file record")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("File '%s' uploaded successfully", handler.Filename)})
+	respondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("File '%s' uploaded successfully", handler.Filename),
+	})
 }
 
 func (a *App) filesHandler(w http.ResponseWriter, r *http.Request) {
@@ -924,7 +949,7 @@ func (a *App) createResourceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	basePath := "Cdrrmo files"
+	basePath := "uploads" // Changed from "Cdrrmo files" to "uploads"
 	if req.ResourceType == "file" {
 		targetDir := basePath
 		req.Directory = strings.TrimSpace(req.Directory)
@@ -989,6 +1014,7 @@ func (a *App) deleteResourceHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusForbidden, "Forbidden")
 		return
 	}
+
 	var req struct {
 		ResourceType string `json:"resource_type"` // "file" or "directory"
 		Name         string `json:"name"`
@@ -997,43 +1023,72 @@ func (a *App) deleteResourceHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	req.Name = sanitizeName(strings.TrimSpace(req.Name))
-	if req.Name == "" {
+
+	// Use safePath to allow subfolders but forbid ".."
+	safeName, err := safePath(req.Name)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if safeName == "" {
 		respondError(w, http.StatusBadRequest, "Name cannot be empty")
 		return
 	}
 
+	// Build the absolute path under "uploads/"
 	basePath := "uploads"
-	resourcePath := filepath.Join(basePath, req.Name)
+	resourcePath := filepath.Join(basePath, safeName)
 
 	switch req.ResourceType {
 	case "file":
-		fr, err := a.getFileRecord(req.Name)
+		fr, err := a.getFileRecord(safeName)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "File does not exist")
+			// If there’s no DB record, check if file physically exists
+			if _, statErr := os.Stat(resourcePath); os.IsNotExist(statErr) {
+				respondError(w, http.StatusNotFound, "File not found on disk or in DB")
+				return
+			}
+			// Remove from disk anyway
+			if errRemove := os.Remove(resourcePath); errRemove != nil {
+				respondError(w, http.StatusInternalServerError, "Error deleting file on disk (no DB record).")
+				return
+			}
+			a.logActivity(fmt.Sprintf("User '%s' forcibly deleted file '%s' from disk (no DB record).", user.Username, safeName))
+			respondJSON(w, http.StatusOK, map[string]string{
+				"message": fmt.Sprintf("File '%s' deleted from disk (no DB record).", safeName),
+			})
 			return
 		}
+
+		// If we do have a DB record, proceed with normal checks
 		if user.Role != "admin" && fr.Uploader != user.Username {
 			respondError(w, http.StatusForbidden, "Forbidden: You can only delete files you uploaded")
 			return
 		}
 		if err := os.Remove(resourcePath); err != nil {
-			respondError(w, http.StatusInternalServerError, "Error deleting file")
+			respondError(w, http.StatusInternalServerError, "Error deleting file on disk")
 			return
 		}
-		if err := a.deleteFileRecord(req.Name); err != nil {
+		if err := a.deleteFileRecord(safeName); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error deleting file record")
 			return
 		}
-		a.logActivity(fmt.Sprintf("Admin '%s' deleted file '%s'.", user.Username, req.Name))
-		respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("File '%s' deleted successfully", req.Name)})
+		a.logActivity(fmt.Sprintf("User '%s' deleted file '%s'.", user.Username, safeName))
+		respondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("File '%s' deleted successfully", safeName),
+		})
+
 	case "directory":
+		// Delete entire directory (and all contents)
 		if err := os.RemoveAll(resourcePath); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error deleting directory")
 			return
 		}
-		a.logActivity(fmt.Sprintf("Admin '%s' deleted directory '%s'.", user.Username, req.Name))
-		respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("Directory '%s' deleted successfully", req.Name)})
+		a.logActivity(fmt.Sprintf("User '%s' deleted directory '%s'.", user.Username, safeName))
+		respondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("Directory '%s' deleted successfully", safeName),
+		})
+
 	default:
 		respondError(w, http.StatusBadRequest, "Invalid resource type")
 	}
@@ -1063,19 +1118,29 @@ func (a *App) renameResourceHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	// For renaming, we only allow simple names.
-	req.OldName = sanitizeName(strings.TrimSpace(req.OldName))
-	req.NewName = sanitizeName(strings.TrimSpace(req.NewName))
-	if req.OldName == "" || req.NewName == "" {
+
+	oldSafe, err := safePath(req.OldName)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	newSafe, err := safePath(req.NewName)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if oldSafe == "" || newSafe == "" {
 		respondError(w, http.StatusBadRequest, "OldName and NewName cannot be empty")
 		return
 	}
 	basePath := "uploads"
-	oldPath := filepath.Join(basePath, req.OldName)
-	newPath := filepath.Join(basePath, req.NewName)
+	oldPath := filepath.Join(basePath, oldSafe)
+	newPath := filepath.Join(basePath, newSafe)
+
 	switch req.ResourceType {
 	case "file":
-		fr, err := a.getFileRecord(req.OldName)
+		fr, err := a.getFileRecord(oldSafe)
 		if err != nil {
 			respondError(w, http.StatusNotFound, "File does not exist")
 			return
@@ -1088,22 +1153,26 @@ func (a *App) renameResourceHandler(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "Error renaming file")
 			return
 		}
-		_, err = a.DB.Exec("UPDATE files SET file_name = $1 WHERE file_name = $2", req.NewName, req.OldName)
+		// Update DB
+		_, err = a.DB.Exec("UPDATE files SET file_name = $1 WHERE file_name = $2", newSafe, oldSafe)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "Error updating file record")
 			return
 		}
-		delete(a.FileCache, req.OldName)
-		respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("File renamed from '%s' to '%s' successfully", req.OldName, req.NewName)})
+		delete(a.FileCache, oldSafe)
+		respondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("File renamed from '%s' to '%s' successfully", oldSafe, newSafe),
+		})
 	case "directory":
 		if err := os.Rename(oldPath, newPath); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error renaming directory")
 			return
 		}
-		respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("Directory renamed from '%s' to '%s' successfully", req.OldName, req.NewName)})
+		respondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("Directory renamed from '%s' to '%s' successfully", oldSafe, newSafe),
+		})
 	default:
 		respondError(w, http.StatusBadRequest, "Invalid resource type")
-		return
 	}
 }
 
@@ -1343,71 +1412,69 @@ func (a *App) copyResourceHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
-
-	// Require authentication.
 	currentUser, err := a.getUserFromSession(r)
 	if err != nil {
 		respondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
-
-	// Parse input JSON; now includes a required "destination" field.
 	var req struct {
 		FileName    string `json:"file_name"`
-		NewName     string `json:"new_name"`    // Optional; if empty, use original name.
-		Destination string `json:"destination"` // Required: destination directory (relative to "uploads")
+		NewName     string `json:"new_name"`    // optional
+		Destination string `json:"destination"` // subfolder path
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	req.FileName = sanitizeName(strings.TrimSpace(req.FileName))
-	req.NewName = sanitizeName(strings.TrimSpace(req.NewName))
-	req.Destination = strings.TrimSpace(req.Destination)
-
-	if req.FileName == "" {
+	fileNameSafe, err := safePath(req.FileName)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	newNameSafe, err := safePath(req.NewName) // might be empty
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	destSafe, err := safePath(req.Destination)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if fileNameSafe == "" {
 		respondError(w, http.StatusBadRequest, "Original file name is required")
 		return
 	}
-	if req.Destination == "" {
+	if destSafe == "" {
 		respondError(w, http.StatusBadRequest, "Destination directory is required when copying a file")
 		return
 	}
 
-	// Determine new file name: if NewName is empty, use the original file name.
-	newFileName := req.NewName
-	if newFileName == "" {
-		newFileName = req.FileName
+	if newNameSafe == "" {
+		newNameSafe = fileNameSafe // use original
 	}
-
-	// Check if the original file exists.
-	origRecord, err := a.getFileRecord(req.FileName)
+	origRecord, err := a.getFileRecord(fileNameSafe)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Original file not found")
 		return
 	}
 
 	basePath := "uploads"
-	// Prepare the destination directory.
-	destDir := filepath.Join(basePath, req.Destination)
-	// Create the destination directory if it doesn't exist.
+	destDir := filepath.Join(basePath, destSafe)
 	if _, err := os.Stat(destDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(destDir, 0755); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error creating destination directory")
 			return
 		}
 	}
-	// New file path: destination directory joined with the new file name.
-	newPath := filepath.Join(destDir, newFileName)
-
-	// Ensure a file with the new name doesn't already exist at the destination.
+	newPath := filepath.Join(destDir, newNameSafe)
 	if _, err := os.Stat(newPath); err == nil {
 		respondError(w, http.StatusBadRequest, "A file with the same name already exists in the destination directory")
 		return
 	}
 
-	// Open the original file for reading.
-	origPath := filepath.Join(basePath, req.FileName)
+	// Copy file data
+	origPath := filepath.Join(basePath, fileNameSafe)
 	origFile, err := os.Open(origPath)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error opening original file")
@@ -1415,7 +1482,6 @@ func (a *App) copyResourceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer origFile.Close()
 
-	// Create the new file.
 	newFile, err := os.Create(newPath)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error creating new file")
@@ -1423,16 +1489,15 @@ func (a *App) copyResourceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer newFile.Close()
 
-	// Copy contents.
 	if _, err := io.Copy(newFile, origFile); err != nil {
 		respondError(w, http.StatusInternalServerError, "Error copying file contents")
 		return
 	}
 
-	// Create new file record with uploader set to the current user.
-	// Here, we store the file's relative path (destination folder + newFileName).
+	// Insert new file record
+	dbRelativePath := filepath.Join(destSafe, newNameSafe)
 	newRecord := FileRecord{
-		FileName:    filepath.Join(req.Destination, newFileName),
+		FileName:    dbRelativePath,
 		Size:        origRecord.Size,
 		ContentType: origRecord.ContentType,
 		Uploader:    currentUser.Username,
@@ -1443,8 +1508,12 @@ func (a *App) copyResourceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	a.cacheFileRecord(newRecord)
 
-	a.logActivity(fmt.Sprintf("User '%s' copied file '%s' to '%s' in destination '%s'.", currentUser.Username, req.FileName, newFileName, req.Destination))
-	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("File copied successfully to '%s'", filepath.Join(req.Destination, newFileName))})
+	a.logActivity(fmt.Sprintf(
+		"User '%s' copied file '%s' to '%s' in destination '%s'.",
+		currentUser.Username, fileNameSafe, newNameSafe, destSafe))
+	respondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("File copied successfully to '%s'", dbRelativePath),
+	})
 }
 
 func (a *App) usersHandler(w http.ResponseWriter, r *http.Request) {
@@ -1663,26 +1732,28 @@ func (a *App) listResourceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the directory parameter
-	directory := r.URL.Query().Get("directory")
-	directory = sanitizeName(strings.TrimSpace(directory))
+	// OLD CODE (removing sanitizeName):
+	// directory := r.URL.Query().Get("directory")
+	// directory = sanitizeName(strings.TrimSpace(directory))
 
-	// Get the base directory from environment or use default
-	baseDir := os.Getenv("BASE_DIRECTORY")
-	if baseDir == "" {
-		baseDir = "Cdrrmo files" // Default base directory
+	// NEW CODE: allow subfolders, but block ".."
+	directoryParam := r.URL.Query().Get("directory")
+	safeDir, err := safePath(directoryParam)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
-	targetPath := filepath.Join(baseDir, directory)
+	baseDir := "uploads"
+	targetPath := filepath.Join(baseDir, safeDir)
 
-	// Ensure the directory exists
+	log.Printf("listResourceHandler: listing path %q", targetPath) // For debugging
+
 	fileInfo, err := os.Stat(targetPath)
 	if os.IsNotExist(err) {
 		respondError(w, http.StatusNotFound, "Directory does not exist")
 		return
-	}
-	if err != nil {
-		// Other errors like permission errors
+	} else if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error accessing directory")
 		return
 	}
@@ -1691,14 +1762,12 @@ func (a *App) listResourceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get directory contents
 	entries, err := os.ReadDir(targetPath)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Cannot read directory")
 		return
 	}
 
-	// Respond with directory contents
 	type DirItem struct {
 		Name string `json:"name"`
 		Type string `json:"type"`
@@ -1757,8 +1826,8 @@ func (a *App) updateUserStatusHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("User '%s' status updated successfully", req.Username)})
 }
 func createBaseFolders() {
-	baseFolder := "Cdrrmo files"
-	baseFolders := []string{"operation", "training", "research"}
+	baseFolder := "uploads"                                      // Changed base folder to "uploads"
+	baseFolders := []string{"Training", "Operation", "Research"} // Changed subfolders to have capitalized names
 
 	for _, folderName := range baseFolders {
 		folderPath := filepath.Join(baseFolder, folderName)
@@ -1768,7 +1837,7 @@ func createBaseFolders() {
 			// If folder does not exist, create it
 			err := os.MkdirAll(folderPath, 0755)
 			if err != nil {
-				log.Printf("Error creating folder: %v\n", err) // Fixed this line
+				log.Printf("Error creating folder: %v\n", err)
 			} else {
 				log.Printf("Folder '%s' created successfully.\n", folderPath)
 			}
@@ -1814,10 +1883,10 @@ func main() {
 	}
 	log.Println("Database connected successfully")
 
-	if _, err := os.Stat("Cdrrmo files"); os.IsNotExist(err) {
-		err := os.Mkdir("Cdrrmo files", 0755)
+	if _, err := os.Stat("uploads"); os.IsNotExist(err) {
+		err := os.Mkdir("uploads", 0755)
 		if err != nil {
-			log.Fatal("Failed to create Cdrrmo files folder:", err)
+			log.Fatal("Failed to create uploads folder:", err)
 		}
 	}
 	createBaseFolders()
