@@ -14,6 +14,8 @@ import TrainingDashboard from './components/TrainingDashboard';
 import ResearchDashboard from './components/ResearchDashboard';
 import InventoryDashboard from './components/InventoryDashboard';
 import UserSettings from './components/UserSettings';  // Import your UserSettings component
+import Settings from './components/Settings'; // Import your Settings component
+
 import axios from 'axios';
 
 function App() {
@@ -49,17 +51,18 @@ function App() {
         <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/admin/files" element={<FileManager />} />
         <Route path="/admin/activities" element={<ActivityLog />} />
+        <Route path="/admin/settings" element={<Settings />} /> {/* <-- Add this route */}
 
         {/* User Routes with Nested Routes */}
         <Route path="/user/*" element={<UserDashboard />}>
-  <Route index element={<UserDashboardHome />} />
-  <Route path="home" element={<UserDashboardHome />} />
-  <Route path="operation" element={<OperationDashboard />} />
-  <Route path="training" element={<TrainingDashboard />} />
-  <Route path="research" element={<ResearchDashboard />} />
-  <Route path="inventory/*" element={<InventoryDashboard />} />
-  <Route path="settings" element={<UserSettings />} /> {/* <-- Add this */}
-</Route>
+          <Route index element={<UserDashboardHome />} />
+          <Route path="home" element={<UserDashboardHome />} />
+          <Route path="operation" element={<OperationDashboard />} />
+          <Route path="training" element={<TrainingDashboard />} />
+          <Route path="research" element={<ResearchDashboard />} />
+          <Route path="inventory/*" element={<InventoryDashboard />} />
+          <Route path="settings" element={<UserSettings />} />
+        </Route>
 
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

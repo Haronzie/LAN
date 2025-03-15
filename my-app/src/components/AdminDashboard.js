@@ -82,32 +82,48 @@ const AdminDashboard = () => {
 
   // Summary statistics.
   const totalUsers = Array.isArray(users) ? users.length : 0;
-  const activeUsers = Array.isArray(users) ? users.filter(u => u.active).length : 0;
-  const totalFiles = Array.isArray(files) ? files.length : 0;
+const activeUsers = Array.isArray(users) ? users.filter(u => u.active).length : 0;
+const totalFiles = Array.isArray(files) ? files.length : 0;
 
-  // Prepare chart data for user statistics.
-  const userStats = [
-    { type: 'Active Users', count: activeUsers },
-    { type: 'Inactive Users', count: totalUsers - activeUsers },
-  ];
+// Ensure activeUsers and inactiveUsers are integers (whole numbers)
+const inactiveUsers = totalUsers - activeUsers;
 
-  const chartConfig = {
-    data: userStats,
-    xField: 'type',
-    yField: 'count',
+// Prepare chart data for user statistics.
+// Ensure that userStats is formatted correctly before passing to the chart
+const userStats = [
+  { type: 'Active Users', count: Math.floor(activeUsers) },  // Ensure count is a whole number
+  { type: 'Inactive Users', count: Math.floor(inactiveUsers) },  // Ensure count is a whole number
+];
+
+// Optionally log the userStats to check the values
+console.log(userStats);
+
+// Chart configuration remains the same, as the data is now properly formatted
+const chartConfig = {
+  data: userStats,
+  xField: 'type',
+  yField: 'count',
+  label: {
+    position: 'inside', // Use inside instead of middle
+    style: {
+      fill: '#FFFFFF',
+      opacity: 0.6,
+    },
+  },
+  meta: {
+    type: { alias: 'User Status' },
+    count: { alias: 'Number of Users' },
+  },
+  columnStyle: { radius: [4, 4, 0, 0] },
+
+  yAxis: {
+    min: 0, // Ensure the starting point is 0
+    tickInterval: 1, // Set the interval between ticks (only whole numbers)
     label: {
-      position: 'inside', // use inside instead of middle
-      style: {
-        fill: '#FFFFFF',
-        opacity: 0.6,
-      },
+      formatter: (value) => Math.floor(value), // Ensure the value is floored to whole numbers
     },
-    meta: {
-      type: { alias: 'User Status' },
-      count: { alias: 'Number of Users' },
-    },
-    columnStyle: { radius: [4, 4, 0, 0] },
-  };
+  },
+};
 
   const handleLogout = async () => {
     try {
@@ -135,7 +151,7 @@ const AdminDashboard = () => {
             <Link to="/admin/files">File Manager</Link>
           </Menu.Item>
           <Menu.Item key="settings" icon={<SettingOutlined />}>
-            <Link to="/admin/settings">Settings</Link>
+            <Link to="/admin/settings">Settings</Link> {/* Settings link in the sidebar */}
           </Menu.Item>
         </Menu>
       </Sider>
@@ -157,7 +173,7 @@ const AdminDashboard = () => {
           </div>
           <div>
             <Button type="primary" style={{ marginRight: 8 }} onClick={() => navigate('/admin/settings')}>
-              Settings
+              Settings {/* Settings button in the header */}
             </Button>
             <Button type="primary" onClick={handleLogout}>
               Logout

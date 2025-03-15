@@ -363,59 +363,46 @@ func (a *App) createDirectoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ensure the user is authenticated.
-	user, err := a.getUserFromSession(r)
-	if err != nil {
-		respondError(w, http.StatusUnauthorized, "Not authenticated")
-		return
-	}
-
-	// Define the expected request structure, including parent directory path
 	var req struct {
 		Name   string `json:"name"`
-		Parent string `json:"parent"` // Optional: parent directory
+		Parent string `json:"parent"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Sanitize and validate the directory name.
+	// Sanitize inputs
 	req.Name = sanitizeName(strings.TrimSpace(req.Name))
-	req.Parent = sanitizeName(strings.TrimSpace(req.Parent)) // Optional
+	req.Parent = sanitizeName(strings.TrimSpace(req.Parent))
 
 	if req.Name == "" {
 		respondError(w, http.StatusBadRequest, "Directory name cannot be empty")
 		return
 	}
 
-	// Define the base path for directories and compute the new directory's path.
-	basePath := "Cdrrmo files" // Root directory
+	basePath := "uploads" // Set base path for directories
 	var resourcePath string
 
-	// If a parent directory is provided, create inside it.
+	// Create folder inside parent directory if specified
 	if req.Parent != "" {
 		resourcePath = filepath.Join(basePath, req.Parent, req.Name)
 	} else {
-		// Otherwise, create the directory at the root level.
 		resourcePath = filepath.Join(basePath, req.Name)
 	}
 
-	// Create the directory on disk.
-	if err := os.MkdirAll(resourcePath, 0755); err != nil {
+	// Check if the directory already exists
+	if _, err := os.Stat(resourcePath); !os.IsNotExist(err) {
+		respondError(w, http.StatusConflict, "Directory already exists")
+		return
+	}
+
+	// Create the directory
+	err := os.MkdirAll(resourcePath, 0755)
+	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error creating directory")
 		return
 	}
-
-	// Insert a record into the directories table (add the parent directory too).
-	_, err = a.DB.Exec("INSERT INTO directories (directory_name, parent_directory, created_by) VALUES ($1, $2, $3)", req.Name, req.Parent, user.Username)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Error saving directory record")
-		return
-	}
-
-	// Log the activity
-	a.logActivity(fmt.Sprintf("User '%s' created directory '%s' inside '%s'.", user.Username, req.Name, req.Parent))
 
 	respondJSON(w, http.StatusOK, map[string]string{"message": "Directory created successfully"})
 }
@@ -746,20 +733,21 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get the current user from session
 	currentUser, err := a.getUserFromSession(r)
 	if err != nil {
-		respondError(w, http.StatusUnauthorized, "Unauthorized")
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	// Parse the multipart form with a 10 MB limit
-	err = r.ParseMultipartForm(10 << 20)
+	// Parse the form with a limit (e.g., 10 MB)
+	err = r.ParseMultipartForm(10 << 20) // 10 MB limit
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "Error parsing form data")
 		return
 	}
 
-	// Retrieve the file from the form data
+	// Retrieve the file and its header
 	file, handler, err := r.FormFile("file")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "Error retrieving the file")
@@ -767,23 +755,21 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Get the optional "directory" field from the form data.
-	// This field can be used to specify a target folder (e.g. "operation", "training/subfolder", etc.)
+	// Optionally, retrieve the directory for uploading (if any)
 	targetDir := r.FormValue("directory")
 	if targetDir != "" {
-		// Clean the path to remove any .. segments.
+		// Clean the path to avoid directory traversal
 		targetDir = filepath.Clean(targetDir)
-		// Prevent directory traversal (disallow paths starting with "..")
 		if strings.HasPrefix(targetDir, "..") {
 			respondError(w, http.StatusBadRequest, "Invalid directory path")
 			return
 		}
 	}
 
-	// Determine destination path and the file record name.
+	// Determine the destination path
 	var fileRecordName, dstPath string
 	if targetDir != "" {
-		// Create the target directory if it does not exist.
+		// Ensure target directory exists
 		dstDir := filepath.Join("uploads", targetDir)
 		if _, err := os.Stat(dstDir); os.IsNotExist(err) {
 			if err := os.MkdirAll(dstDir, 0755); err != nil {
@@ -798,25 +784,7 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 		dstPath = filepath.Join("uploads", handler.Filename)
 	}
 
-	var msg string
-	if _, err := a.getFileRecord(fileRecordName); err == nil {
-		msg = fmt.Sprintf("File '%s' overwritten successfully", handler.Filename)
-	} else {
-		fr := FileRecord{
-			FileName:    fileRecordName,
-			Size:        handler.Size,
-			ContentType: handler.Header.Get("Content-Type"),
-			Uploader:    currentUser.Username,
-		}
-		if err := a.createFileRecord(fr); err != nil {
-			respondError(w, http.StatusInternalServerError, "Error saving file record")
-			return
-		}
-		a.cacheFileRecord(fr)
-		msg = fmt.Sprintf("File '%s' uploaded successfully", handler.Filename)
-	}
-
-	// Create the destination file
+	// Create the file on the server
 	dst, err := os.Create(dstPath)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Error saving file")
@@ -824,14 +792,25 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer dst.Close()
 
+	// Copy the content to the new file
 	if _, err := io.Copy(dst, file); err != nil {
-		respondError(w, http.StatusInternalServerError, "Error saving file")
+		respondError(w, http.StatusInternalServerError, "Error copying file content")
 		return
 	}
 
-	a.logActivity(fmt.Sprintf("File '%s' uploaded by '%s'.", fileRecordName, currentUser.Username))
+	// Optionally, save the file details to the database
+	fr := FileRecord{
+		FileName:    fileRecordName,
+		Size:        handler.Size,
+		ContentType: handler.Header.Get("Content-Type"),
+		Uploader:    currentUser.Username, // Get the username from the session
+	}
+	if err := a.createFileRecord(fr); err != nil {
+		respondError(w, http.StatusInternalServerError, "Error saving file record")
+		return
+	}
 
-	respondJSON(w, http.StatusOK, map[string]string{"message": msg})
+	respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("File '%s' uploaded successfully", handler.Filename)})
 }
 
 func (a *App) filesHandler(w http.ResponseWriter, r *http.Request) {
@@ -945,7 +924,7 @@ func (a *App) createResourceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	basePath := "uploads"
+	basePath := "Cdrrmo files"
 	if req.ResourceType == "file" {
 		targetDir := basePath
 		req.Directory = strings.TrimSpace(req.Directory)
@@ -1684,30 +1663,27 @@ func (a *App) listResourceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify authentication and log the user accessing the resource.
-	user, err := a.getUserFromSession(r)
-	if err != nil {
-		respondError(w, http.StatusForbidden, "Forbidden")
-		return
-	}
-	log.Printf("User %s is listing resources\n", user.Username)
-
-	// e.g. GET /list-resource?directory=operation
+	// Get the directory parameter
 	directory := r.URL.Query().Get("directory")
 	directory = sanitizeName(strings.TrimSpace(directory))
 
-	basePath := "uploads"
-	targetPath := filepath.Join(basePath, directory)
-
-	// If no directory provided, default to top-level "uploads".
-	if directory == "" {
-		targetPath = basePath
+	// Get the base directory from environment or use default
+	baseDir := os.Getenv("BASE_DIRECTORY")
+	if baseDir == "" {
+		baseDir = "Cdrrmo files" // Default base directory
 	}
 
-	// Check if the folder exists.
+	targetPath := filepath.Join(baseDir, directory)
+
+	// Ensure the directory exists
 	fileInfo, err := os.Stat(targetPath)
 	if os.IsNotExist(err) {
 		respondError(w, http.StatusNotFound, "Directory does not exist")
+		return
+	}
+	if err != nil {
+		// Other errors like permission errors
+		respondError(w, http.StatusInternalServerError, "Error accessing directory")
 		return
 	}
 	if !fileInfo.IsDir() {
@@ -1715,21 +1691,20 @@ func (a *App) listResourceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read directory contents.
+	// Get directory contents
 	entries, err := os.ReadDir(targetPath)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Cannot read directory")
 		return
 	}
 
-	// Build a list of items.
+	// Respond with directory contents
 	type DirItem struct {
 		Name string `json:"name"`
-		Type string `json:"type"` // "file" or "directory"
+		Type string `json:"type"`
 		Size int64  `json:"size,omitempty"`
 	}
 	var results []DirItem
-
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
@@ -1784,13 +1759,18 @@ func (a *App) updateUserStatusHandler(w http.ResponseWriter, r *http.Request) {
 func createBaseFolders() {
 	baseFolder := "Cdrrmo files"
 	baseFolders := []string{"operation", "training", "research"}
+
 	for _, folderName := range baseFolders {
 		folderPath := filepath.Join(baseFolder, folderName)
+
+		// Check if folder already exists
 		if _, err := os.Stat(folderPath); os.IsNotExist(err) {
-			if err := os.MkdirAll(folderPath, 0755); err != nil {
-				log.Printf("Error creating folder %s: %v\n", folderPath, err)
+			// If folder does not exist, create it
+			err := os.MkdirAll(folderPath, 0755)
+			if err != nil {
+				log.Printf("Error creating folder: %v\n", err) // Fixed this line
 			} else {
-				log.Printf("Created folder %s\n", folderPath)
+				log.Printf("Folder '%s' created successfully.\n", folderPath)
 			}
 		}
 	}
