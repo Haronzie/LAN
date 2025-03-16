@@ -372,6 +372,7 @@ func (a *App) inventoryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (a *App) createDirectoryHandler(w http.ResponseWriter, r *http.Request) {
+	// Only allow POST requests.
 	if r.Method != http.MethodPost {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
@@ -386,8 +387,7 @@ func (a *App) createDirectoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// CHANGED HERE: no more sanitizeName
-	// Instead, allow subfolders but forbid ".."
+	// Allow subfolders but block ".."
 	nameSafe, err := safePath(req.Name)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -420,6 +420,23 @@ func (a *App) createDirectoryHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Error creating directory")
 		return
 	}
+
+	// Retrieve current user from session to record ownership.
+	user, err := a.getUserFromSession(r)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Insert directory record with created_by.
+	_, err = a.DB.Exec("INSERT INTO directories (directory_name, parent_directory, created_by) VALUES ($1, $2, $3)",
+		nameSafe, parentSafe, user.Username)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Error saving directory record")
+		return
+	}
+
+	a.logActivity(fmt.Sprintf("User '%s' created directory '%s'.", user.Username, nameSafe))
 
 	respondJSON(w, http.StatusOK, map[string]string{
 		"message": "Directory created successfully",
@@ -1799,11 +1816,6 @@ func (a *App) listResourceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// OLD CODE (removing sanitizeName):
-	// directory := r.URL.Query().Get("directory")
-	// directory = sanitizeName(strings.TrimSpace(directory))
-
-	// NEW CODE: allow subfolders, but block ".."
 	directoryParam := r.URL.Query().Get("directory")
 	safeDir, err := safePath(directoryParam)
 	if err != nil {
@@ -1814,9 +1826,7 @@ func (a *App) listResourceHandler(w http.ResponseWriter, r *http.Request) {
 	baseDir := "uploads"
 	targetPath := filepath.Join(baseDir, safeDir)
 
-	log.Printf("listResourceHandler: listing path %q", targetPath) // For debugging
-
-	fileInfo, err := os.Stat(targetPath)
+	info, err := os.Stat(targetPath)
 	if os.IsNotExist(err) {
 		respondError(w, http.StatusNotFound, "Directory does not exist")
 		return
@@ -1824,7 +1834,7 @@ func (a *App) listResourceHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Error accessing directory")
 		return
 	}
-	if !fileInfo.IsDir() {
+	if !info.IsDir() {
 		respondError(w, http.StatusBadRequest, "Not a directory")
 		return
 	}
@@ -1835,26 +1845,51 @@ func (a *App) listResourceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// We'll expand the structure to also hold Uploader for files
+	// and CreatedBy for directories
 	type DirItem struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-		Size int64  `json:"size,omitempty"`
+		Name      string `json:"name"`
+		Type      string `json:"type"`
+		Size      int64  `json:"size,omitempty"`
+		Uploader  string `json:"uploader,omitempty"`
+		CreatedBy string `json:"created_by,omitempty"`
 	}
 	var results []DirItem
+
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
-		itemType := "file"
-		if entry.IsDir() {
-			itemType = "directory"
-		}
-		results = append(results, DirItem{
+
+		di := DirItem{
 			Name: entry.Name(),
-			Type: itemType,
 			Size: info.Size(),
-		})
+		}
+
+		if entry.IsDir() {
+			di.Type = "directory"
+
+			// Lookup in 'directories' table
+			var createdBy sql.NullString
+			err := a.DB.QueryRow(
+				"SELECT created_by FROM directories WHERE directory_name = $1",
+				entry.Name(),
+			).Scan(&createdBy)
+			if err == nil && createdBy.Valid {
+				di.CreatedBy = createdBy.String
+			}
+		} else {
+			di.Type = "file"
+
+			// Lookup in 'files' table
+			fr, err := a.getFileRecord(entry.Name())
+			if err == nil {
+				di.Uploader = fr.Uploader
+			}
+		}
+
+		results = append(results, di)
 	}
 
 	respondJSON(w, http.StatusOK, results)

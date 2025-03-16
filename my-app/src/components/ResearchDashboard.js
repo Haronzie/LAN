@@ -13,7 +13,8 @@ import {
   Tooltip,
   Form,
   Select,
-  Card
+  Card,
+  Breadcrumb
 } from 'antd';
 import {
   UploadOutlined,
@@ -31,29 +32,27 @@ import axios from 'axios';
 import path from 'path-browserify';
 
 const { Content } = Layout;
-
-// Example: replace with your real authentication logic
+// Replace this with your actual authentication logic
 const currentUser = { username: 'john_doe' };
 
 const ResearchDashboard = () => {
   const navigate = useNavigate();
 
-  // 1) Start at the root (empty string), so we can show the "Research" folder
-  //    (and filter out other folders at root).
+  // At root, we want to show only the "Research" folder.
   const [currentPath, setCurrentPath] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Folder creation
+  // Folder creation state.
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
-  // Upload
+  // Upload state.
   const [selectedFolder, setSelectedFolder] = useState('');
   const [fileToUpload, setFileToUpload] = useState(null);
 
-  // Rename / Move / Copy
+  // Rename / Move / Copy modals and state.
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [copyModalVisible, setCopyModalVisible] = useState(false);
@@ -76,7 +75,9 @@ const ResearchDashboard = () => {
       setItems(res.data || []);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
-      message.error(error.response?.data?.error || 'Error fetching directory contents');
+      message.error(
+        error.response?.data?.error || 'Error fetching directory contents'
+      );
     } finally {
       setLoading(false);
     }
@@ -90,14 +91,14 @@ const ResearchDashboard = () => {
   // ===========================
   // FILTER LOGIC
   // ===========================
-  // If we're at root (''), only show the "Research" folder (if it exists).
-  // If we're inside "Research" (or deeper), show all items normally.
+  // At root (""), only show the "Research" folder.
   let displayedItems = items;
   if (currentPath === '') {
-    displayedItems = items.filter((item) => item.name === 'Research' && item.type === 'directory');
+    displayedItems = items.filter(
+      (item) => item.name === 'Research' && item.type === 'directory'
+    );
   }
-
-  // Search filter
+  // Apply search filter.
   const filteredItems = displayedItems.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -113,10 +114,7 @@ const ResearchDashboard = () => {
     try {
       await axios.post(
         '/create-directory',
-        {
-          name: newFolderName,
-          parent: currentPath
-        },
+        { name: newFolderName, parent: currentPath },
         { withCredentials: true }
       );
       message.success('Folder created successfully');
@@ -125,12 +123,14 @@ const ResearchDashboard = () => {
       fetchItems();
     } catch (error) {
       console.error('Create folder error:', error);
-      message.error(error.response?.data?.error || 'Error creating folder');
+      message.error(
+        error.response?.data?.error || 'Error creating folder'
+      );
     }
   };
 
   // ===========================
-  // NAVIGATION
+  // NAVIGATION & BREADCRUMBS
   // ===========================
   const handleFolderClick = (folderName) => {
     const newPath = path.join(currentPath, folderName);
@@ -138,34 +138,48 @@ const ResearchDashboard = () => {
   };
 
   const handleGoUp = () => {
-    // If at root, do nothing.
     if (currentPath === '') return;
-
-    // If currently "Research", go back to root
     if (currentPath === 'Research') {
       setCurrentPath('');
       return;
     }
-    // Else, normal "up" logic
     const parent = path.dirname(currentPath);
     setCurrentPath(parent === '.' ? '' : parent);
   };
+
+  const getPathSegments = (p) => (p ? p.split('/').filter(Boolean) : []);
+  const segments = getPathSegments(currentPath);
+  const breadcrumbItems = [
+    <Breadcrumb.Item key="root">
+      {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
+    </Breadcrumb.Item>
+  ];
+  segments.forEach((seg, index) => {
+    breadcrumbItems.push(
+      <Breadcrumb.Item key={index}>
+        {index === segments.length - 1 ? (
+          seg
+        ) : (
+          <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
+            {seg}
+          </a>
+        )}
+      </Breadcrumb.Item>
+    );
+  });
 
   // ===========================
   // UPLOAD FILE
   // ===========================
   const customUpload = async ({ file, onSuccess, onError }) => {
-    // Force user to pick a folder from dropdown
     if (!selectedFolder) {
       message.error('Please select a folder to upload your file.');
       onError(new Error('No folder selected'));
       return;
     }
-
     const formData = new FormData();
     formData.append('file', file);
     formData.append('directory', selectedFolder);
-
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
@@ -186,6 +200,15 @@ const ResearchDashboard = () => {
   // DELETE
   // ===========================
   const handleDelete = async (record) => {
+    // For directories, only allow deletion if current user is the folder owner.
+    if (
+      record.type === 'directory' &&
+      record.created_by &&
+      record.created_by !== currentUser.username
+    ) {
+      message.error('Only the folder owner can delete this folder.');
+      return;
+    }
     try {
       await axios.delete('/delete-resource', {
         data: {
@@ -198,7 +221,9 @@ const ResearchDashboard = () => {
       fetchItems();
     } catch (error) {
       console.error('Delete error:', error);
-      message.error(error.response?.data?.error || `Error deleting ${record.name}`);
+      message.error(
+        error.response?.data?.error || `Error deleting ${record.name}`
+      );
     }
   };
 
@@ -385,13 +410,19 @@ const ResearchDashboard = () => {
               </>
             )}
             {record.type === 'directory' && (
-              <Tooltip title="Delete Folder">
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleDelete(record)}
-                />
-              </Tooltip>
+              record.created_by && record.created_by !== currentUser.username ? (
+                <Tooltip title="Only the folder owner can delete this folder">
+                  <Button disabled icon={<DeleteOutlined />} />
+                </Tooltip>
+              ) : (
+                <Tooltip title="Delete Folder">
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => handleDelete(record)}
+                  />
+                </Tooltip>
+              )
             )}
           </Space>
         );
@@ -404,7 +435,6 @@ const ResearchDashboard = () => {
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            {/* Instead of "Back", go to your main dashboard (adjust as needed) */}
             <Button onClick={() => navigate('/user')}>Back to Dashboard</Button>
           </Col>
           <Col>
@@ -425,12 +455,8 @@ const ResearchDashboard = () => {
 
         {fileToUpload && (
           <Card title="Selected File" bordered={false} style={{ marginBottom: 16 }}>
-            <p>
-              <strong>File Name:</strong> {fileToUpload.name}
-            </p>
-            <p>
-              <strong>Target Folder:</strong> {selectedFolder || '(none selected)'}
-            </p>
+            <p><strong>File Name:</strong> {fileToUpload.name}</p>
+            <p><strong>Target Folder:</strong> {selectedFolder || '(none selected)'}</p>
           </Card>
         )}
 
@@ -450,7 +476,6 @@ const ResearchDashboard = () => {
             </Button>
           </Col>
           <Col>
-            {/* Folder dropdown for upload */}
             <Select
               value={selectedFolder}
               onChange={setSelectedFolder}
@@ -478,6 +503,17 @@ const ResearchDashboard = () => {
             />
           </Col>
         </Row>
+
+        <Breadcrumb style={{ marginBottom: 16 }}>
+          <Breadcrumb.Item key="root">
+            {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
+          </Breadcrumb.Item>
+          {segments.map((seg, index) => (
+            <Breadcrumb.Item key={index}>
+              {index === segments.length - 1 ? seg : <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>{seg}</a>}
+            </Breadcrumb.Item>
+          ))}
+        </Breadcrumb>
 
         <Table
           columns={columns}

@@ -61,6 +61,15 @@ const OperationDashboard = () => {
   const [moveDestination, setMoveDestination] = useState('');
   const [copyDestination, setCopyDestination] = useState('');
 
+  // When currentPath changes, automatically set the selected folder.
+  useEffect(() => {
+    if (currentPath !== '') {
+      setSelectedFolder(currentPath);
+    } else {
+      setSelectedFolder('');
+    }
+  }, [currentPath]);
+
   // ===========================
   // FETCH ITEMS
   // ===========================
@@ -114,10 +123,7 @@ const OperationDashboard = () => {
     try {
       await axios.post(
         '/create-directory',
-        {
-          name: newFolderName,
-          parent: currentPath
-        },
+        { name: newFolderName, parent: currentPath },
         { withCredentials: true }
       );
       message.success('Folder created successfully');
@@ -133,7 +139,7 @@ const OperationDashboard = () => {
   };
 
   // ===========================
-  // NAVIGATION
+  // NAVIGATION & BREADCRUMBS
   // ===========================
   const handleFolderClick = (folderName) => {
     const newPath = path.join(currentPath, folderName);
@@ -150,7 +156,6 @@ const OperationDashboard = () => {
     setCurrentPath(parent === '.' ? '' : parent);
   };
 
-  // Breadcrumbs.
   const getPathSegments = (p) => (p ? p.split('/').filter(Boolean) : []);
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
@@ -161,13 +166,7 @@ const OperationDashboard = () => {
   segments.forEach((seg, index) => {
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {index === segments.length - 1 ? (
-          seg
-        ) : (
-          <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
-            {seg}
-          </a>
-        )}
+        {index === segments.length - 1 ? seg : <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>{seg}</a>}
       </Breadcrumb.Item>
     );
   });
@@ -176,8 +175,9 @@ const OperationDashboard = () => {
   // UPLOAD FILE
   // ===========================
   const customUpload = async ({ file, onSuccess, onError }) => {
+    // Now, selectedFolder is automatically set to the currentPath.
     if (!selectedFolder) {
-      message.error('Please select a folder for upload.');
+      message.error('No folder selected for upload.');
       onError(new Error('No folder selected'));
       return;
     }
@@ -204,8 +204,12 @@ const OperationDashboard = () => {
   // DELETE
   // ===========================
   const handleDelete = async (record) => {
-    // For folders, check if current user is the owner.
-    if (record.type === 'directory' && record.created_by && record.created_by !== currentUser.username) {
+    // For folders, only allow deletion if the current user is the owner.
+    if (
+      record.type === 'directory' &&
+      record.created_by &&
+      record.created_by !== currentUser.username
+    ) {
       message.error('Only the folder owner can delete this folder.');
       return;
     }
@@ -232,10 +236,7 @@ const OperationDashboard = () => {
   // ===========================
   const handleDownload = (fileName) => {
     const fullPath = path.join(currentPath, fileName);
-    window.open(
-      `/download?filename=${encodeURIComponent(fullPath)}`,
-      '_blank'
-    );
+    window.open(`/download?filename=${encodeURIComponent(fullPath)}`, '_blank');
   };
 
   // ===========================
@@ -247,7 +248,6 @@ const OperationDashboard = () => {
       return;
     }
     try {
-      // Send the full old path and full new path.
       await axios.put(
         '/rename-resource',
         {
@@ -360,7 +360,9 @@ const OperationDashboard = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        const isFolderOwner = record.type === 'directory' && record.created_by === currentUser.username;
+        const isFolderOwner =
+          record.type === 'directory' && record.created_by === currentUser.username;
+        const isUploader = record.uploader === currentUser.username;
         return (
           <Space>
             {record.type === 'file' && (
@@ -382,7 +384,7 @@ const OperationDashboard = () => {
                 />
               </Tooltip>
             )}
-            {record.type === 'file' && record.uploader === currentUser.username && (
+            {record.type === 'file' && isUploader && (
               <>
                 <Tooltip title="Rename">
                   <Button
@@ -459,14 +461,22 @@ const OperationDashboard = () => {
 
         {fileToUpload && (
           <Card title="Selected File" bordered={false} style={{ marginBottom: 16 }}>
-            <p><strong>File Name:</strong> {fileToUpload.name}</p>
-            <p><strong>Target Folder:</strong> {selectedFolder || '(none selected)'}</p>
+            <p>
+              <strong>File Name:</strong> {fileToUpload.name}
+            </p>
+            <p>
+              <strong>Target Folder:</strong> {selectedFolder || '(none selected)'}
+            </p>
           </Card>
         )}
 
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
-            <Button icon={<ArrowUpOutlined />} onClick={handleGoUp} disabled={currentPath === ''}>
+            <Button
+              icon={<ArrowUpOutlined />}
+              onClick={handleGoUp}
+              disabled={currentPath === ''}
+            >
               Go Up
             </Button>
           </Col>
