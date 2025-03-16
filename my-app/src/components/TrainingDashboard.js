@@ -13,7 +13,8 @@ import {
   Tooltip,
   Form,
   Select,
-  Card
+  Card,
+  Breadcrumb
 } from 'antd';
 import {
   UploadOutlined,
@@ -31,28 +32,27 @@ import axios from 'axios';
 import path from 'path-browserify';
 
 const { Content } = Layout;
-
-// Replace this with real auth context or logic
+// Replace this with your actual auth logic/context
 const currentUser = { username: 'john_doe' };
 
 const TrainingDashboard = () => {
   const navigate = useNavigate();
 
-  // Start at the root (""), then filter to only show "Training" at root.
+  // At root, we only show the "Training" folder.
   const [currentPath, setCurrentPath] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Folder creation
+  // Folder creation state.
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
-  // Upload
+  // Upload state.
   const [selectedFolder, setSelectedFolder] = useState('');
   const [fileToUpload, setFileToUpload] = useState(null);
 
-  // Rename / Move / Copy
+  // Rename / Move / Copy modals and state.
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [copyModalVisible, setCopyModalVisible] = useState(false);
@@ -91,16 +91,14 @@ const TrainingDashboard = () => {
   // ===========================
   // FILTER LOGIC
   // ===========================
-  // At root (""), only show the "Training" folder if it exists.
-  // If we're inside "Training" or deeper, show all items normally.
+  // At root, only show the "Training" folder.
   let displayedItems = items;
   if (currentPath === '') {
     displayedItems = items.filter(
       (item) => item.name === 'Training' && item.type === 'directory'
     );
   }
-
-  // Search filter
+  // Apply search filter.
   const filteredItems = displayedItems.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -116,10 +114,7 @@ const TrainingDashboard = () => {
     try {
       await axios.post(
         '/create-directory',
-        {
-          name: newFolderName,
-          parent: currentPath
-        },
+        { name: newFolderName, parent: currentPath },
         { withCredentials: true }
       );
       message.success('Folder created successfully');
@@ -143,34 +138,43 @@ const TrainingDashboard = () => {
   };
 
   const handleGoUp = () => {
-    // If at root, do nothing
     if (currentPath === '') return;
-
-    // If currently "Training", go back to root
     if (currentPath === 'Training') {
       setCurrentPath('');
       return;
     }
-    // Else normal logic
     const parent = path.dirname(currentPath);
     setCurrentPath(parent === '.' ? '' : parent);
   };
+
+  // Breadcrumbs.
+  const getPathSegments = (p) => (p ? p.split('/').filter(Boolean) : []);
+  const segments = getPathSegments(currentPath);
+  const breadcrumbItems = [
+    <Breadcrumb.Item key="root">
+      {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
+    </Breadcrumb.Item>
+  ];
+  segments.forEach((seg, index) => {
+    breadcrumbItems.push(
+      <Breadcrumb.Item key={index}>
+        {index === segments.length - 1 ? seg : <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>{seg}</a>}
+      </Breadcrumb.Item>
+    );
+  });
 
   // ===========================
   // UPLOAD FILE
   // ===========================
   const customUpload = async ({ file, onSuccess, onError }) => {
-    // Force user to pick a folder from dropdown
     if (!selectedFolder) {
       message.error('Please select a folder to upload your file.');
       onError(new Error('No folder selected'));
       return;
     }
-
     const formData = new FormData();
     formData.append('file', file);
     formData.append('directory', selectedFolder);
-
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
@@ -191,6 +195,11 @@ const TrainingDashboard = () => {
   // DELETE
   // ===========================
   const handleDelete = async (record) => {
+    // For directories, only allow deletion if the current user is the owner.
+    if (record.type === 'directory' && record.created_by && record.created_by !== currentUser.username) {
+      message.error('Only the folder owner can delete this folder.');
+      return;
+    }
     try {
       await axios.delete('/delete-resource', {
         data: {
@@ -342,6 +351,8 @@ const TrainingDashboard = () => {
       key: 'actions',
       render: (record) => {
         const isUploader = record.uploader === currentUser.username;
+        // For directories, only allow deletion if the current user is the folder owner.
+        const canDeleteFolder = record.type !== 'directory' || (record.created_by && record.created_by === currentUser.username);
         return (
           <Space>
             {record.type === 'file' && (
@@ -395,13 +406,19 @@ const TrainingDashboard = () => {
               </>
             )}
             {record.type === 'directory' && (
-              <Tooltip title="Delete Folder">
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleDelete(record)}
-                />
-              </Tooltip>
+              canDeleteFolder ? (
+                <Tooltip title="Delete Folder">
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => handleDelete(record)}
+                  />
+                </Tooltip>
+              ) : (
+                <Tooltip title="Only the folder owner can delete this folder">
+                  <Button disabled icon={<DeleteOutlined />} />
+                </Tooltip>
+              )
             )}
           </Space>
         );
@@ -414,7 +431,6 @@ const TrainingDashboard = () => {
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            {/* "Back to Dashboard" goes to /user instead of admin */}
             <Button onClick={() => navigate('/user')}>Back to Dashboard</Button>
           </Col>
           <Col>
@@ -435,12 +451,8 @@ const TrainingDashboard = () => {
 
         {fileToUpload && (
           <Card title="Selected File" bordered={false} style={{ marginBottom: 16 }}>
-            <p>
-              <strong>File Name:</strong> {fileToUpload.name}
-            </p>
-            <p>
-              <strong>Target Folder:</strong> {selectedFolder || '(none selected)'}
-            </p>
+            <p><strong>File Name:</strong> {fileToUpload.name}</p>
+            <p><strong>Target Folder:</strong> {selectedFolder || '(none selected)'}</p>
           </Card>
         )}
 
@@ -487,6 +499,17 @@ const TrainingDashboard = () => {
             />
           </Col>
         </Row>
+
+        <Breadcrumb style={{ marginBottom: 16 }}>
+          <Breadcrumb.Item key="root">
+            {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
+          </Breadcrumb.Item>
+          {segments.map((seg, index) => (
+            <Breadcrumb.Item key={index}>
+              {index === segments.length - 1 ? seg : <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>{seg}</a>}
+            </Breadcrumb.Item>
+          ))}
+        </Breadcrumb>
 
         <Table
           columns={columns}
