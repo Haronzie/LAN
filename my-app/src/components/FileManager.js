@@ -11,7 +11,6 @@ import {
   Space,
   Tooltip,
   Form,
-  Select,
   Card,
   Breadcrumb,
   Upload
@@ -226,7 +225,8 @@ const FileManager = () => {
         {
           resource_type: selectedItem.type,
           old_name: path.join(currentPath, selectedItem.name),
-          new_name: path.join(currentPath, renameNewName)
+          // Send only the new base name so that the backend will use the old directory.
+          new_name: renameNewName
         },
         { withCredentials: true }
       );
@@ -387,15 +387,9 @@ const FileManager = () => {
 
   // Build breadcrumb items
   const segments = getPathSegments(currentPath);
-  // Example: if currentPath="Operation/Reports", segments=["Operation","Reports"]
-  // We'll add a "Root" link if currentPath is not empty.
   const breadcrumbItems = [
     <Breadcrumb.Item key="root">
-      {isRoot ? (
-        'Root'
-      ) : (
-        <a onClick={() => setCurrentPath('')}>Root</a>
-      )}
+      {isRoot ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
     </Breadcrumb.Item>
   ];
 
@@ -441,19 +435,12 @@ const FileManager = () => {
         {/* Create folder / Go Up / Search row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
-            <Button
-              icon={<ArrowUpOutlined />}
-              disabled={isRoot}
-              onClick={handleGoUp}
-            >
+            <Button icon={<ArrowUpOutlined />} disabled={isRoot} onClick={handleGoUp}>
               Go Up
             </Button>
           </Col>
           <Col>
-            <Button
-              icon={<FolderAddOutlined />}
-              onClick={() => setCreateFolderModal(true)}
-            >
+            <Button icon={<FolderAddOutlined />} onClick={() => setCreateFolderModal(true)}>
               Create Folder
             </Button>
           </Col>

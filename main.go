@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -784,28 +785,24 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Determine the destination path
-	var fileRecordName, dstPath string
-	if targetDir != "" {
-		// e.g. fileRecordName = "Operation/123.jpg"
-		fileRecordName = filepath.Join(targetDir, handler.Filename)
+	// Physically store the file inside "uploads/<targetDir>/filename"
+	// but only store the raw filename in the DB.
+	uploadBase := "uploads"
+	dstDir := filepath.Join(uploadBase, targetDir)
 
-		// e.g. dstPath = "uploads/Operation/123.jpg"
-		dstPath = filepath.Join("uploads", targetDir, handler.Filename)
-
-		// Ensure target directory exists on disk
-		dstDir := filepath.Join("uploads", targetDir)
-		if _, err := os.Stat(dstDir); os.IsNotExist(err) {
-			if err := os.MkdirAll(dstDir, 0755); err != nil {
-				respondError(w, http.StatusInternalServerError, "Error creating target directory")
-				return
-			}
+	// Ensure the target directory exists on disk
+	if _, err := os.Stat(dstDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dstDir, 0755); err != nil {
+			respondError(w, http.StatusInternalServerError, "Error creating target directory")
+			return
 		}
-	} else {
-		// No subfolder, store it at top-level in "uploads/"
-		fileRecordName = handler.Filename
-		dstPath = filepath.Join("uploads", handler.Filename)
 	}
+
+	// This is the raw filename you will store in the DB
+	rawFileName := handler.Filename
+
+	// Construct the physical file path
+	dstPath := filepath.Join(dstDir, rawFileName)
 
 	// Create the file on the server
 	dst, err := os.Create(dstPath)
@@ -821,23 +818,27 @@ func (a *App) uploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save the file details to the database
+	// Save only the raw filename in the database (not the subfolder path)
 	fr := FileRecord{
-		FileName:    fileRecordName, // "Operation/123.jpg"
+		FileName:    rawFileName, // <--- Only the raw name in DB
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
 		Uploader:    currentUser.Username,
 	}
+
 	if err := a.createFileRecord(fr); err != nil {
 		respondError(w, http.StatusInternalServerError, "Error saving file record")
 		return
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("File '%s' uploaded successfully", handler.Filename),
+		"message": fmt.Sprintf("File '%s' uploaded successfully", rawFileName),
 	})
-	a.logActivity(fmt.Sprintf("User '%s' uploaded file '%s' to directory '%s'.", currentUser.Username, handler.Filename, targetDir))
 
+	a.logActivity(fmt.Sprintf(
+		"User '%s' uploaded file '%s' to directory '%s'.",
+		currentUser.Username, rawFileName, targetDir,
+	))
 }
 
 func (a *App) filesHandler(w http.ResponseWriter, r *http.Request) {
@@ -1007,179 +1008,239 @@ func (a *App) createResourceHandler(w http.ResponseWriter, r *http.Request) {
 
 // deleteResourceHandler deletes files or directories.
 func (a *App) deleteResourceHandler(w http.ResponseWriter, r *http.Request) {
+	// Only allow DELETE requests.
 	if r.Method != http.MethodDelete {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
+
+	// Get the current user session.
 	user, err := a.getUserFromSession(r)
 	if err != nil {
 		respondError(w, http.StatusForbidden, "Forbidden")
 		return
 	}
 
+	// Decode the request body.
 	var req struct {
 		ResourceType string `json:"resource_type"` // "file" or "directory"
-		Name         string `json:"name"`
+		Name         string `json:"name"`          // e.g., "folder/filename.txt"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Use safePath to allow subfolders but forbid ".."
-	safeName, err := safePath(req.Name)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if safeName == "" {
-		respondError(w, http.StatusBadRequest, "Name cannot be empty")
-		return
-	}
-
-	// Build the absolute path under "uploads/"
 	basePath := "uploads"
-	resourcePath := filepath.Join(basePath, safeName)
+	var resourcePath, safeName string
 
+	// Handle file deletion.
+	if req.ResourceType == "file" {
+		// Split the path into directory and base file name.
+		_, baseName := path.Split(req.Name)
+		safeName, err = safePath(baseName)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		// If a directory is provided, build the full file path.
+		dir, _ := path.Split(req.Name)
+		dir = strings.Trim(dir, "/")
+		if dir != "" {
+			resourcePath = filepath.Join(basePath, dir, safeName)
+		} else {
+			resourcePath = filepath.Join(basePath, safeName)
+		}
+	} else if req.ResourceType == "directory" {
+		// For directories, use the whole provided name.
+		safeName, err = safePath(req.Name)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		resourcePath = filepath.Join(basePath, safeName)
+	} else {
+		respondError(w, http.StatusBadRequest, "Invalid resource type")
+		return
+	}
+
+	// Delete resource based on type.
 	switch req.ResourceType {
 	case "file":
+		// Check for the file record in the database.
 		fr, err := a.getFileRecord(safeName)
 		if err != nil {
-			// If there’s no DB record, check if file physically exists
+			// If not in DB, verify if the file exists on disk.
 			if _, statErr := os.Stat(resourcePath); os.IsNotExist(statErr) {
 				respondError(w, http.StatusNotFound, "File not found on disk or in DB")
 				return
 			}
-			// Remove from disk anyway
-			if errRemove := os.Remove(resourcePath); errRemove != nil {
-				respondError(w, http.StatusInternalServerError, "Error deleting file on disk (no DB record).")
+			// If file exists on disk without a DB record, delete it.
+			if err := os.Remove(resourcePath); err != nil {
+				respondError(w, http.StatusInternalServerError, "Error deleting file on disk (no DB record)")
 				return
 			}
-			a.logActivity(fmt.Sprintf("User '%s' forcibly deleted file '%s' from disk (no DB record).", user.Username, safeName))
-			respondJSON(w, http.StatusOK, map[string]string{
-				"message": fmt.Sprintf("File '%s' deleted from disk (no DB record).", safeName),
-			})
+			a.logActivity(fmt.Sprintf("User '%s' forcibly deleted file '%s' from disk (no DB record)", user.Username, safeName))
+			respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("File '%s' deleted from disk (no DB record)", safeName)})
 			return
 		}
 
-		// If we do have a DB record, proceed with normal checks
+		// Check if the user has permission to delete the file.
 		if user.Role != "admin" && fr.Uploader != user.Username {
 			respondError(w, http.StatusForbidden, "Forbidden: You can only delete files you uploaded")
 			return
 		}
+
+		// Delete the file from disk.
 		if err := os.Remove(resourcePath); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error deleting file on disk")
 			return
 		}
+
+		// Delete the file record from the database.
 		if err := a.deleteFileRecord(safeName); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error deleting file record")
 			return
 		}
-		a.logActivity(fmt.Sprintf("User '%s' deleted file '%s'.", user.Username, safeName))
-		respondJSON(w, http.StatusOK, map[string]string{
-			"message": fmt.Sprintf("File '%s' deleted successfully", safeName),
-		})
+
+		a.logActivity(fmt.Sprintf("User '%s' deleted file '%s'", user.Username, safeName))
+		respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("File '%s' deleted successfully", safeName)})
 
 	case "directory":
-		// Delete entire directory (and all contents)
+		// Remove the directory and all its contents.
 		if err := os.RemoveAll(resourcePath); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error deleting directory")
 			return
 		}
-		a.logActivity(fmt.Sprintf("User '%s' deleted directory '%s'.", user.Username, safeName))
-		respondJSON(w, http.StatusOK, map[string]string{
-			"message": fmt.Sprintf("Directory '%s' deleted successfully", safeName),
-		})
-
-	default:
-		respondError(w, http.StatusBadRequest, "Invalid resource type")
+		a.logActivity(fmt.Sprintf("User '%s' deleted directory '%s'", user.Username, safeName))
+		respondJSON(w, http.StatusOK, map[string]string{"message": fmt.Sprintf("Directory '%s' deleted successfully", safeName)})
 	}
-	a.logActivity(fmt.Sprintf("User '%s' deleted file '%s'.", user.Username, safeName))
-
 }
 
-// =======================
-// NEW SEPARATE HANDLERS:
-// =======================
-//
 // renameResourceHandler handles renaming a file or directory (changing its name within the same directory).
 func (a *App) renameResourceHandler(w http.ResponseWriter, r *http.Request) {
+	// Only allow PUT requests.
 	if r.Method != http.MethodPut {
 		respondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
+
+	// Get the user from session.
 	user, err := a.getUserFromSession(r)
 	if err != nil {
 		respondError(w, http.StatusForbidden, "Forbidden")
 		return
 	}
+
+	// Decode the request body.
 	var req struct {
 		ResourceType string `json:"resource_type"` // "file" or "directory"
-		OldName      string `json:"old_name"`
-		NewName      string `json:"new_name"`
+		OldName      string `json:"old_name"`      // e.g., "folder/oldname.txt"
+		NewName      string `json:"new_name"`      // e.g., "folder/newname.txt"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	oldSafe, err := safePath(req.OldName)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	newSafe, err := safePath(req.NewName)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	if oldSafe == "" || newSafe == "" {
-		respondError(w, http.StatusBadRequest, "OldName and NewName cannot be empty")
-		return
-	}
 	basePath := "uploads"
-	oldPath := filepath.Join(basePath, oldSafe)
-	newPath := filepath.Join(basePath, newSafe)
 
-	switch req.ResourceType {
-	case "file":
-		fr, err := a.getFileRecord(oldSafe)
+	// Handle renaming for files.
+	if req.ResourceType == "file" {
+		// Split the old and new names into directory and base parts.
+		dirOld, baseOld := path.Split(req.OldName)
+		_, baseNew := path.Split(req.NewName)
+
+		// Sanitize the base file names.
+		safeOld, err := safePath(baseOld)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		safeNew, err := safePath(baseNew)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// Trim directory from old name.
+		dirOld = strings.Trim(dirOld, "/")
+
+		// Build full paths for the old and new file.
+		var oldPath, newPath string
+		if dirOld != "" {
+			oldPath = filepath.Join(basePath, dirOld, safeOld)
+			newPath = filepath.Join(basePath, dirOld, safeNew)
+		} else {
+			oldPath = filepath.Join(basePath, safeOld)
+			newPath = filepath.Join(basePath, safeNew)
+		}
+
+		// Retrieve the file record from the database.
+		fr, err := a.getFileRecord(safeOld)
 		if err != nil {
 			respondError(w, http.StatusNotFound, "File does not exist")
 			return
 		}
+
+		// Check that the user is allowed to rename the file.
 		if user.Role != "admin" && fr.Uploader != user.Username {
 			respondError(w, http.StatusForbidden, "Forbidden: You can only rename files you uploaded")
 			return
 		}
+
+		// Rename the file on disk.
 		if err := os.Rename(oldPath, newPath); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error renaming file")
 			return
 		}
-		// Update DB
-		_, err = a.DB.Exec("UPDATE files SET file_name = $1 WHERE file_name = $2", newSafe, oldSafe)
+
+		// Update the file record in the database.
+		_, err = a.DB.Exec("UPDATE files SET file_name = $1 WHERE file_name = $2", safeNew, safeOld)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "Error updating file record")
 			return
 		}
-		delete(a.FileCache, oldSafe)
+
+		// Update any cache if needed.
+		delete(a.FileCache, safeOld)
+
 		respondJSON(w, http.StatusOK, map[string]string{
-			"message": fmt.Sprintf("File renamed from '%s' to '%s' successfully", oldSafe, newSafe),
+			"message": fmt.Sprintf("File renamed from '%s' to '%s' successfully", safeOld, safeNew),
 		})
-	case "directory":
+	} else if req.ResourceType == "directory" {
+		// For directories, we assume the entire path is provided.
+		safeOld, err := safePath(req.OldName)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		safeNew, err := safePath(req.NewName)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// Build full paths for directories.
+		oldPath := filepath.Join(basePath, safeOld)
+		newPath := filepath.Join(basePath, safeNew)
+
+		// Rename the directory.
 		if err := os.Rename(oldPath, newPath); err != nil {
 			respondError(w, http.StatusInternalServerError, "Error renaming directory")
 			return
 		}
-		respondJSON(w, http.StatusOK, map[string]string{
-			"message": fmt.Sprintf("Directory renamed from '%s' to '%s' successfully", oldSafe, newSafe),
-		})
-	default:
-		respondError(w, http.StatusBadRequest, "Invalid resource type")
-	}
-	a.logActivity(fmt.Sprintf("User '%s' renamed %s from '%s' to '%s'.", user.Username, req.ResourceType, req.OldName, req.NewName))
 
+		respondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("Directory renamed from '%s' to '%s' successfully", safeOld, safeNew),
+		})
+	} else {
+		respondError(w, http.StatusBadRequest, "Invalid resource type")
+		return
+	}
+
+	// Log the activity.
+	a.logActivity(fmt.Sprintf("User '%s' renamed %s from '%s' to '%s'.", user.Username, req.ResourceType, req.OldName, req.NewName))
 }
 
 // moveResourceHandler handles moving a file or directory to a new location (destination can include subdirectories).
