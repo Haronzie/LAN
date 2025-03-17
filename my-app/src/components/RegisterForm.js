@@ -14,7 +14,7 @@ const RegisterForm = () => {
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exists'); // ✅ Proxy handles this
+        const res = await axios.get('/admin-exists'); // Uses proxy
         setAdminExists(res.data.exists);
       } catch (error) {
         message.error('Failed to check admin status.');
@@ -56,24 +56,43 @@ const RegisterForm = () => {
       <Card style={{ width: 350, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', borderRadius: 8 }}>
         <Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>Register</Title>
         <Form name="register" layout="vertical" onFinish={onFinish}>
-          <Form.Item label="Username" name="username" rules={[{ required: true, message: 'Please input your username!' }]}>
-            <Input placeholder="Enter your username" />
+          <Form.Item
+            label="Username"
+            name="username"
+            rules={[{ required: true, message: 'Please input your username!' }]}
+          >
+            <Input placeholder="Enter your username" autoFocus />
           </Form.Item>
-          <Form.Item label="Password" name="password" rules={[{ required: true, message: 'Please input your password!' }]} hasFeedback>
+          <Form.Item
+            label="Password"
+            name="password"
+            rules={[{ required: true, message: 'Please input your password!' }]}
+            hasFeedback
+          >
             <Input.Password placeholder="Enter your password" />
           </Form.Item>
-          <Form.Item label="Confirm Password" name="confirmPassword" dependencies={['password']} hasFeedback rules={[
-            { required: true, message: 'Please confirm your password!' },
-            ({ getFieldValue }) => ({
-              validator(_, value) {
-                return !value || getFieldValue('password') === value ? Promise.resolve() : Promise.reject(new Error('Passwords do not match!'));
-              }
-            })
-          ]}>
+          <Form.Item
+            label="Confirm Password"
+            name="confirmPassword"
+            dependencies={['password']}
+            hasFeedback
+            rules={[
+              { required: true, message: 'Please confirm your password!' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  return !value || getFieldValue('password') === value
+                    ? Promise.resolve()
+                    : Promise.reject(new Error('Passwords do not match!'));
+                }
+              })
+            ]}
+          >
             <Input.Password placeholder="Confirm your password" />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" block>Register</Button>
+            <Button type="primary" htmlType="submit" block>
+              Register
+            </Button>
           </Form.Item>
         </Form>
       </Card>
