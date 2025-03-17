@@ -1,0 +1,174 @@
+package controllers
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"LANFileSharingSystem/internal/models"
+)
+
+// AuthController handles authentication-related endpoints.
+type AuthController struct {
+	App *models.App
+}
+
+// NewAuthController creates a new AuthController.
+func NewAuthController(app *models.App) *AuthController {
+	return &AuthController{App: app}
+}
+
+// Register handles user registration. The first registered user is set as admin.
+func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+	if req.Username == "" || req.Password == "" {
+		models.RespondError(w, http.StatusBadRequest, "Username and password cannot be empty")
+		return
+	}
+
+	// Check if the user already exists.
+	if _, err := ac.App.GetUserByUsername(req.Username); err == nil {
+		models.RespondError(w, http.StatusBadRequest, "User already exists")
+		return
+	}
+
+	// Hash the password.
+	hashedPass, err := models.HashPassword(req.Password)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error hashing password")
+		return
+	}
+
+	// First user is an admin; subsequent users are "user" and inactive.
+	role := "admin"
+	active := true
+	if ac.App.AdminExists() {
+		role = "user"
+		active = false
+	}
+
+	newUser := models.User{
+		Username: req.Username,
+		Password: hashedPass,
+		Role:     role,
+		Active:   active,
+	}
+
+	if err := ac.App.CreateUser(newUser); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error registering user")
+		return
+	}
+
+	// Set session values.
+	session, err := ac.App.Store.Get(r, "session")
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error getting session")
+		return
+	}
+	session.Values["username"] = newUser.Username
+	session.Values["role"] = newUser.Role
+	if err := session.Save(r, w); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error saving session")
+		return
+	}
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("%s registered successfully", newUser.Username),
+	})
+}
+
+// Login handles user authentication.
+func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+
+	user, err := ac.App.GetUserByUsername(req.Username)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
+		return
+	}
+	if !user.Active {
+		models.RespondError(w, http.StatusForbidden, "Account not activated")
+		return
+	}
+	if !models.CheckPasswordHash(req.Password, user.Password) {
+		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
+		return
+	}
+
+	session, err := ac.App.Store.Get(r, "session")
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error getting session")
+		return
+	}
+	session.Values["username"] = user.Username
+	session.Values["role"] = user.Role
+	session.Options = ac.App.DefaultSessionOptions()
+	if err := session.Save(r, w); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error saving session")
+		return
+	}
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message":  "Login successful",
+		"username": user.Username,
+		"role":     user.Role,
+	})
+}
+
+// Logout ends the user session.
+func (ac *AuthController) Logout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := ac.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := ac.App.Store.Get(r, "session")
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving session")
+		return
+	}
+	session.Options.MaxAge = -1
+	if err := session.Save(r, w); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error saving session")
+		return
+	}
+
+	ac.App.LogActivity(fmt.Sprintf("User '%s' logged out.", user.Username))
+	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Logout successful"})
+}
