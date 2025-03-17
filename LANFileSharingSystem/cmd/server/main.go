@@ -37,9 +37,6 @@ func main() {
 	// Initialize the application model (shared context)
 	app := models.NewApp(db, store)
 
-	// Create necessary tables if they don't exist
-	app.CreateTables()
-
 	// Create a new router
 	router := mux.NewRouter()
 

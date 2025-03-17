@@ -9,13 +9,14 @@ const { Title, Paragraph } = Typography;
 
 const Home = () => {
   const [adminExists, setAdminExists] = useState(false);
+  const [loadingDefaultFolders, setLoadingDefaultFolders] = useState(false);
   const navigate = useNavigate();
 
   // Check if an admin exists
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exists'); // ✅ Uses proxy
+        const res = await axios.get('/admin-exists', { withCredentials: true });
         setAdminExists(res.data.exists);
       } catch (error) {
         message.error('Failed to check admin status.');
@@ -27,7 +28,6 @@ const Home = () => {
   // Handler for Login button click
   const handleLoginClick = () => {
     if (!adminExists) {
-      // Show a modal alerting the user that no admin exists yet
       Modal.info({
         title: 'No Admin Account Found',
         content: (
@@ -42,6 +42,19 @@ const Home = () => {
       });
     } else {
       navigate('/login');
+    }
+  };
+
+  // (Optional) Handler to initialize default folders dynamically in the backend.
+  const handleInitDefaultFolders = async () => {
+    setLoadingDefaultFolders(true);
+    try {
+      const res = await axios.post('/directory/create-default', {}, { withCredentials: true });
+      message.success(res.data.message || 'Default folders created successfully');
+    } catch (error) {
+      message.error(error.response?.data?.error || 'Error initializing default folders');
+    } finally {
+      setLoadingDefaultFolders(false);
     }
   };
 
@@ -79,7 +92,12 @@ const Home = () => {
           </Paragraph>
           <div className="button-group" style={{ marginTop: 24 }}>
             <Tooltip title="Click here to log in">
-              <Button type="primary" size="large" style={{ marginRight: '10px' }} onClick={handleLoginClick}>
+              <Button
+                type="primary"
+                size="large"
+                style={{ marginRight: '10px' }}
+                onClick={handleLoginClick}
+              >
                 Login
               </Button>
             </Tooltip>
@@ -88,6 +106,20 @@ const Home = () => {
                 <Link to="/register">
                   <Button type="default" size="large">Register</Button>
                 </Link>
+              </Tooltip>
+            )}
+            {/* Optional: Show default folder initialization button for admins */}
+            {adminExists && (
+              <Tooltip title="Initialize default folders (Operation, Research, Training)">
+                <Button
+                  type="dashed"
+                  size="large"
+                  loading={loadingDefaultFolders}
+                  style={{ marginLeft: '10px' }}
+                  onClick={handleInitDefaultFolders}
+                >
+                  Init Folders
+                </Button>
               </Tooltip>
             )}
           </div>
