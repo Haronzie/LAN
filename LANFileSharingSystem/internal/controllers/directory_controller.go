@@ -42,6 +42,8 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
+	// Trim whitespace
 	req.Name = strings.TrimSpace(req.Name)
 	req.Parent = strings.TrimSpace(req.Parent)
 	if req.Name == "" {
@@ -57,22 +59,40 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 		resourcePath = filepath.Join(basePath, req.Name)
 	}
 
-	if _, err := os.Stat(resourcePath); !os.IsNotExist(err) {
-		models.RespondError(w, http.StatusConflict, "Directory already exists")
+	// --- Check if the directory path already exists ---
+	if info, err := os.Stat(resourcePath); err == nil {
+		// err == nil => the path already exists on disk
+		if info.IsDir() {
+			models.RespondError(w, http.StatusConflict,
+				fmt.Sprintf("Directory '%s' already exists under parent '%s'", req.Name, req.Parent))
+			return
+		} else {
+			models.RespondError(w, http.StatusConflict,
+				fmt.Sprintf("A file with the same name '%s' already exists under parent '%s'", req.Name, req.Parent))
+			return
+		}
+	} else if !os.IsNotExist(err) {
+		// If we get an error that's not "does not exist," it's a different I/O error
+		models.RespondError(w, http.StatusInternalServerError,
+			fmt.Sprintf("Error checking directory path: %v", err))
 		return
 	}
 
+	// --- If we reach here, the path does NOT exist; create it ---
 	if err := os.MkdirAll(resourcePath, 0755); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error creating directory")
+		models.RespondError(w, http.StatusInternalServerError, "Error creating directory on disk")
 		return
 	}
 
+	// Insert a record into your 'directories' table
 	if err := dc.App.CreateDirectoryRecord(req.Name, req.Parent, user.Username); err != nil {
+		// If your DB schema requires unique (name + parent), you can catch DB constraint errors here
 		models.RespondError(w, http.StatusInternalServerError, "Error saving directory record")
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' created directory '%s'.", user.Username, req.Name))
+	// Log the activity and respond success
+	dc.App.LogActivity(fmt.Sprintf("User '%s' created directory '%s' (parent='%s').", user.Username, req.Name, req.Parent))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": "Directory created successfully",
 	})

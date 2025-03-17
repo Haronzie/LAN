@@ -165,13 +165,6 @@ func (app *App) GetUserByUsername(username string) (User, error) {
 // CreateUser inserts a new user into the database.
 // NOTE: Make sure you hash the password before calling CreateUser or do it here.
 func (app *App) CreateUser(user User) error {
-	// If you haven't already hashed user.Password, you can do it here.
-	// hashedPass, err := HashPassword(user.Password)
-	// if err != nil {
-	// 	return err
-	// }
-	// user.Password = hashedPass
-
 	_, err := app.DB.Exec(`
 		INSERT INTO users(username, email, password, role, active) 
 		VALUES($1, $2, $3, $4, $5)
@@ -395,4 +388,84 @@ func (app *App) ListDirectory(directory string) ([]map[string]interface{}, error
 	// For example, you might query the file system or database.
 	// Here we return an empty list.
 	return []map[string]interface{}{}, nil
+}
+
+// -------------------------------------
+//  Database Table Creation (Dynamic)
+// -------------------------------------
+
+// CreateTables creates all necessary tables and indexes if they do not already exist.
+func (app *App) CreateTables() {
+	// Create users table.
+	userTable := `
+	CREATE TABLE IF NOT EXISTS users (
+		username TEXT PRIMARY KEY,
+		email TEXT,
+		password TEXT NOT NULL,
+		role TEXT NOT NULL,
+		active BOOLEAN NOT NULL DEFAULT false,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+	if _, err := app.DB.Exec(userTable); err != nil {
+		log.Fatalf("Error creating users table: %v", err)
+	}
+
+	// Create index on users role.
+	if _, err := app.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);`); err != nil {
+		log.Fatalf("Error creating index on users table: %v", err)
+	}
+
+	// Create files table.
+	fileTable := `
+	CREATE TABLE IF NOT EXISTS files (
+		file_name TEXT PRIMARY KEY,
+		size BIGINT,
+		content_type TEXT,
+		uploader TEXT
+	);`
+	if _, err := app.DB.Exec(fileTable); err != nil {
+		log.Fatalf("Error creating files table: %v", err)
+	}
+
+	// Create index on files uploader.
+	if _, err := app.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);`); err != nil {
+		log.Fatalf("Error creating index on files table: %v", err)
+	}
+
+	// Create directories table.
+	directoryTable := `
+	CREATE TABLE IF NOT EXISTS directories (
+		directory_name TEXT PRIMARY KEY,
+		parent_directory TEXT,
+		created_by TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+	if _, err := app.DB.Exec(directoryTable); err != nil {
+		log.Fatalf("Error creating directories table: %v", err)
+	}
+
+	// Create index on directories parent_directory.
+	if _, err := app.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_directories_parent ON directories (parent_directory);`); err != nil {
+		log.Fatalf("Error creating index on directories table: %v", err)
+	}
+
+	// Create activity_log table.
+	activityTable := `
+	CREATE TABLE IF NOT EXISTS activity_log (
+		id SERIAL PRIMARY KEY,
+		timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		event TEXT NOT NULL
+	);`
+	if _, err := app.DB.Exec(activityTable); err != nil {
+		log.Fatalf("Error creating activity_log table: %v", err)
+	}
+
+	// Create index on activity_log timestamp.
+	if _, err := app.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_log (timestamp);`); err != nil {
+		log.Fatalf("Error creating index on activity_log table: %v", err)
+	}
+
+	log.Println("All necessary tables and indexes created successfully.")
 }
