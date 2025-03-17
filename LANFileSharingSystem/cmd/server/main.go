@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -36,6 +38,26 @@ func main() {
 
 	// Initialize the application model (shared context)
 	app := models.NewApp(db, store)
+	// 1) Ensure `uploads` folder exists
+	if err := os.MkdirAll("uploads", 0755); err != nil {
+		log.Fatal("Error creating 'uploads' folder:", err)
+	}
+	// 2) Create the three subfolders if they don’t exist
+	defaultFolders := []string{"Operation", "Research", "Training"}
+	for _, folderName := range defaultFolders {
+		folderPath := filepath.Join("uploads", folderName)
+		if _, err := os.Stat(folderPath); os.IsNotExist(err) {
+			// Create the subfolder on disk
+			if err := os.MkdirAll(folderPath, 0755); err != nil {
+				log.Fatalf("Error creating subfolder '%s': %v", folderName, err)
+			}
+			// Optionally, create a directory record in the database
+			// (Use a system or admin username to track who created it)
+			if err := app.CreateDirectoryRecord(folderName, "", "system"); err != nil {
+				log.Printf("Warning: could not create DB record for '%s': %v", folderName, err)
+			}
+		}
+	}
 
 	// Create a new router
 	router := mux.NewRouter()
@@ -67,8 +89,6 @@ func main() {
 	router.HandleFunc("/delete-file", fileController.DeleteFile).Methods("DELETE")
 	// After initializing userController in main.go:
 	router.HandleFunc("/admin-exists", userController.AdminExists).Methods("GET")
-
-	router.HandleFunc("/directory/create-default", directoryController.CreateDefaultFolders).Methods("POST")
 
 	router.HandleFunc("/directory/create", directoryController.Create).Methods("POST")
 	router.HandleFunc("/directory/delete", directoryController.Delete).Methods("DELETE")
