@@ -27,7 +27,7 @@ func LoadConfig() Config {
 
 	// Set a default database URL if not provided.
 	if cfg.DatabaseURL == "" {
-		cfg.DatabaseURL = "postgres://postgres:Cheonilmyung2004@localhost:5432/myung?sslmode=disable"
+		cfg.DatabaseURL = "postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable"
 
 	}
 
