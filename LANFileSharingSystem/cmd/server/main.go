@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	_ "github.com/lib/pq"
@@ -15,8 +16,7 @@ import (
 )
 
 func main() {
-
-	// Load application configuration (e.g. port, database URL, session key)
+	// Load application configuration
 	cfg := config.LoadConfig()
 
 	// Connect to the database
@@ -25,8 +25,9 @@ func main() {
 		log.Fatal("Error connecting to database:", err)
 	}
 	defer db.Close()
+
 	if err := db.Ping(); err != nil {
-		log.Fatal("Error connecting to database:", err)
+		log.Fatal("Error pinging database:", err)
 	}
 	log.Println("Successfully connected to database!")
 
@@ -35,8 +36,10 @@ func main() {
 
 	// Initialize the application model (shared context)
 	app := models.NewApp(db, store)
+
 	// Create necessary tables if they don't exist
 	app.CreateTables()
+
 	// Create a new router
 	router := mux.NewRouter()
 
@@ -47,7 +50,7 @@ func main() {
 	directoryController := controllers.NewDirectoryController(app)
 	activityController := controllers.NewActivityController(app)
 
-	// Define routes (these endpoints are now handled by their respective controllers)
+	// Define routes
 	router.HandleFunc("/register", authController.Register).Methods("POST")
 	router.HandleFunc("/login", authController.Login).Methods("POST")
 	router.HandleFunc("/logout", authController.Logout).Methods("POST")
@@ -72,11 +75,16 @@ func main() {
 
 	router.HandleFunc("/activities", activityController.List).Methods("GET")
 
-	// Additional endpoints for moving, copying resources, updating user status, etc. can be added similarly.
+	// Wrap your router with the CORS middleware
+	corsRouter := handlers.CORS(
+		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+	)(router)
 
-	// Start the HTTP server
+	// Start the HTTP server with CORS wrapping the router
 	log.Println("Starting server on port", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, router); err != nil {
+	if err := http.ListenAndServe(":"+cfg.Port, corsRouter); err != nil {
 		log.Fatal("Server failed:", err)
 	}
 }
