@@ -33,7 +33,7 @@ import path from 'path-browserify';
 
 const { Content } = Layout;
 
-// Helper to split a path (e.g. "Operation/Reports") into segments
+// Helper: split a path into segments (e.g. "Operation/Reports")
 function getPathSegments(p) {
   if (!p) return [];
   return p.split('/').filter(Boolean);
@@ -65,20 +65,32 @@ const FileManager = () => {
   const navigate = useNavigate();
   const isRoot = currentPath === '';
 
-  // ===========================
-  // 1) FETCH ITEMS
-  // ===========================
+  // Default subfolders for root view.
+  const defaultFolders = [
+    { name: 'Operation', type: 'directory' },
+    { name: 'Research', type: 'directory' },
+    { name: 'Training', type: 'directory' }
+  ];
+
+  // 1) FETCH ITEMS (combine files and directories)
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const directoryParam = encodeURIComponent(currentPath);
-      const res = await axios.get(
-        `http://localhost:9090/list-resource?directory=${directoryParam}`,
-        { withCredentials: true }
-      );
-      setItems(res.data || []);
+      // When at root, you can simply use the default folders.
+      if (isRoot) {
+        setItems(defaultFolders);
+      } else {
+        const directoryParam = encodeURIComponent(currentPath);
+        const [filesRes, dirsRes] = await Promise.all([
+          axios.get(`/files?directory=${directoryParam}`, { withCredentials: true }),
+          axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true })
+        ]);
+        const files = filesRes.data || [];
+        const directories = dirsRes.data || [];
+        setItems([...directories, ...files]);
+      }
     } catch (error) {
-      console.error('Error fetching directory contents:', error);
+      console.error('Error fetching items:', error);
       message.error(
         error.response?.data?.error || 'Error fetching directory contents'
       );
@@ -92,14 +104,12 @@ const FileManager = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // Filter for search
+  // Use a safe check for item.name in case it's undefined.
   const filteredItems = items.filter((item) =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (item.name || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // ===========================
-  // 2) CREATE FOLDER
-  // ===========================
+  // 2) CREATE FOLDER using /directory/create
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -107,11 +117,8 @@ const FileManager = () => {
     }
     try {
       await axios.post(
-        '/create-directory',
-        {
-          name: newFolderName,
-          parent: currentPath
-        },
+        '/directory/create',
+        { name: newFolderName, parent: currentPath },
         { withCredentials: true }
       );
       message.success('Folder created successfully');
@@ -126,13 +133,9 @@ const FileManager = () => {
     }
   };
 
-  // ===========================
-  // 3) NAVIGATE
-  // ===========================
+  // 3) NAVIGATE FOLDERS
   const handleFolderClick = (folderName) => {
-    const newPath = isRoot
-      ? folderName
-      : path.join(currentPath, folderName);
+    const newPath = isRoot ? folderName : path.join(currentPath, folderName);
     setCurrentPath(newPath);
   };
 
@@ -142,18 +145,19 @@ const FileManager = () => {
     setCurrentPath(parent === '.' ? '' : parent);
   };
 
-  // Breadcrumb click
   const handleBreadcrumbClick = (index) => {
-    // If user clicks the nth breadcrumb, rebuild path from 0..n
     const segments = getPathSegments(currentPath);
     const newPath = segments.slice(0, index + 1).join('/');
     setCurrentPath(newPath);
   };
 
-  // ===========================
-  // 4) UPLOAD
-  // ===========================
+  // 4) UPLOAD FILE
   const handleOpenUploadModal = () => {
+    // Prevent upload if no folder is selected.
+    if (isRoot) {
+      message.error('Please select a folder before uploading a file.');
+      return;
+    }
     setUploadingFile(null);
     setUploadModalVisible(true);
   };
@@ -163,11 +167,9 @@ const FileManager = () => {
       message.error('Please select a file first');
       return;
     }
-    // Upload to currentPath
     const formData = new FormData();
     formData.append('file', uploadingFile);
     formData.append('directory', currentPath);
-
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
@@ -183,18 +185,20 @@ const FileManager = () => {
     }
   };
 
-  // ===========================
-  // 5) DELETE
-  // ===========================
+  // 5) DELETE: use different endpoints for file vs. directory
   const handleDelete = async (record) => {
     try {
-      await axios.delete('/delete-resource', {
-        data: {
-          resource_type: record.type,
-          name: path.join(currentPath, record.name)
-        },
-        withCredentials: true
-      });
+      if (record.type === 'directory') {
+        await axios.delete('/directory/delete', {
+          data: { name: path.join(currentPath, record.name) },
+          withCredentials: true
+        });
+      } else {
+        await axios.delete('/files', {
+          data: { filename: path.join(currentPath, record.name) },
+          withCredentials: true
+        });
+      }
       message.success(`${record.name} deleted successfully`);
       fetchItems();
     } catch (error) {
@@ -203,33 +207,30 @@ const FileManager = () => {
     }
   };
 
-  // ===========================
   // 6) DOWNLOAD
-  // ===========================
   const handleDownload = (fileName) => {
     const fullPath = path.join(currentPath, fileName);
     window.open(`/download?filename=${encodeURIComponent(fullPath)}`, '_blank');
   };
 
-  // ===========================
-  // 7) RENAME
-  // ===========================
+  // 7) RENAME: different endpoints based on type
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
       message.error('New name cannot be empty');
       return;
     }
     try {
-      await axios.put(
-        '/rename-resource',
-        {
-          resource_type: selectedItem.type,
+      if (selectedItem.type === 'directory') {
+        await axios.put('/directory/rename', {
           old_name: path.join(currentPath, selectedItem.name),
-          // Send only the new base name so that the backend will use the old directory.
           new_name: renameNewName
-        },
-        { withCredentials: true }
-      );
+        }, { withCredentials: true });
+      } else {
+        await axios.put('/files', {
+          old_filename: path.join(currentPath, selectedItem.name),
+          new_filename: renameNewName
+        }, { withCredentials: true });
+      }
       message.success('Item renamed successfully');
       setRenameModalVisible(false);
       setSelectedItem(null);
@@ -240,24 +241,24 @@ const FileManager = () => {
     }
   };
 
-  // ===========================
-  // 8) MOVE
-  // ===========================
+  // 8) MOVE: assume endpoints /directory/move and /files/move exist
   const handleMoveConfirm = async () => {
     if (!moveDestination.trim()) {
       message.error('Destination cannot be empty');
       return;
     }
     try {
-      await axios.put(
-        '/move-resource',
-        {
-          resource_type: selectedItem.type,
+      if (selectedItem.type === 'directory') {
+        await axios.put('/directory/move', {
           source: path.join(currentPath, selectedItem.name),
           destination: moveDestination
-        },
-        { withCredentials: true }
-      );
+        }, { withCredentials: true });
+      } else {
+        await axios.put('/files/move', {
+          source: path.join(currentPath, selectedItem.name),
+          destination: moveDestination
+        }, { withCredentials: true });
+      }
       message.success('Item moved successfully');
       setMoveModalVisible(false);
       setSelectedItem(null);
@@ -268,24 +269,24 @@ const FileManager = () => {
     }
   };
 
-  // ===========================
-  // 9) COPY
-  // ===========================
+  // 9) COPY: assume endpoints /directory/copy and /files/copy exist
   const handleCopyConfirm = async () => {
     if (!copyDestination.trim()) {
       message.error('Destination cannot be empty');
       return;
     }
     try {
-      await axios.post(
-        '/copy-resource',
-        {
-          file_name: path.join(currentPath, selectedItem.name),
-          new_name: '',
+      if (selectedItem.type === 'directory') {
+        await axios.post('/directory/copy', {
+          name: path.join(currentPath, selectedItem.name),
           destination: copyDestination
-        },
-        { withCredentials: true }
-      );
+        }, { withCredentials: true });
+      } else {
+        await axios.post('/files/copy', {
+          filename: path.join(currentPath, selectedItem.name),
+          destination: copyDestination
+        }, { withCredentials: true });
+      }
       message.success('Item copied successfully');
       setCopyModalVisible(false);
       setSelectedItem(null);
@@ -296,9 +297,7 @@ const FileManager = () => {
     }
   };
 
-  // ===========================
-  // 10) TABLE COLUMNS
-  // ===========================
+  // 10) TABLE COLUMNS for display
   const columns = [
     {
       title: 'Name',
@@ -371,9 +370,7 @@ const FileManager = () => {
               }}
             />
           </Tooltip>
-          <Tooltip
-            title={record.type === 'file' ? 'Delete File' : 'Delete Folder'}
-          >
+          <Tooltip title={record.type === 'file' ? 'Delete File' : 'Delete Folder'}>
             <Button
               danger
               icon={<DeleteOutlined />}
@@ -385,14 +382,13 @@ const FileManager = () => {
     }
   ];
 
-  // Build breadcrumb items
+  // Breadcrumb items
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
     <Breadcrumb.Item key="root">
       {isRoot ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
     </Breadcrumb.Item>
   ];
-
   segments.forEach((seg, index) => {
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
@@ -408,7 +404,6 @@ const FileManager = () => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
-        {/* Top row with back button, title, and upload */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin')}>
@@ -425,14 +420,12 @@ const FileManager = () => {
           </Col>
         </Row>
 
-        {/* Breadcrumb row */}
         <Row style={{ marginBottom: 16 }}>
           <Col>
             <Breadcrumb>{breadcrumbItems}</Breadcrumb>
           </Col>
         </Row>
 
-        {/* Create folder / Go Up / Search row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
             <Button icon={<ArrowUpOutlined />} disabled={isRoot} onClick={handleGoUp}>
@@ -454,7 +447,6 @@ const FileManager = () => {
           </Col>
         </Row>
 
-        {/* Main table */}
         <Table
           columns={columns}
           dataSource={filteredItems}
@@ -551,8 +543,7 @@ const FileManager = () => {
           <Upload
             beforeUpload={(file) => {
               setUploadingFile(file);
-              // Prevent antd's default upload
-              return false;
+              return false; // Prevent default upload
             }}
             maxCount={1}
           >

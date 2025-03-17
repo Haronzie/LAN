@@ -119,6 +119,20 @@ func (uc *UserController) AddUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// AdminExists handles GET /admin-exists
+func (uc *UserController) AdminExists(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Call the AdminExists method from your App
+	exists := uc.App.AdminExists()
+
+	// Return a JSON response
+	models.RespondJSON(w, http.StatusOK, map[string]bool{"exists": exists})
+}
+
 // UpdateUser allows an admin to update a user's information.
 func (uc *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	user, err := uc.App.GetUserFromSession(r)

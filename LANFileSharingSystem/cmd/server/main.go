@@ -67,6 +67,11 @@ func main() {
 	router.HandleFunc("/user/update", userController.UpdateUser).Methods("PUT")
 	router.HandleFunc("/user/delete", userController.DeleteUser).Methods("DELETE")
 	router.HandleFunc("/assign-admin", userController.AssignAdmin).Methods("POST")
+	router.HandleFunc("/delete-file", fileController.DeleteFile).Methods("DELETE")
+	// After initializing userController in main.go:
+	router.HandleFunc("/admin-exists", userController.AdminExists).Methods("GET")
+
+	router.HandleFunc("/directory/create-default", directoryController.CreateDefaultFolders).Methods("POST")
 
 	router.HandleFunc("/directory/create", directoryController.Create).Methods("POST")
 	router.HandleFunc("/directory/delete", directoryController.Delete).Methods("DELETE")

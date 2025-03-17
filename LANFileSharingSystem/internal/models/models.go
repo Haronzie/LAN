@@ -163,7 +163,6 @@ func (app *App) GetUserByUsername(username string) (User, error) {
 }
 
 // CreateUser inserts a new user into the database.
-// NOTE: Make sure you hash the password before calling CreateUser or do it here.
 func (app *App) CreateUser(user User) error {
 	_, err := app.DB.Exec(`
 		INSERT INTO users(username, email, password, role, active) 
@@ -390,82 +389,23 @@ func (app *App) ListDirectory(directory string) ([]map[string]interface{}, error
 	return []map[string]interface{}{}, nil
 }
 
-// -------------------------------------
-//  Database Table Creation (Dynamic)
-// -------------------------------------
-
-// CreateTables creates all necessary tables and indexes if they do not already exist.
-func (app *App) CreateTables() {
-	// Create users table.
-	userTable := `
-	CREATE TABLE IF NOT EXISTS users (
-		username TEXT PRIMARY KEY,
-		email TEXT,
-		password TEXT NOT NULL,
-		role TEXT NOT NULL,
-		active BOOLEAN NOT NULL DEFAULT false,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`
-	if _, err := app.DB.Exec(userTable); err != nil {
-		log.Fatalf("Error creating users table: %v", err)
+// DirectoryExists checks if a directory with the given name exists under the specified parent.
+func (app *App) DirectoryExists(name, parent string) (bool, error) {
+	var count int
+	query := "SELECT COUNT(*) FROM directories WHERE directory_name = $1 AND parent_directory = $2"
+	err := app.DB.QueryRow(query, name, parent).Scan(&count)
+	if err != nil {
+		return false, err
 	}
+	return count > 0, nil
+}
 
-	// Create index on users role.
-	if _, err := app.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);`); err != nil {
-		log.Fatalf("Error creating index on users table: %v", err)
-	}
-
-	// Create files table.
-	fileTable := `
-	CREATE TABLE IF NOT EXISTS files (
-		file_name TEXT PRIMARY KEY,
-		size BIGINT,
-		content_type TEXT,
-		uploader TEXT
-	);`
-	if _, err := app.DB.Exec(fileTable); err != nil {
-		log.Fatalf("Error creating files table: %v", err)
-	}
-
-	// Create index on files uploader.
-	if _, err := app.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);`); err != nil {
-		log.Fatalf("Error creating index on files table: %v", err)
-	}
-
-	// Create directories table.
-	directoryTable := `
-	CREATE TABLE IF NOT EXISTS directories (
-		directory_name TEXT PRIMARY KEY,
-		parent_directory TEXT,
-		created_by TEXT,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`
-	if _, err := app.DB.Exec(directoryTable); err != nil {
-		log.Fatalf("Error creating directories table: %v", err)
-	}
-
-	// Create index on directories parent_directory.
-	if _, err := app.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_directories_parent ON directories (parent_directory);`); err != nil {
-		log.Fatalf("Error creating index on directories table: %v", err)
-	}
-
-	// Create activity_log table.
-	activityTable := `
-	CREATE TABLE IF NOT EXISTS activity_log (
-		id SERIAL PRIMARY KEY,
-		timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		event TEXT NOT NULL
-	);`
-	if _, err := app.DB.Exec(activityTable); err != nil {
-		log.Fatalf("Error creating activity_log table: %v", err)
-	}
-
-	// Create index on activity_log timestamp.
-	if _, err := app.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_log (timestamp);`); err != nil {
-		log.Fatalf("Error creating index on activity_log table: %v", err)
-	}
-
-	log.Println("All necessary tables and indexes created successfully.")
+func (app *App) RenameFileRecord(oldFilename, newFilename string) error {
+	query := "UPDATE files SET file_name = $1 WHERE file_name = $2"
+	_, err := app.DB.Exec(query, newFilename, oldFilename)
+	return err
+}
+func (app *App) DeleteFileRecord(fileName string) error {
+	_, err := app.DB.Exec("DELETE FROM files WHERE file_name = $1", fileName)
+	return err
 }

@@ -97,6 +97,103 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// RenameFile renames a file both in local storage and in the database.
+func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	var req struct {
+		OldFilename string `json:"old_filename"`
+		NewFilename string `json:"new_filename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	req.OldFilename = strings.TrimSpace(req.OldFilename)
+	req.NewFilename = strings.TrimSpace(req.NewFilename)
+	if req.OldFilename == "" || req.NewFilename == "" {
+		models.RespondError(w, http.StatusBadRequest, "Old and new filenames are required")
+		return
+	}
+
+	// Build paths relative to your "uploads" directory.
+	oldPath := filepath.Join("uploads", req.OldFilename)
+	newPath := filepath.Join("uploads", req.NewFilename)
+
+	// Rename file in the file system.
+	if err := os.Rename(oldPath, newPath); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error renaming file in storage")
+		return
+	}
+
+	// Update the file record in the database.
+	// (Implement fc.App.RenameFileRecord in your models package.)
+	if err := fc.App.RenameFileRecord(req.OldFilename, req.NewFilename); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error updating file record")
+		return
+	}
+
+	fc.App.LogActivity(fmt.Sprintf("User '%s' renamed file from '%s' to '%s'.", user.Username, req.OldFilename, req.NewFilename))
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("File renamed from '%s' to '%s' successfully", req.OldFilename, req.NewFilename),
+	})
+}
+
+// DeleteFile handles file deletion requests.
+// It deletes the file from local storage and then removes its record from the database.
+func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	var req struct {
+		Filename string `json:"filename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	req.Filename = strings.TrimSpace(req.Filename)
+	if req.Filename == "" {
+		models.RespondError(w, http.StatusBadRequest, "Filename cannot be empty")
+		return
+	}
+
+	// Delete file from local storage.
+	filePath := filepath.Join("uploads", req.Filename)
+	if err := os.Remove(filePath); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error deleting file from local storage")
+		return
+	}
+
+	// Delete the file record from the database.
+	if err := fc.App.DeleteFileRecord(req.Filename); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error deleting file record from database")
+		return
+	}
+
+	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file '%s'.", user.Username, req.Filename))
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("File '%s' deleted successfully", req.Filename),
+	})
+}
+
 // Download handles file download requests.
 func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -135,6 +232,87 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, f)
 
 	fc.App.LogActivity(fmt.Sprintf("User downloaded file '%s'.", fileName))
+}
+
+// CopyFile creates a copy of an existing file in the storage and inserts a new record in the database.
+func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	var req struct {
+		SourceFile  string `json:"source_file"`
+		NewFileName string `json:"new_file_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	req.SourceFile = strings.TrimSpace(req.SourceFile)
+	req.NewFileName = strings.TrimSpace(req.NewFileName)
+	if req.SourceFile == "" || req.NewFileName == "" {
+		models.RespondError(w, http.StatusBadRequest, "Source file and new file name are required")
+		return
+	}
+
+	srcPath := filepath.Join("uploads", req.SourceFile)
+	dstPath := filepath.Join("uploads", req.NewFileName)
+
+	// Open the source file.
+	in, err := os.Open(srcPath)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error opening source file")
+		return
+	}
+	defer in.Close()
+
+	// Create the destination file.
+	out, err := os.Create(dstPath)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error creating destination file")
+		return
+	}
+	defer out.Close()
+
+	if _, err = io.Copy(out, in); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error copying file content")
+		return
+	}
+
+	// Retrieve source file info for metadata.
+	fileInfo, err := os.Stat(srcPath)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving file info")
+		return
+	}
+
+	// Prepare new file record. Optionally, you can copy more metadata from the source record.
+	newRecord := models.FileRecord{
+		FileName:    req.NewFileName,
+		Size:        fileInfo.Size(),
+		ContentType: "application/octet-stream",
+		Uploader:    user.Username,
+	}
+	if oldRecord, err := fc.App.GetFileRecord(req.SourceFile); err == nil {
+		newRecord.ContentType = oldRecord.ContentType
+	}
+
+	if err := fc.App.CreateFileRecord(newRecord); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error creating file record for copied file")
+		return
+	}
+
+	fc.App.LogActivity(fmt.Sprintf("User '%s' copied file from '%s' to '%s'.", user.Username, req.SourceFile, req.NewFileName))
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("File copied to '%s' successfully", req.NewFileName),
+	})
 }
 
 // ListFiles returns a list of files.

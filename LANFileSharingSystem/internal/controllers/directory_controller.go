@@ -22,6 +22,8 @@ func NewDirectoryController(app *models.App) *DirectoryController {
 }
 
 // Create handles directory creation.
+// It checks both the file system and the database to enforce that a directory
+// with the same name under the same parent does not already exist.
 func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -43,7 +45,7 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Trim whitespace
+	// Trim whitespace.
 	req.Name = strings.TrimSpace(req.Name)
 	req.Parent = strings.TrimSpace(req.Parent)
 	if req.Name == "" {
@@ -51,6 +53,19 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check in the database if a directory with the same name exists under the same parent.
+	exists, err := dc.App.DirectoryExists(req.Name, req.Parent)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error checking directory existence in database")
+		return
+	}
+	if exists {
+		models.RespondError(w, http.StatusConflict,
+			fmt.Sprintf("Directory '%s' already exists under parent '%s'", req.Name, req.Parent))
+		return
+	}
+
+	// Build the path for the new directory.
 	basePath := "uploads"
 	var resourcePath string
 	if req.Parent != "" {
@@ -59,9 +74,8 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 		resourcePath = filepath.Join(basePath, req.Name)
 	}
 
-	// --- Check if the directory path already exists ---
+	// Check on disk if the directory already exists.
 	if info, err := os.Stat(resourcePath); err == nil {
-		// err == nil => the path already exists on disk
 		if info.IsDir() {
 			models.RespondError(w, http.StatusConflict,
 				fmt.Sprintf("Directory '%s' already exists under parent '%s'", req.Name, req.Parent))
@@ -72,29 +86,68 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if !os.IsNotExist(err) {
-		// If we get an error that's not "does not exist," it's a different I/O error
 		models.RespondError(w, http.StatusInternalServerError,
 			fmt.Sprintf("Error checking directory path: %v", err))
 		return
 	}
 
-	// --- If we reach here, the path does NOT exist; create it ---
+	// Create the directory on disk.
 	if err := os.MkdirAll(resourcePath, 0755); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error creating directory on disk")
 		return
 	}
 
-	// Insert a record into your 'directories' table
+	// Insert a record into your 'directories' table.
 	if err := dc.App.CreateDirectoryRecord(req.Name, req.Parent, user.Username); err != nil {
-		// If your DB schema requires unique (name + parent), you can catch DB constraint errors here
 		models.RespondError(w, http.StatusInternalServerError, "Error saving directory record")
 		return
 	}
 
-	// Log the activity and respond success
 	dc.App.LogActivity(fmt.Sprintf("User '%s' created directory '%s' (parent='%s').", user.Username, req.Name, req.Parent))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": "Directory created successfully",
+	})
+}
+
+// CreateDefaultFolders creates three default folders ("Operation", "Research", and "Training")
+// in the uploads directory (at the root) and inserts records for them in the database.
+func (dc *DirectoryController) CreateDefaultFolders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	// Optionally, require authentication
+	user, err := dc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	basePath := "uploads"
+	// These folders will be created in the root (i.e. no parent)
+	defaultFolders := []string{"Operation", "Research", "Training"}
+
+	for _, folderName := range defaultFolders {
+		folderPath := filepath.Join(basePath, folderName)
+		// Check if folder exists on disk; if not, create it.
+		if _, err := os.Stat(folderPath); os.IsNotExist(err) {
+			if err := os.MkdirAll(folderPath, 0755); err != nil {
+				models.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Error creating folder: %s", folderName))
+				return
+			}
+			// Insert a record in the database.
+			// Here the parent is empty (i.e. root level).
+			if err := dc.App.CreateDirectoryRecord(folderName, "", user.Username); err != nil {
+				models.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Error saving folder record: %s", folderName))
+				return
+			}
+		}
+	}
+
+	dc.App.LogActivity(fmt.Sprintf("User '%s' created default folders: Operation, Research, Training.", user.Username))
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "Default folders (Operation, Research, Training) created successfully",
 	})
 }
 
@@ -127,7 +180,7 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 	basePath := "uploads"
 	resourcePath := filepath.Join(basePath, req.Name)
 	if err := os.RemoveAll(resourcePath); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory")
+		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory on disk")
 		return
 	}
 
@@ -143,6 +196,8 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // Rename handles renaming of directories.
+// It renames the folder on disk and updates the corresponding record in the database.
+// It also checks that the new name does not conflict with an existing directory under the same parent.
 func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -158,6 +213,7 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		OldName string `json:"old_name"`
 		NewName string `json:"new_name"`
+		Parent  string `json:"parent"` // Parent directory context.
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
@@ -165,16 +221,29 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 	}
 	req.OldName = strings.TrimSpace(req.OldName)
 	req.NewName = strings.TrimSpace(req.NewName)
+	req.Parent = strings.TrimSpace(req.Parent)
 	if req.OldName == "" || req.NewName == "" {
 		models.RespondError(w, http.StatusBadRequest, "Old and new directory names are required")
 		return
 	}
 
+	// Check if a directory with the new name already exists under the same parent.
+	exists, err := dc.App.DirectoryExists(req.NewName, req.Parent)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error checking directory existence in database")
+		return
+	}
+	if exists {
+		models.RespondError(w, http.StatusConflict,
+			fmt.Sprintf("Directory '%s' already exists under parent '%s'", req.NewName, req.Parent))
+		return
+	}
+
 	basePath := "uploads"
-	oldPath := filepath.Join(basePath, req.OldName)
-	newPath := filepath.Join(basePath, req.NewName)
+	oldPath := filepath.Join(basePath, req.Parent, req.OldName)
+	newPath := filepath.Join(basePath, req.Parent, req.NewName)
 	if err := os.Rename(oldPath, newPath); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error renaming directory")
+		models.RespondError(w, http.StatusInternalServerError, "Error renaming directory on disk")
 		return
 	}
 
@@ -183,7 +252,7 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' renamed directory from '%s' to '%s'.", user.Username, req.OldName, req.NewName))
+	dc.App.LogActivity(fmt.Sprintf("User '%s' renamed directory from '%s' to '%s' in parent '%s'.", user.Username, req.OldName, req.NewName, req.Parent))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Directory renamed from '%s' to '%s' successfully", req.OldName, req.NewName),
 	})
