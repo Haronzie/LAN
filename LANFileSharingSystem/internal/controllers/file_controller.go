@@ -23,6 +23,8 @@ func NewFileController(app *models.App) *FileController {
 }
 
 // Upload handles file uploads.
+// In your file_controller.go file
+
 func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -66,6 +68,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rawFileName := handler.Filename
+	// Construct the destination path.
 	dstPath := filepath.Join(dstDir, rawFileName)
 	dst, err := os.Create(dstPath)
 	if err != nil {
@@ -79,8 +82,11 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Save file metadata including the relative file path.
+	// Here, dstPath is relative to your project's working directory.
 	fr := models.FileRecord{
 		FileName:    rawFileName,
+		FilePath:    dstPath, // Store the file path (or you can store a relative path, e.g., targetDir + "/" + rawFileName)
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
 		Uploader:    user.Username,

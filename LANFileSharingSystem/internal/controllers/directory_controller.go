@@ -135,6 +135,10 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory record from database")
 		return
 	}
+	if err := dc.App.DeleteFilesInFolder(resourcePath); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error deleting file records in the folder")
+		return
+	}
 
 	dc.App.LogActivity(fmt.Sprintf("User '%s' deleted directory '%s' (parent: '%s').", user.Username, req.Name, req.Parent))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
@@ -198,6 +202,12 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 	// Update the directory record in the database.
 	if err := dc.App.UpdateDirectoryRecord(req.OldName, req.NewName); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error updating directory record in database")
+		return
+	}
+
+	// Now update the file records that reference the old folder path.
+	if err := dc.App.UpdateFilePathsForRenamedFolder(oldPath, newPath); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error updating file paths in database")
 		return
 	}
 

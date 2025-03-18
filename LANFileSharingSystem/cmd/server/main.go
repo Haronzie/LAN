@@ -37,11 +37,6 @@ func main() {
 	log.Println("Successfully connected to database!")
 
 	// AUTOMATICALLY RUN MIGRATIONS HERE
-	// ---------------------------------
-	// 1. Specify the file:// path to your migrations folder.
-	// 2. Create the migrate object.
-	// 3. Always run m.Up() on startup.
-	// 4. If there's nothing to migrate, migrate.ErrNoChange is safe to ignore.
 
 	migrationsPath := "file://../../internal/migrations"
 	m, err := migrate.New(migrationsPath, cfg.DatabaseURL)
@@ -87,7 +82,6 @@ func main() {
 	router.HandleFunc("/files", fileController.ListFiles).Methods("GET")
 	router.HandleFunc("/share", fileController.ShareFile).Methods("POST")
 	router.HandleFunc("/download-share", fileController.DownloadShare).Methods("GET")
-	router.HandleFunc("/user/profile", userController.Profile).Methods("GET", "PUT")
 	router.HandleFunc("/users", userController.ListUsers).Methods("GET")
 	router.HandleFunc("/user/add", userController.AddUser).Methods("POST")
 	router.HandleFunc("/user/update", userController.UpdateUser).Methods("PUT")

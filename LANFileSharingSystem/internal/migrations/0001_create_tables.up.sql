@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,
+    
     password TEXT NOT NULL,
     role TEXT NOT NULL,
     active BOOLEAN NOT NULL DEFAULT false,
@@ -10,10 +11,12 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 
 CREATE TABLE IF NOT EXISTS files (
     file_name TEXT PRIMARY KEY,
+    file_path TEXT,
     size BIGINT,
     content_type TEXT,
     uploader TEXT
 );
+
 CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);
 
 CREATE TABLE IF NOT EXISTS directories (

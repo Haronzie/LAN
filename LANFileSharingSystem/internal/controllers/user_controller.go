@@ -19,56 +19,6 @@ func NewUserController(app *models.App) *UserController {
 	return &UserController{App: app}
 }
 
-// Profile handles retrieving and updating the authenticated user's profile.
-func (uc *UserController) Profile(w http.ResponseWriter, r *http.Request) {
-	user, err := uc.App.GetUserFromSession(r)
-	if err != nil {
-		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
-		return
-	}
-
-	switch r.Method {
-	case http.MethodGet:
-		// Return the user record as JSON.
-		models.RespondJSON(w, http.StatusOK, user)
-
-	case http.MethodPut:
-		// No longer expect an email field in the JSON payload.
-		var req struct {
-			Username string `json:"username"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			models.RespondError(w, http.StatusBadRequest, "Invalid request body")
-			return
-		}
-
-		req.Username = strings.TrimSpace(req.Username)
-		if req.Username == "" {
-			models.RespondError(w, http.StatusBadRequest, "Username cannot be empty")
-			return
-		}
-
-		// UpdateUserProfile now only updates the username (remove email references).
-		if err := uc.App.UpdateUserProfile(user.Username, req.Username); err != nil {
-			models.RespondError(w, http.StatusInternalServerError, "Error updating profile")
-			return
-		}
-
-		// Update session username to reflect changes.
-		session, _ := uc.App.Store.Get(r, "session")
-		session.Values["username"] = req.Username
-		session.Save(r, w)
-
-		models.RespondJSON(w, http.StatusOK, map[string]string{
-			"message":  "Profile updated successfully",
-			"username": req.Username,
-		})
-
-	default:
-		models.RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
-	}
-}
-
 // ListUsers returns a list of all users. Only admins can access this.
 func (uc *UserController) ListUsers(w http.ResponseWriter, r *http.Request) {
 	user, err := uc.App.GetUserFromSession(r)
@@ -126,7 +76,7 @@ func (uc *UserController) AddUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// AdminExists handles GET /admin-exists
+// AdminExists handles GET /admin-exists.
 func (uc *UserController) AdminExists(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")

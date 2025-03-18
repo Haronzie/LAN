@@ -49,6 +49,7 @@ type User struct {
 // FileRecord represents a file stored in the system.
 type FileRecord struct {
 	FileName    string `json:"file_name"`
+	FilePath    string `json:"file_path"` // New field to store the file's relative path
 	Size        int64  `json:"size"`
 	ContentType string `json:"content_type"`
 	Uploader    string `json:"uploader"`
@@ -316,10 +317,10 @@ func (app *App) ListActivities() ([]map[string]interface{}, error) {
 
 func (app *App) CreateFileRecord(fr FileRecord) error {
 	_, err := app.DB.Exec(`
-        INSERT INTO files(file_name, size, content_type, uploader)
-        VALUES($1, $2, $3, $4)
+        INSERT INTO files(file_name, file_path, size, content_type, uploader) 
+        VALUES($1, $2, $3, $4, $5)
     `,
-		fr.FileName, fr.Size, fr.ContentType, fr.Uploader)
+		fr.FileName, fr.FilePath, fr.Size, fr.ContentType, fr.Uploader)
 	return err
 }
 
@@ -420,5 +421,26 @@ func (app *App) RenameFileRecord(oldFilename, newFilename string) error {
 
 func (app *App) DeleteFileRecord(fileName string) error {
 	_, err := app.DB.Exec("DELETE FROM files WHERE file_name = $1", fileName)
+	return err
+}
+
+// UpdateFilePathsForRenamedFolder updates the file paths of all files
+// whose file_path starts with oldFolderPath by replacing that prefix with newFolderPath.
+func (app *App) UpdateFilePathsForRenamedFolder(oldFolderPath, newFolderPath string) error {
+	query := `
+        UPDATE files
+        SET file_path = regexp_replace(file_path, $1, $2)
+        WHERE file_path LIKE $3
+    `
+	// Create a pattern that matches the beginning of the file_path.
+	pattern := "^" + oldFolderPath
+	// Build the LIKE pattern (files whose file_path starts with oldFolderPath).
+	likePattern := oldFolderPath + "%"
+	_, err := app.DB.Exec(query, pattern, newFolderPath, likePattern)
+	return err
+}
+func (app *App) DeleteFilesInFolder(folderPath string) error {
+	pattern := folderPath + "%" // All files whose path begins with folderPath
+	_, err := app.DB.Exec("DELETE FROM files WHERE file_path LIKE $1", pattern)
 	return err
 }
