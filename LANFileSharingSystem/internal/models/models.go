@@ -36,10 +36,9 @@ func NewApp(db *sql.DB, store *sessions.CookieStore) *App {
 //  Data Structures
 // -------------------------------------
 
-// User represents an application user.
+// User represents an application user (no email field).
 type User struct {
 	Username  string    `json:"username"`
-	Email     string    `json:"email"`
 	Password  string    `json:"password"`
 	Role      string    `json:"role"`
 	Active    bool      `json:"active"`
@@ -59,25 +58,21 @@ type FileRecord struct {
 //  Request Structs (for user_controller.go)
 // -------------------------------------
 
-// AddUserRequest is used when an admin creates a new user.
 type AddUserRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
-// UpdateUserRequest is used when an admin updates an existing user.
 type UpdateUserRequest struct {
 	OldUsername string `json:"old_username"`
 	NewUsername string `json:"new_username"`
 	NewPassword string `json:"new_password"`
 }
 
-// DeleteUserRequest is used when an admin deletes a user.
 type DeleteUserRequest struct {
 	Username string `json:"username"`
 }
 
-// AssignAdminRequest is used when an admin promotes a user to admin.
 type AssignAdminRequest struct {
 	Username string `json:"username"`
 }
@@ -86,14 +81,12 @@ type AssignAdminRequest struct {
 //  JSON Response Helpers
 // -------------------------------------
 
-// RespondJSON sends a JSON response.
 func RespondJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(payload)
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
-// RespondError sends a JSON error response.
 func RespondError(w http.ResponseWriter, code int, message string) {
 	RespondJSON(w, code, map[string]string{"error": message})
 }
@@ -102,18 +95,15 @@ func RespondError(w http.ResponseWriter, code int, message string) {
 //  Password & Session Helpers
 // -------------------------------------
 
-// HashPassword returns the bcrypt hash of the password.
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err
 }
 
-// CheckPasswordHash compares a plaintext password with its hashed version.
 func CheckPasswordHash(password, hash string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-// GenerateToken creates a random token for various uses.
 func (app *App) GenerateToken() (string, error) {
 	b := make([]byte, 16) // 128-bit token
 	if _, err := rand.Read(b); err != nil {
@@ -122,7 +112,6 @@ func (app *App) GenerateToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// DefaultSessionOptions returns default session options.
 func (app *App) DefaultSessionOptions() *sessions.Options {
 	return &sessions.Options{
 		Path:     "/",
@@ -149,36 +138,47 @@ func (app *App) GetUserFromSession(r *http.Request) (User, error) {
 //  User / Admin Operations
 // -------------------------------------
 
-// GetUserByUsername retrieves a user by username from the database.
+// GetUserByUsername retrieves a user by username from the database (no email column).
 func (app *App) GetUserByUsername(username string) (User, error) {
 	row := app.DB.QueryRow(`
-		SELECT username, email, password, role, active, created_at, updated_at 
-		FROM users 
-		WHERE username = $1
-	`, username)
+        SELECT username, password, role, active, created_at, updated_at
+        FROM users
+        WHERE username = $1
+    `, username)
 
 	var user User
-	err := row.Scan(&user.Username, &user.Email, &user.Password, &user.Role, &user.Active, &user.CreatedAt, &user.UpdatedAt)
+	err := row.Scan(
+		&user.Username,
+		&user.Password,
+		&user.Role,
+		&user.Active,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
 	return user, err
 }
 
-// CreateUser inserts a new user into the database.
+// CreateUser inserts a new user into the database (no email column).
 func (app *App) CreateUser(user User) error {
 	_, err := app.DB.Exec(`
-		INSERT INTO users(username, email, password, role, active) 
-		VALUES($1, $2, $3, $4, $5)
-	`,
-		user.Username, user.Email, user.Password, user.Role, user.Active)
+        INSERT INTO users(username, password, role, active)
+        VALUES($1, $2, $3, $4)
+    `,
+		user.Username,
+		user.Password,
+		user.Role,
+		user.Active,
+	)
 	return err
 }
 
-// ListUsers returns all users from the database.
+// ListUsers returns all users from the database (no email column).
 func (app *App) ListUsers() ([]User, error) {
 	rows, err := app.DB.Query(`
-		SELECT username, email, password, role, active, created_at, updated_at
-		FROM users
-		ORDER BY username
-	`)
+        SELECT username, password, role, active, created_at, updated_at
+        FROM users
+        ORDER BY username
+    `)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,14 @@ func (app *App) ListUsers() ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.Username, &u.Email, &u.Password, &u.Role, &u.Active, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(
+			&u.Username,
+			&u.Password,
+			&u.Role,
+			&u.Active,
+			&u.CreatedAt,
+			&u.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		users = append(users, u)
@@ -205,13 +212,13 @@ func (app *App) AdminExists() bool {
 	return count > 0
 }
 
-// UpdateUserProfile updates a user's username and email.
-func (app *App) UpdateUserProfile(oldUsername, newUsername, newEmail string) error {
+// UpdateUserProfile updates only the username (no email).
+func (app *App) UpdateUserProfile(oldUsername, newUsername string) error {
 	_, err := app.DB.Exec(`
-		UPDATE users 
-		SET username = $1, email = $2, updated_at = CURRENT_TIMESTAMP 
-		WHERE username = $3
-	`, newUsername, newEmail, oldUsername)
+        UPDATE users
+        SET username = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE username = $2
+    `, newUsername, oldUsername)
 	return err
 }
 
@@ -222,19 +229,19 @@ func (app *App) UpdateUser(oldUsername, newUsername, newPassword string) error {
 		return err
 	}
 	_, err = app.DB.Exec(`
-		UPDATE users 
-		SET username = $1, password = $2, updated_at = CURRENT_TIMESTAMP 
-		WHERE username = $3
-	`, newUsername, hashedPass, oldUsername)
+        UPDATE users
+        SET username = $1, password = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE username = $3
+    `, newUsername, hashedPass, oldUsername)
 	return err
 }
 
 // DeleteUser removes a user from the database.
 func (app *App) DeleteUser(username string) error {
 	res, err := app.DB.Exec(`
-		DELETE FROM users 
-		WHERE username = $1
-	`, username)
+        DELETE FROM users
+        WHERE username = $1
+    `, username)
 	if err != nil {
 		return err
 	}
@@ -251,10 +258,10 @@ func (app *App) DeleteUser(username string) error {
 // AssignAdmin promotes a user to an admin role.
 func (app *App) AssignAdmin(username string) error {
 	_, err := app.DB.Exec(`
-		UPDATE users 
-		SET role = 'admin', updated_at = CURRENT_TIMESTAMP 
-		WHERE username = $1
-	`, username)
+        UPDATE users
+        SET role = 'admin', updated_at = CURRENT_TIMESTAMP
+        WHERE username = $1
+    `, username)
 	return err
 }
 
@@ -262,25 +269,23 @@ func (app *App) AssignAdmin(username string) error {
 //  Activity Logging
 // -------------------------------------
 
-// LogActivity records an event in the activity log.
 func (app *App) LogActivity(event string) {
 	_, err := app.DB.Exec(`
-		INSERT INTO activity_log(event, timestamp) 
-		VALUES($1, CURRENT_TIMESTAMP)
-	`, event)
+        INSERT INTO activity_log(event, timestamp)
+        VALUES($1, CURRENT_TIMESTAMP)
+    `, event)
 	if err != nil {
 		log.Println("Error logging activity:", err)
 	}
 }
 
-// ListActivities retrieves the most recent activity logs.
 func (app *App) ListActivities() ([]map[string]interface{}, error) {
 	rows, err := app.DB.Query(`
-		SELECT id, timestamp, event 
-		FROM activity_log 
-		ORDER BY timestamp DESC 
-		LIMIT 50
-	`)
+        SELECT id, timestamp, event
+        FROM activity_log
+        ORDER BY timestamp DESC
+        LIMIT 50
+    `)
 	if err != nil {
 		return nil, err
 	}
@@ -309,34 +314,31 @@ func (app *App) ListActivities() ([]map[string]interface{}, error) {
 //  File & Directory Operations
 // -------------------------------------
 
-// CreateFileRecord creates a new record for a file in the database.
 func (app *App) CreateFileRecord(fr FileRecord) error {
 	_, err := app.DB.Exec(`
-		INSERT INTO files(file_name, size, content_type, uploader) 
-		VALUES($1, $2, $3, $4)
-	`,
+        INSERT INTO files(file_name, size, content_type, uploader)
+        VALUES($1, $2, $3, $4)
+    `,
 		fr.FileName, fr.Size, fr.ContentType, fr.Uploader)
 	return err
 }
 
-// GetFileRecord retrieves a file record from the database.
 func (app *App) GetFileRecord(fileName string) (FileRecord, error) {
 	row := app.DB.QueryRow(`
-		SELECT file_name, size, content_type, uploader 
-		FROM files 
-		WHERE file_name = $1
-	`, fileName)
+        SELECT file_name, size, content_type, uploader
+        FROM files
+        WHERE file_name = $1
+    `, fileName)
 	var fr FileRecord
 	err := row.Scan(&fr.FileName, &fr.Size, &fr.ContentType, &fr.Uploader)
 	return fr, err
 }
 
-// ListFiles returns all file records from the database.
 func (app *App) ListFiles() ([]FileRecord, error) {
 	rows, err := app.DB.Query(`
-		SELECT file_name, size, content_type, uploader 
-		FROM files
-	`)
+        SELECT file_name, size, content_type, uploader
+        FROM files
+    `)
 	if err != nil {
 		return nil, err
 	}
@@ -353,46 +355,56 @@ func (app *App) ListFiles() ([]FileRecord, error) {
 	return files, nil
 }
 
-// CreateDirectoryRecord creates a record for a new directory.
 func (app *App) CreateDirectoryRecord(name, parent, createdBy string) error {
 	_, err := app.DB.Exec(`
-		INSERT INTO directories(directory_name, parent_directory, created_by, created_at) 
-		VALUES($1, $2, $3, CURRENT_TIMESTAMP)
-	`, name, parent, createdBy)
+        INSERT INTO directories(directory_name, parent_directory, created_by, created_at)
+        VALUES($1, $2, $3, CURRENT_TIMESTAMP)
+    `, name, parent, createdBy)
 	return err
 }
 
-// DeleteDirectoryRecord removes a directory record from the database.
 func (app *App) DeleteDirectoryRecord(name string) error {
 	_, err := app.DB.Exec(`
-		DELETE FROM directories 
-		WHERE directory_name = $1
-	`, name)
+        DELETE FROM directories
+        WHERE directory_name = $1
+    `, name)
 	return err
 }
 
-// UpdateDirectoryRecord updates a directory record (e.g., when renaming).
 func (app *App) UpdateDirectoryRecord(oldName, newName string) error {
+	// 1. Rename the directory record itself
 	_, err := app.DB.Exec(`
-		UPDATE directories 
-		SET directory_name = $1, updated_at = CURRENT_TIMESTAMP 
-		WHERE directory_name = $2
-	`, newName, oldName)
+        UPDATE directories 
+        SET directory_name = $1, updated_at = CURRENT_TIMESTAMP 
+        WHERE directory_name = $2
+    `, newName, oldName)
+	if err != nil {
+		return err
+	}
+
+	// 2. Update any subfolders whose parent_directory = oldName
+	_, err = app.DB.Exec(`
+        UPDATE directories
+        SET parent_directory = $1
+        WHERE parent_directory = $2
+    `, newName, oldName)
 	return err
 }
 
-// ListDirectory returns the contents of a directory.
-// This is a placeholder; you can implement this based on your application logic.
+// ListDirectory is a placeholder that can be implemented as needed.
 func (app *App) ListDirectory(directory string) ([]map[string]interface{}, error) {
-	// For example, you might query the file system or database.
-	// Here we return an empty list.
+	// Return an empty list or implement your logic (DB queries, file system, etc.).
 	return []map[string]interface{}{}, nil
 }
 
 // DirectoryExists checks if a directory with the given name exists under the specified parent.
 func (app *App) DirectoryExists(name, parent string) (bool, error) {
 	var count int
-	query := "SELECT COUNT(*) FROM directories WHERE directory_name = $1 AND parent_directory = $2"
+	query := `
+        SELECT COUNT(*)
+        FROM directories
+        WHERE directory_name = $1 AND parent_directory = $2
+    `
 	err := app.DB.QueryRow(query, name, parent).Scan(&count)
 	if err != nil {
 		return false, err
@@ -405,6 +417,7 @@ func (app *App) RenameFileRecord(oldFilename, newFilename string) error {
 	_, err := app.DB.Exec(query, newFilename, oldFilename)
 	return err
 }
+
 func (app *App) DeleteFileRecord(fileName string) error {
 	_, err := app.DB.Exec("DELETE FROM files WHERE file_name = $1", fileName)
 	return err
