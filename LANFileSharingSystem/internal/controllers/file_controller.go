@@ -12,19 +12,15 @@ import (
 	"LANFileSharingSystem/internal/models"
 )
 
-// FileController handles endpoints related to file operations.
 type FileController struct {
 	App *models.App
 }
 
-// NewFileController creates a new FileController.
 func NewFileController(app *models.App) *FileController {
 	return &FileController{App: app}
 }
 
 // Upload handles file uploads.
-// In your file_controller.go file
-
 func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -58,19 +54,25 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// We'll store files in "uploads/<targetDir>/<filename>" on disk,
+	// but only store "<targetDir>/<filename>" in the DB.
 	uploadBase := "uploads"
-	dstDir := filepath.Join(uploadBase, targetDir)
-	if _, err := os.Stat(dstDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(dstDir, 0755); err != nil {
-			models.RespondError(w, http.StatusInternalServerError, "Error creating target directory")
-			return
-		}
+	rawFileName := handler.Filename
+
+	// Build a relative path to store in the DB, e.g. "RootFolder/myFile.jpg"
+	relativePath := filepath.Join(targetDir, rawFileName)
+
+	// Build the actual disk path, e.g. "uploads/RootFolder/myFile.jpg"
+	fullDiskPath := filepath.Join(uploadBase, relativePath)
+
+	// Ensure the directory exists.
+	if err := os.MkdirAll(filepath.Dir(fullDiskPath), 0755); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error creating target directory")
+		return
 	}
 
-	rawFileName := handler.Filename
-	// Construct the destination path.
-	dstPath := filepath.Join(dstDir, rawFileName)
-	dst, err := os.Create(dstPath)
+	// Create the file on disk.
+	dst, err := os.Create(fullDiskPath)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving file")
 		return
@@ -82,11 +84,10 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save file metadata including the relative file path.
-	// Here, dstPath is relative to your project's working directory.
+	// Save file metadata, storing only the relative path in DB.
 	fr := models.FileRecord{
-		FileName:    rawFileName,
-		FilePath:    dstPath, // Store the file path (or you can store a relative path, e.g., targetDir + "/" + rawFileName)
+		FileName:    rawFileName,  // e.g. "myFile.jpg"
+		FilePath:    relativePath, // e.g. "RootFolder/myFile.jpg"
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
 		Uploader:    user.Username,
@@ -131,19 +132,26 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build paths relative to your "uploads" directory.
-	oldPath := filepath.Join("uploads", req.OldFilename)
-	newPath := filepath.Join("uploads", req.NewFilename)
+	// 1) Get the old file record to see the old path
+	oldFR, err := fc.App.GetFileRecord(req.OldFilename)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "Old file not found in database")
+		return
+	}
 
-	// Rename file in the file system.
-	if err := os.Rename(oldPath, newPath); err != nil {
+	// 2) Build the new relative path (keep the same folder, just change the file name)
+	oldFullPath := filepath.Join("uploads", oldFR.FilePath)
+	newRelativePath := filepath.Join(filepath.Dir(oldFR.FilePath), req.NewFilename)
+	newFullPath := filepath.Join("uploads", newRelativePath)
+
+	// 3) Rename on disk
+	if err := os.Rename(oldFullPath, newFullPath); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error renaming file in storage")
 		return
 	}
 
-	// Update the file record in the database.
-	// (Implement fc.App.RenameFileRecord in your models package.)
-	if err := fc.App.RenameFileRecord(req.OldFilename, req.NewFilename); err != nil {
+	// 4) Update DB record to reflect new file_name and new file_path
+	if err := fc.App.RenameFileRecord(req.OldFilename, req.NewFilename, newRelativePath); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error updating file record")
 		return
 	}
@@ -155,7 +163,6 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteFile handles file deletion requests.
-// It deletes the file from local storage and then removes its record from the database.
 func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -181,14 +188,21 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete file from local storage.
-	filePath := filepath.Join("uploads", req.Filename)
-	if err := os.Remove(filePath); err != nil {
+	// 1. Retrieve the file record from DB to get its relative path.
+	fr, err := fc.App.GetFileRecord(req.Filename)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "File not found in database")
+		return
+	}
+
+	// 2. Remove the file from disk using the stored path.
+	fullPath := filepath.Join("uploads", fr.FilePath)
+	if err := os.Remove(fullPath); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file from local storage")
 		return
 	}
 
-	// Delete the file record from the database.
+	// 3. Delete the file record from the database.
 	if err := fc.App.DeleteFileRecord(req.Filename); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file record from database")
 		return
@@ -225,7 +239,8 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePath := filepath.Join("uploads", fileName)
+	// Build the full disk path from the stored relative path.
+	filePath := filepath.Join("uploads", fr.FilePath)
 	f, err := os.Open(filePath)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error opening file")
@@ -268,10 +283,21 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	srcPath := filepath.Join("uploads", req.SourceFile)
-	dstPath := filepath.Join("uploads", req.NewFileName)
+	// 1. Retrieve the source file record from DB to get the relative path.
+	oldFR, err := fc.App.GetFileRecord(req.SourceFile)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "Source file not found in database")
+		return
+	}
 
-	// Open the source file.
+	// 2. Build the disk paths for source and destination.
+	srcPath := filepath.Join("uploads", oldFR.FilePath)
+
+	// We'll store the new copy in the same folder as the source, just with a new file name:
+	newRelativePath := filepath.Join(filepath.Dir(oldFR.FilePath), req.NewFileName)
+	dstPath := filepath.Join("uploads", newRelativePath)
+
+	// 3. Copy the file on disk.
 	in, err := os.Open(srcPath)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error opening source file")
@@ -279,7 +305,6 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer in.Close()
 
-	// Create the destination file.
 	out, err := os.Create(dstPath)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error creating destination file")
@@ -292,22 +317,14 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Retrieve source file info for metadata.
-	fileInfo, err := os.Stat(srcPath)
-	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error retrieving file info")
-		return
-	}
-
-	// Prepare new file record. Optionally, you can copy more metadata from the source record.
+	// 4. Build a new record for the copied file.
+	//    We can copy the content type and other metadata from the old record.
 	newRecord := models.FileRecord{
 		FileName:    req.NewFileName,
-		Size:        fileInfo.Size(),
-		ContentType: "application/octet-stream",
-		Uploader:    user.Username,
-	}
-	if oldRecord, err := fc.App.GetFileRecord(req.SourceFile); err == nil {
-		newRecord.ContentType = oldRecord.ContentType
+		FilePath:    newRelativePath,
+		Size:        oldFR.Size, // or you can re-check with os.Stat(dstPath) for exact size
+		ContentType: oldFR.ContentType,
+		Uploader:    user.Username, // or oldFR.Uploader, depending on your policy
 	}
 
 	if err := fc.App.CreateFileRecord(newRecord); err != nil {
@@ -364,6 +381,7 @@ func (fc *FileController) ShareFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Check if the file record exists and if the user can share it.
 	fr, err := fc.App.GetFileRecord(req.FileName)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "File does not exist")
@@ -374,12 +392,14 @@ func (fc *FileController) ShareFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 2. Generate a token for sharing.
 	token, err := fc.App.GenerateToken()
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error generating share token")
 		return
 	}
 	fc.App.FileShareTokens[token] = req.FileName
+
 	shareURL := fmt.Sprintf("http://%s/download-share?token=%s", r.Host, token)
 	models.RespondJSON(w, http.StatusOK, map[string]string{"share_url": shareURL})
 }
@@ -398,13 +418,15 @@ func (fc *FileController) DownloadShare(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// 1. Retrieve the file record from DB to get its relative path.
 	fr, err := fc.App.GetFileRecord(fileName)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "File not found")
 		return
 	}
 
-	filePath := filepath.Join("uploads", fileName)
+	// 2. Open the file from disk.
+	filePath := filepath.Join("uploads", fr.FilePath)
 	f, err := os.Open(filePath)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error opening file")
@@ -413,6 +435,6 @@ func (fc *FileController) DownloadShare(w http.ResponseWriter, r *http.Request) 
 	defer f.Close()
 
 	w.Header().Set("Content-Type", fr.ContentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
 	io.Copy(w, f)
 }

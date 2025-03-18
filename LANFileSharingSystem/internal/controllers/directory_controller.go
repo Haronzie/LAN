@@ -170,6 +170,7 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate input
 	req.OldName = strings.TrimSpace(req.OldName)
 	req.NewName = strings.TrimSpace(req.NewName)
 	req.Parent = strings.TrimSpace(req.Parent)
@@ -190,23 +191,30 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oldPath := getResourcePath(req.OldName, req.Parent)
-	newPath := getResourcePath(req.NewName, req.Parent)
+	// Build the old and new absolute disk paths
+	oldPath := filepath.Join("uploads", req.Parent, req.OldName)
+	newPath := filepath.Join("uploads", req.Parent, req.NewName)
 
-	// Rename the directory on the filesystem.
+	// Rename on disk
 	if err := os.Rename(oldPath, newPath); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error renaming directory on disk")
 		return
 	}
 
-	// Update the directory record in the database.
+	// Update the directory record in the database
 	if err := dc.App.UpdateDirectoryRecord(req.OldName, req.NewName); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error updating directory record in database")
 		return
 	}
 
-	// Now update the file records that reference the old folder path.
-	if err := dc.App.UpdateFilePathsForRenamedFolder(oldPath, newPath); err != nil {
+	// **IMPORTANT**: Now update file paths in the 'files' table
+	// Example: oldFolderPath = "MyFolder" -> newFolderPath = "RenamedFolder"
+	// If parent is not empty, oldFolderPath might be "Parent/OldName"
+	oldFolderPath := filepath.Join(req.Parent, req.OldName)
+	newFolderPath := filepath.Join(req.Parent, req.NewName)
+
+	// This updates any file_path that starts with oldFolderPath
+	if err := dc.App.UpdateFilePathsForRenamedFolder(oldFolderPath, newFolderPath); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error updating file paths in database")
 		return
 	}

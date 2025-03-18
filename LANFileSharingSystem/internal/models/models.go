@@ -326,12 +326,19 @@ func (app *App) CreateFileRecord(fr FileRecord) error {
 
 func (app *App) GetFileRecord(fileName string) (FileRecord, error) {
 	row := app.DB.QueryRow(`
-        SELECT file_name, size, content_type, uploader
+        SELECT file_name, file_path, size, content_type, uploader
         FROM files
         WHERE file_name = $1
     `, fileName)
+
 	var fr FileRecord
-	err := row.Scan(&fr.FileName, &fr.Size, &fr.ContentType, &fr.Uploader)
+	err := row.Scan(
+		&fr.FileName,
+		&fr.FilePath,
+		&fr.Size,
+		&fr.ContentType,
+		&fr.Uploader,
+	)
 	return fr, err
 }
 
@@ -413,9 +420,14 @@ func (app *App) DirectoryExists(name, parent string) (bool, error) {
 	return count > 0, nil
 }
 
-func (app *App) RenameFileRecord(oldFilename, newFilename string) error {
-	query := "UPDATE files SET file_name = $1 WHERE file_name = $2"
-	_, err := app.DB.Exec(query, newFilename, oldFilename)
+// Enhance this method to update both file_name AND file_path
+func (app *App) RenameFileRecord(oldFilename, newFilename, newFilePath string) error {
+	_, err := app.DB.Exec(`
+        UPDATE files
+        SET file_name = $1,
+            file_path = $2
+        WHERE file_name = $3
+    `, newFilename, newFilePath, oldFilename)
 	return err
 }
 
