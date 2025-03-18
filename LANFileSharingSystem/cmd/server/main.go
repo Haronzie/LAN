@@ -72,6 +72,7 @@ func main() {
 	userController := controllers.NewUserController(app)
 	directoryController := controllers.NewDirectoryController(app)
 	activityController := controllers.NewActivityController(app)
+	inventoryController := controllers.NewInventoryController(app)
 
 	// Define routes.
 	router.HandleFunc("/register", authController.Register).Methods("POST")
@@ -96,6 +97,13 @@ func main() {
 	router.HandleFunc("/directory/delete", directoryController.Delete).Methods("DELETE")
 	router.HandleFunc("/directory/rename", directoryController.Rename).Methods("PUT")
 	router.HandleFunc("/directory/list", directoryController.List).Methods("GET")
+
+	// Inventory routes
+	router.HandleFunc("/inventory", inventoryController.List).Methods("GET")
+	router.HandleFunc("/inventory", inventoryController.Create).Methods("POST")
+	router.HandleFunc("/inventory/{id}", inventoryController.Get).Methods("GET")
+	router.HandleFunc("/inventory/{id}", inventoryController.Update).Methods("PUT")
+	router.HandleFunc("/inventory/{id}", inventoryController.Delete).Methods("DELETE")
 
 	// Activity routes.
 	router.HandleFunc("/activities", activityController.List).Methods("GET")

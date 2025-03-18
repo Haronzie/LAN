@@ -453,8 +453,89 @@ func (app *App) UpdateFilePathsForRenamedFolder(oldFolderPath, newFolderPath str
 	_, err := app.DB.Exec(query, pattern, newFolderPath, likePattern)
 	return err
 }
+
 func (app *App) DeleteFilesInFolder(folderPath string) error {
 	pattern := folderPath + "%" // All files whose path begins with folderPath
 	_, err := app.DB.Exec("DELETE FROM files WHERE file_path LIKE $1", pattern)
+	return err
+}
+
+// -------------------------------------------------------------------
+//  Inventory Feature (Added at the bottom of models.go)
+// -------------------------------------------------------------------
+
+// InventoryItem represents a single inventory record.
+type InventoryItem struct {
+	ID        int       `json:"id"`
+	ItemName  string    `json:"item_name"`
+	Quantity  int       `json:"quantity"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// CreateInventoryItem inserts a new record into the inventory table.
+func (app *App) CreateInventoryItem(item InventoryItem) error {
+	_, err := app.DB.Exec(`
+        INSERT INTO inventory (item_name, quantity)
+        VALUES ($1, $2)
+    `, item.ItemName, item.Quantity)
+	return err
+}
+
+// ListInventoryItems returns all items from the inventory table.
+func (app *App) ListInventoryItems() ([]InventoryItem, error) {
+	rows, err := app.DB.Query(`
+        SELECT id, item_name, quantity, created_at, updated_at
+        FROM inventory
+        ORDER BY id
+    `)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []InventoryItem
+	for rows.Next() {
+		var it InventoryItem
+		if err := rows.Scan(&it.ID, &it.ItemName, &it.Quantity, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, nil
+}
+
+// GetInventoryItemByID retrieves a single item by its ID.
+func (app *App) GetInventoryItemByID(id int) (InventoryItem, error) {
+	row := app.DB.QueryRow(`
+        SELECT id, item_name, quantity, created_at, updated_at
+        FROM inventory
+        WHERE id = $1
+    `, id)
+
+	var it InventoryItem
+	err := row.Scan(&it.ID, &it.ItemName, &it.Quantity, &it.CreatedAt, &it.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return it, errors.New("inventory item not found")
+	}
+	return it, err
+}
+
+// UpdateInventoryItem updates an existing record.
+func (app *App) UpdateInventoryItem(item InventoryItem) error {
+	_, err := app.DB.Exec(`
+        UPDATE inventory
+        SET item_name = $1, quantity = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+    `, item.ItemName, item.Quantity, item.ID)
+	return err
+}
+
+// DeleteInventoryItem removes a record from the inventory table.
+func (app *App) DeleteInventoryItem(id int) error {
+	_, err := app.DB.Exec(`
+        DELETE FROM inventory
+        WHERE id = $1
+    `, id)
 	return err
 }
