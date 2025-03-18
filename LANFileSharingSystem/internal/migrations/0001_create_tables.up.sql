@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS files (
     size BIGINT,
     content_type TEXT,
     uploader TEXT
+    confidential BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);

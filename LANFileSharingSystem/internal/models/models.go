@@ -48,11 +48,12 @@ type User struct {
 
 // FileRecord represents a file stored in the system.
 type FileRecord struct {
-	FileName    string `json:"file_name"`
-	FilePath    string `json:"file_path"` // New field to store the file's relative path
-	Size        int64  `json:"size"`
-	ContentType string `json:"content_type"`
-	Uploader    string `json:"uploader"`
+	FileName     string `json:"file_name"`
+	FilePath     string `json:"file_path"`
+	Size         int64  `json:"size"`
+	ContentType  string `json:"content_type"`
+	Uploader     string `json:"uploader"`
+	Confidential bool   `json:"confidential"`
 }
 
 // -------------------------------------
@@ -326,7 +327,7 @@ func (app *App) CreateFileRecord(fr FileRecord) error {
 
 func (app *App) GetFileRecord(fileName string) (FileRecord, error) {
 	row := app.DB.QueryRow(`
-        SELECT file_name, file_path, size, content_type, uploader
+        SELECT file_name, file_path, size, content_type, uploader, confidential
         FROM files
         WHERE file_name = $1
     `, fileName)
@@ -338,6 +339,7 @@ func (app *App) GetFileRecord(fileName string) (FileRecord, error) {
 		&fr.Size,
 		&fr.ContentType,
 		&fr.Uploader,
+		&fr.Confidential,
 	)
 	return fr, err
 }
