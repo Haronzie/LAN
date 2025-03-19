@@ -31,12 +31,21 @@ import axios from 'axios';
 import path from 'path-browserify';
 
 const { Content } = Layout;
-
-// Replace with your real auth logic
-const currentUser = { username: 'john_doe' };
+const { Option } = Select;
 
 const TrainingDashboard = () => {
   const navigate = useNavigate();
+
+  // Current user from localStorage
+  const [currentUser, setCurrentUser] = useState('');
+
+  // On mount, load username from localStorage
+  useEffect(() => {
+    const storedUsername = localStorage.getItem('username');
+    if (storedUsername) {
+      setCurrentUser(storedUsername);
+    }
+  }, []);
 
   // The path within "uploads". Empty string means "root".
   const [currentPath, setCurrentPath] = useState('');
@@ -99,7 +108,7 @@ const TrainingDashboard = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // Automatically set the selected folder for uploads whenever currentPath changes
+  // Automatically set the selected folder for uploading whenever currentPath changes
   useEffect(() => {
     setSelectedFolder(currentPath || '');
   }, [currentPath]);
@@ -211,11 +220,10 @@ const TrainingDashboard = () => {
   const handleDelete = async (record) => {
     if (record.type === 'directory') {
       // Only the folder owner can delete
-      if (record.created_by && record.created_by !== currentUser.username) {
+      if (record.created_by && record.created_by !== currentUser) {
         message.error('Only the folder owner can delete this folder.');
         return;
       }
-      // /directory/delete
       try {
         await axios.delete('/directory/delete', {
           data: { name: record.name, parent: currentPath },
@@ -231,11 +239,10 @@ const TrainingDashboard = () => {
       }
     } else if (record.type === 'file') {
       // Only the file uploader can delete
-      if (record.uploader && record.uploader !== currentUser.username) {
+      if (record.uploader && record.uploader !== currentUser) {
         message.error('Only the uploader can delete this file.');
         return;
       }
-      // /delete-file
       try {
         await axios.delete('/delete-file', {
           data: { filename: path.join(currentPath, record.name) },
@@ -256,8 +263,9 @@ const TrainingDashboard = () => {
   // DOWNLOAD
   // ==================================================
   const handleDownload = (fileName) => {
-    const fullPath = path.join(currentPath, fileName);
-    window.open(`/download?filename=${encodeURIComponent(fullPath)}`, '_blank');
+    // If your backend is on port 8080:
+    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+    window.open(downloadUrl, '_blank');
   };
 
   // ==================================================
@@ -289,7 +297,7 @@ const TrainingDashboard = () => {
           },
           { withCredentials: true }
         );
-      } else if (selectedItem.type === 'file') {
+      } else {
         // /file/rename
         await axios.put(
           '/file/rename',
@@ -392,6 +400,7 @@ const TrainingDashboard = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
+        // Check ownership
         const isFolderOwner =
           record.type === 'directory' && record.created_by === currentUser.username;
         const isFileOwner =
@@ -462,6 +471,7 @@ const TrainingDashboard = () => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
+        {/* Top bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
             <Button onClick={() => navigate('/user')}>Back to Dashboard</Button>
@@ -493,6 +503,7 @@ const TrainingDashboard = () => {
           </Card>
         )}
 
+        {/* Navigation Row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
             <Button
@@ -540,8 +551,12 @@ const TrainingDashboard = () => {
           </Col>
         </Row>
 
-        <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
+        {/* Breadcrumb */}
+        <Breadcrumb style={{ marginBottom: 16 }}>
+          {breadcrumbItems}
+        </Breadcrumb>
 
+        {/* Table of Items */}
         <Table
           columns={columns}
           dataSource={filteredItems}

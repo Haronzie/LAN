@@ -31,12 +31,22 @@ import axios from 'axios';
 import path from 'path-browserify';
 
 const { Content } = Layout;
-
-// Replace with your actual auth logic
-const currentUser = { username: 'john_doe' };
+const { Option } = Select;
 
 const ResearchDashboard = () => {
   const navigate = useNavigate();
+
+  // =========================================
+  // Current user from localStorage
+  // =========================================
+  const [currentUser, setCurrentUser] = useState('');
+
+  useEffect(() => {
+    const storedUsername = localStorage.getItem('username');
+    if (storedUsername) {
+      setCurrentUser(storedUsername);
+    }
+  }, []);
 
   // The path within "uploads". Empty string means "root".
   const [currentPath, setCurrentPath] = useState('');
@@ -62,26 +72,27 @@ const ResearchDashboard = () => {
   const [copyNewFileName, setCopyNewFileName] = useState('');
   const [copySelectedItem, setCopySelectedItem] = useState(null);
 
-  // ==================================================
-  // FETCH DIRECTORIES + FILES
-  // ==================================================
+  // =========================================
+  // Fetch Directories + Files
+  // =========================================
   const fetchItems = async () => {
     setLoading(true);
     try {
-      // 1) Fetch directories from /directory/list?directory=...
       const dirParam = encodeURIComponent(currentPath);
+
+      // 1) Directories
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
         withCredentials: true
       });
       const directories = Array.isArray(dirRes.data) ? dirRes.data : [];
 
-      // 2) Fetch files from /files?directory=...
+      // 2) Files
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true
       });
       const files = Array.isArray(fileRes.data) ? fileRes.data : [];
 
-      // Combine them into a single array
+      // Combine them
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
@@ -99,21 +110,21 @@ const ResearchDashboard = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // Automatically set the selected folder for uploads whenever currentPath changes
+  // Whenever currentPath changes, set selected folder for upload
   useEffect(() => {
     setSelectedFolder(currentPath || '');
   }, [currentPath]);
 
-  // ==================================================
-  // SEARCH
-  // ==================================================
+  // =========================================
+  // Search + Filter
+  // =========================================
   const filteredItems = items.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // ==================================================
-  // CREATE FOLDER
-  // ==================================================
+  // =========================================
+  // Create Folder
+  // =========================================
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -135,16 +146,16 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ==================================================
-  // NAVIGATION & BREADCRUMBS
-  // ==================================================
+  // =========================================
+  // Navigation & Breadcrumbs
+  // =========================================
   const handleFolderClick = (folderName) => {
     const newPath = path.join(currentPath, folderName);
     setCurrentPath(newPath);
   };
 
   const handleGoUp = () => {
-    if (!currentPath) return; // already at root
+    if (!currentPath) return; // at root
     if (currentPath === 'Research') {
       setCurrentPath('');
       return;
@@ -177,9 +188,9 @@ const ResearchDashboard = () => {
     );
   });
 
-  // ==================================================
-  // UPLOAD FILE
-  // ==================================================
+  // =========================================
+  // Upload File
+  // =========================================
   const customUpload = async ({ file, onSuccess, onError }) => {
     if (!selectedFolder) {
       message.error('No folder selected for upload.');
@@ -205,17 +216,16 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ==================================================
-  // DELETE
-  // ==================================================
+  // =========================================
+  // Delete (File or Folder)
+  // =========================================
   const handleDelete = async (record) => {
     if (record.type === 'directory') {
       // Only the folder owner can delete
-      if (record.created_by && record.created_by !== currentUser.username) {
+      if (record.created_by && record.created_by !== currentUser) {
         message.error('Only the folder owner can delete this folder.');
         return;
       }
-      // /directory/delete
       try {
         await axios.delete('/directory/delete', {
           data: { name: record.name, parent: currentPath },
@@ -231,11 +241,10 @@ const ResearchDashboard = () => {
       }
     } else if (record.type === 'file') {
       // Only the file uploader can delete
-      if (record.uploader && record.uploader !== currentUser.username) {
+      if (record.uploader && record.uploader !== currentUser) {
         message.error('Only the uploader can delete this file.');
         return;
       }
-      // /delete-file
       try {
         await axios.delete('/delete-file', {
           data: { filename: path.join(currentPath, record.name) },
@@ -252,17 +261,18 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ==================================================
-  // DOWNLOAD
-  // ==================================================
+  // =========================================
+  // Download (File Only)
+  // =========================================
   const handleDownload = (fileName) => {
-    const fullPath = path.join(currentPath, fileName);
-    window.open(`/download?filename=${encodeURIComponent(fullPath)}`, '_blank');
+    // If your backend is on port 8080:
+    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+    window.open(downloadUrl, '_blank');
   };
 
-  // ==================================================
-  // RENAME
-  // ==================================================
+  // =========================================
+  // Rename
+  // =========================================
   const handleRename = (record) => {
     setSelectedItem(record);
     setRenameNewName(record.name);
@@ -289,7 +299,7 @@ const ResearchDashboard = () => {
           },
           { withCredentials: true }
         );
-      } else if (selectedItem.type === 'file') {
+      } else {
         // /file/rename
         await axios.put(
           '/file/rename',
@@ -310,9 +320,9 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ==================================================
-  // COPY (FILES ONLY)
-  // ==================================================
+  // =========================================
+  // Copy (File Only)
+  // =========================================
   const handleCopy = (record) => {
     if (record.type !== 'file') {
       message.error('Copying directories is not supported by the current backend.');
@@ -351,9 +361,9 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ==================================================
-  // TABLE COLUMNS
-  // ==================================================
+  // =========================================
+  // Table Columns
+  // =========================================
   const columns = [
     {
       title: 'Name',
@@ -392,14 +402,15 @@ const ResearchDashboard = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
+        // Check ownership
         const isFolderOwner =
-          record.type === 'directory' && record.created_by === currentUser.username;
+          record.type === 'directory' && record.created_by === currentUser;
         const isFileOwner =
-          record.type === 'file' && record.uploader === currentUser.username;
+          record.type === 'file' && record.uploader === currentUser;
 
         return (
           <Space>
-            {/* DOWNLOAD (file only) */}
+            {/* Download (file only) */}
             {record.type === 'file' && (
               <Tooltip title="Download">
                 <Button
@@ -409,7 +420,7 @@ const ResearchDashboard = () => {
               </Tooltip>
             )}
 
-            {/* COPY (file only) */}
+            {/* Copy (file only) */}
             {record.type === 'file' && (
               <Tooltip title="Copy">
                 <Button
@@ -419,7 +430,7 @@ const ResearchDashboard = () => {
               </Tooltip>
             )}
 
-            {/* RENAME (only owner) */}
+            {/* Rename (owner only) */}
             {(isFolderOwner || isFileOwner) && (
               <Tooltip title="Rename">
                 <Button
@@ -429,7 +440,7 @@ const ResearchDashboard = () => {
               </Tooltip>
             )}
 
-            {/* DELETE (only owner) */}
+            {/* Delete (owner only) */}
             {(isFolderOwner || isFileOwner) && (
               <Tooltip
                 title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}
@@ -462,6 +473,7 @@ const ResearchDashboard = () => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
+        {/* Top bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
             <Button onClick={() => navigate('/user')}>Back to Dashboard</Button>
@@ -493,6 +505,7 @@ const ResearchDashboard = () => {
           </Card>
         )}
 
+        {/* Navigation Row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
             <Button
@@ -540,6 +553,7 @@ const ResearchDashboard = () => {
           </Col>
         </Row>
 
+        {/* Breadcrumb */}
         <Breadcrumb style={{ marginBottom: 16 }}>
           <Breadcrumb.Item key="root">
             {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
@@ -557,6 +571,7 @@ const ResearchDashboard = () => {
           ))}
         </Breadcrumb>
 
+        {/* Table of Items */}
         <Table
           columns={columns}
           dataSource={filteredItems}

@@ -18,12 +18,14 @@ const LoginForm = () => {
       hideLoading();
       message.success(res.data.message || 'Login successful');
 
-      // If the logged-in user is an admin, store the username in localStorage
+      // Always store the username in localStorage so OperationDashboard can use it
+      localStorage.setItem('username', res.data.username);
+
+      // Redirect based on role
       if (res.data.role === 'admin') {
-        localStorage.setItem("username", res.data.username);
         navigate('/admin'); // Admin dashboard
       } else {
-        navigate('/user'); // Regular user dashboard
+        navigate('/user');  // Regular user dashboard
       }
     } catch (error) {
       hideLoading();

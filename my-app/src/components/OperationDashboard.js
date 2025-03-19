@@ -31,16 +31,14 @@ import axios from 'axios';
 import path from 'path-browserify';
 
 const { Content } = Layout;
-
-// Mock current user. In production, retrieve from session or user context.
-const currentUser = { username: 'john_doe' };
+const { Option } = Select;
 
 const OperationDashboard = () => {
   const navigate = useNavigate();
 
   // The path within "uploads". Empty string means "root".
   const [currentPath, setCurrentPath] = useState('');
-  const [items, setItems] = useState([]);    // Combined list of directories + files
+  const [items, setItems] = useState([]); // Combined list of directories + files
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -62,26 +60,37 @@ const OperationDashboard = () => {
   const [copyNewFileName, setCopyNewFileName] = useState('');
   const [copySelectedItem, setCopySelectedItem] = useState(null);
 
-  // ==================================================
-  // FETCH DIRECTORIES + FILES
-  // ==================================================
+  // Track current user (from localStorage or fetch from server)
+  const [currentUser, setCurrentUser] = useState('');
+
+  // On mount, retrieve currentUser from localStorage (or from /api if you prefer)
+  useEffect(() => {
+    const storedUsername = localStorage.getItem('username');
+    if (storedUsername) {
+      setCurrentUser(storedUsername);
+    }
+  }, []);
+
+  // ================================
+  // Fetch Directories + Files
+  // ================================
   const fetchItems = async () => {
     setLoading(true);
     try {
-      // 1) Fetch directories from /directory/list?directory=...
       const dirParam = encodeURIComponent(currentPath);
+      // 1) Directories
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
         withCredentials: true
       });
       const directories = Array.isArray(dirRes.data) ? dirRes.data : [];
 
-      // 2) Fetch files from /files?directory=...
+      // 2) Files
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true
       });
       const files = Array.isArray(fileRes.data) ? fileRes.data : [];
 
-      // Combine them into a single array
+      // Combine them
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
@@ -99,23 +108,21 @@ const OperationDashboard = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // Automatically set the selected folder for uploading whenever currentPath changes
+  // Whenever currentPath changes, set selected folder for upload
   useEffect(() => {
     setSelectedFolder(currentPath || '');
   }, [currentPath]);
 
-  // ==================================================
-  // SEARCH & FILTER
-  // ==================================================
-  // We no longer filter out folders if currentPath === ''.
-  // Instead, we display all items at root so new folders are visible to everyone.
+  // ================================
+  // Search + Filter
+  // ================================
   const filteredItems = items.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // ==================================================
-  // CREATE FOLDER
-  // ==================================================
+  // ================================
+  // Create Folder
+  // ================================
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -137,16 +144,16 @@ const OperationDashboard = () => {
     }
   };
 
-  // ==================================================
-  // NAVIGATION & BREADCRUMBS
-  // ==================================================
+  // ================================
+  // Navigation & Breadcrumbs
+  // ================================
   const handleFolderClick = (folderName) => {
     const newPath = path.join(currentPath, folderName);
     setCurrentPath(newPath);
   };
 
   const handleGoUp = () => {
-    if (!currentPath) return; // already at root
+    if (!currentPath) return; // at root
     if (currentPath === 'Operation') {
       setCurrentPath('');
       return;
@@ -155,18 +162,17 @@ const OperationDashboard = () => {
     setCurrentPath(parent === '.' ? '' : parent);
   };
 
+  // Build breadcrumb
   const getPathSegments = (p) => (p ? p.split('/').filter(Boolean) : []);
   const segments = getPathSegments(currentPath);
-
-  // Build the breadcrumb items
   const breadcrumbItems = [
     <Breadcrumb.Item key="root">
       {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
     </Breadcrumb.Item>
   ];
   segments.forEach((seg, index) => {
-    const isLast = index === segments.length - 1;
     const partialPath = segments.slice(0, index + 1).join('/');
+    const isLast = index === segments.length - 1;
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
         {isLast ? (
@@ -180,9 +186,9 @@ const OperationDashboard = () => {
     );
   });
 
-  // ==================================================
-  // UPLOAD FILE
-  // ==================================================
+  // ================================
+  // Upload File
+  // ================================
   const customUpload = async ({ file, onSuccess, onError }) => {
     if (!selectedFolder) {
       message.error('No folder selected for upload.');
@@ -208,17 +214,16 @@ const OperationDashboard = () => {
     }
   };
 
-  // ==================================================
-  // DELETE
-  // ==================================================
+  // ================================
+  // Delete (File or Folder)
+  // ================================
   const handleDelete = async (record) => {
     if (record.type === 'directory') {
       // Only the folder owner can delete
-      if (record.created_by && record.created_by !== currentUser.username) {
+      if (record.created_by && record.created_by !== currentUser) {
         message.error('Only the folder owner can delete this folder.');
         return;
       }
-      // Call /directory/delete
       try {
         await axios.delete('/directory/delete', {
           data: { name: record.name, parent: currentPath },
@@ -234,12 +239,12 @@ const OperationDashboard = () => {
       }
     } else if (record.type === 'file') {
       // Only the file uploader can delete
-      if (record.uploader && record.uploader !== currentUser.username) {
+      if (record.uploader && record.uploader !== currentUser) {
         message.error('Only the uploader can delete this file.');
         return;
       }
-      // Call /delete-file
       try {
+        // /delete-file
         await axios.delete('/delete-file', {
           data: { filename: path.join(currentPath, record.name) },
           withCredentials: true
@@ -255,17 +260,18 @@ const OperationDashboard = () => {
     }
   };
 
-  // ==================================================
-  // DOWNLOAD
-  // ==================================================
+  // ================================
+  // Download (File Only)
+  // ================================
   const handleDownload = (fileName) => {
-    const fullPath = path.join(currentPath, fileName);
-    window.open(`/download?filename=${encodeURIComponent(fullPath)}`, '_blank');
+    // If your backend is on port 8080:
+    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+    window.open(downloadUrl, '_blank');
   };
 
-  // ==================================================
-  // RENAME
-  // ==================================================
+  // ================================
+  // Rename
+  // ================================
   const handleRename = (record) => {
     setSelectedItem(record);
     setRenameNewName(record.name);
@@ -277,8 +283,8 @@ const OperationDashboard = () => {
       message.error('New name cannot be empty');
       return;
     }
-
     if (!selectedItem) return;
+
     const oldName = selectedItem.name;
     try {
       if (selectedItem.type === 'directory') {
@@ -292,7 +298,7 @@ const OperationDashboard = () => {
           },
           { withCredentials: true }
         );
-      } else if (selectedItem.type === 'file') {
+      } else {
         // /file/rename
         await axios.put(
           '/file/rename',
@@ -313,12 +319,12 @@ const OperationDashboard = () => {
     }
   };
 
-  // ==================================================
-  // COPY (FILES ONLY)
-  // ==================================================
+  // ================================
+  // Copy (File Only)
+  // ================================
   const handleCopy = (record) => {
     if (record.type !== 'file') {
-      message.error('Copying directories is not supported.');
+      message.error('Copying directories is not supported by the current backend.');
       return;
     }
     setCopySelectedItem(record);
@@ -354,9 +360,9 @@ const OperationDashboard = () => {
     }
   };
 
-  // ==================================================
-  // TABLE COLUMNS
-  // ==================================================
+  // ================================
+  // Table Columns
+  // ================================
   const columns = [
     {
       title: 'Name',
@@ -395,14 +401,15 @@ const OperationDashboard = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
+        // Check ownership
         const isFolderOwner =
-          record.type === 'directory' && record.created_by === currentUser.username;
+          record.type === 'directory' && record.created_by === currentUser;
         const isFileOwner =
-          record.type === 'file' && record.uploader === currentUser.username;
+          record.type === 'file' && record.uploader === currentUser;
 
         return (
           <Space>
-            {/* DOWNLOAD (file only) */}
+            {/* Download (file only) */}
             {record.type === 'file' && (
               <Tooltip title="Download">
                 <Button
@@ -412,7 +419,7 @@ const OperationDashboard = () => {
               </Tooltip>
             )}
 
-            {/* COPY (file only) */}
+            {/* Copy (file only) */}
             {record.type === 'file' && (
               <Tooltip title="Copy">
                 <Button
@@ -422,7 +429,7 @@ const OperationDashboard = () => {
               </Tooltip>
             )}
 
-            {/* RENAME (only owner) */}
+            {/* Rename (owner only) */}
             {(isFolderOwner || isFileOwner) && (
               <Tooltip title="Rename">
                 <Button
@@ -432,7 +439,7 @@ const OperationDashboard = () => {
               </Tooltip>
             )}
 
-            {/* DELETE (only owner) */}
+            {/* Delete (owner only) */}
             {(isFolderOwner || isFileOwner) && (
               <Tooltip
                 title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}
@@ -445,7 +452,7 @@ const OperationDashboard = () => {
               </Tooltip>
             )}
 
-            {/* If not owner, disable the delete button for directories/files */}
+            {/* If not owner, disable the delete button */}
             {record.type === 'directory' && !isFolderOwner && (
               <Tooltip title="Only the folder owner can delete this folder">
                 <Button disabled danger icon={<DeleteOutlined />} />
@@ -465,6 +472,7 @@ const OperationDashboard = () => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
+        {/* Top bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
             <Button onClick={() => navigate('/user')}>Back to Dashboard</Button>
@@ -485,6 +493,7 @@ const OperationDashboard = () => {
           </Col>
         </Row>
 
+        {/* Show the selected file if any */}
         {fileToUpload && (
           <Card title="Selected File" bordered={false} style={{ marginBottom: 16 }}>
             <p>
@@ -496,6 +505,7 @@ const OperationDashboard = () => {
           </Card>
         )}
 
+        {/* Navigation Row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
             <Button
@@ -526,9 +536,9 @@ const OperationDashboard = () => {
                 .map((folder, index) => {
                   const folderPath = path.join(currentPath, folder.name);
                   return (
-                    <Select.Option key={index} value={folderPath}>
+                    <Option key={index} value={folderPath}>
                       {folder.name}
-                    </Select.Option>
+                    </Option>
                   );
                 })}
             </Select>
@@ -543,8 +553,12 @@ const OperationDashboard = () => {
           </Col>
         </Row>
 
-        <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
+        {/* Breadcrumb */}
+        <Breadcrumb style={{ marginBottom: 16 }}>
+          {breadcrumbItems}
+        </Breadcrumb>
 
+        {/* Table of Items */}
         <Table
           columns={columns}
           dataSource={filteredItems}
