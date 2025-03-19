@@ -432,6 +432,46 @@ func (app *App) ListDirectory(parent string) ([]map[string]interface{}, error) {
 	return directories, nil
 }
 
+// models.go
+// models.go
+func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
+	var rows *sql.Rows
+	var err error
+
+	if dir == "" {
+		// Root: files with no slash at all
+		rows, err = app.DB.Query(`
+            SELECT file_name, file_path, size, content_type, uploader
+            FROM files
+            WHERE file_path NOT LIKE '%/%'
+        `)
+	} else {
+		// Only immediate children of dir (e.g. "Operation/file.jpg"),
+		// not subfolders (e.g. "Operation/Report/file.jpg").
+		rows, err = app.DB.Query(`
+            SELECT file_name, file_path, size, content_type, uploader
+            FROM files
+            WHERE file_path LIKE $1 || '/%' 
+              AND file_path NOT LIKE $1 || '/%/%'
+        `, dir)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []FileRecord
+	for rows.Next() {
+		var f FileRecord
+		if err := rows.Scan(&f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader); err != nil {
+			return nil, err
+		}
+		results = append(results, f)
+	}
+	return results, nil
+}
+
 // DirectoryExists checks if a directory with the given name exists under the specified parent.
 func (app *App) DirectoryExists(name, parent string) (bool, error) {
 	var count int

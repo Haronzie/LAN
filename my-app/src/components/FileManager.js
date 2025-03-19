@@ -37,7 +37,7 @@ function getPathSegments(p) {
 }
 
 const FileManager = () => {
-  const [items, setItems] = useState([]); // items: files and directories
+  const [items, setItems] = useState([]); // files and directories
   const [loading, setLoading] = useState(false);
   const [currentPath, setCurrentPath] = useState(''); // root: empty string
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,7 +54,7 @@ const FileManager = () => {
   const navigate = useNavigate();
   const isRoot = currentPath === '';
 
-  // Fetch items from backend (directories and files) based on currentPath.
+  // Fetch items (directories and files) based on currentPath.
   const fetchItems = async () => {
     setLoading(true);
     try {
@@ -63,22 +63,19 @@ const FileManager = () => {
         axios.get(`/files?directory=${directoryParam}`, { withCredentials: true }),
         axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true }),
       ]);
-  
-      // Transform files so that 'file_name' becomes 'name' and set type = 'file'
+
+      // Transform each file so that the returned JSON uses the expected keys
       const files = (filesRes.data || []).map((f) => ({
-        name: f.file_name,
+        name: f.name,            // expects "name" as provided by the backend
         type: 'file',
         size: f.size,
-        contentType: f.content_type,
+        contentType: f.contentType, // using updated key from backend
         uploader: f.uploader,
       }));
-  
-      // Ensure directories also have "type": "directory"
-      const directories = (dirsRes.data || []).map((d) => ({
-        ...d,
-        type: 'directory',
-      }));
-  
+
+      // Directories should already come back with "name" and "type": "directory"
+      const directories = (dirsRes.data || []);
+
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching items:', error);
@@ -87,14 +84,13 @@ const FileManager = () => {
       setLoading(false);
     }
   };
-  
 
   // Fetch items on mount and whenever currentPath changes.
   useEffect(() => {
     fetchItems();
   }, [currentPath]);
 
-  // Optional polling for backend changes (every 30 seconds).
+  // Optional polling for backend changes.
   useEffect(() => {
     const interval = setInterval(fetchItems, 10000);
     return () => clearInterval(interval);
@@ -105,7 +101,7 @@ const FileManager = () => {
     (item.name || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Create Folder: Makes a POST to create folder in the backend.
+  // Create Folder: POST to create a folder.
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -127,13 +123,13 @@ const FileManager = () => {
     }
   };
 
-  // Navigate into a folder (update currentPath)
+  // Navigate into a folder (update currentPath).
   const handleFolderClick = (folderName) => {
     const newPath = isRoot ? folderName : path.join(currentPath, folderName);
     setCurrentPath(newPath);
   };
 
-  // Go Up one level.
+  // Go up one level.
   const handleGoUp = () => {
     if (isRoot) return;
     const parent = path.dirname(currentPath);
@@ -147,7 +143,7 @@ const FileManager = () => {
     setCurrentPath(newPath);
   };
 
-  // Upload: Ensure user is inside an existing folder.
+  // Upload: Only allow uploading when inside an existing folder.
   const handleOpenUploadModal = () => {
     if (isRoot) {
       message.error('Please select an existing folder before uploading a file.');
@@ -157,14 +153,23 @@ const FileManager = () => {
     setUploadModalVisible(true);
   };
 
+  // Upload file with folder enforced.
   const handleUpload = async () => {
     if (!uploadingFile) {
       message.error('Please select a file first');
       return;
     }
+
+    // Double-check that we're not in the root.
+    if (!currentPath) {
+      message.error('Please select a folder first');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', uploadingFile);
-    formData.append('directory', currentPath);
+    formData.append('directory', currentPath);  // e.g. "Tata" or "Operation/Tata"
+
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
@@ -173,14 +178,14 @@ const FileManager = () => {
       message.success(res.data.message || 'File uploaded successfully');
       setUploadModalVisible(false);
       setUploadingFile(null);
-      fetchItems();
+      fetchItems();  // Refresh the file list
     } catch (error) {
       console.error('Upload error:', error);
-      message.error('Error uploading file');
+      message.error(error.response?.data?.error || 'Error uploading file');
     }
   };
 
-  // Delete: Use appropriate endpoint for file vs. directory.
+  // Delete: Use appropriate endpoint for files or directories.
   const handleDelete = async (record) => {
     try {
       if (record.type === 'directory') {
@@ -207,7 +212,7 @@ const FileManager = () => {
     window.open(`/download?filename=${encodeURIComponent(fileName)}`, '_blank');
   };
 
-  // Rename: For both files and directories.
+  // Rename for both files and directories.
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
       message.error('New name cannot be empty');
@@ -236,7 +241,7 @@ const FileManager = () => {
     }
   };
 
-  // Table columns for displaying files and folders.
+  // Table columns for displaying files and directories.
   const columns = [
     {
       title: 'Name',
@@ -264,7 +269,8 @@ const FileManager = () => {
       title: 'Size (KB)',
       dataIndex: 'size',
       key: 'size',
-      render: (size, record) => (record.type === 'directory' ? '--' : (size / 1024).toFixed(2)),
+      render: (size, record) =>
+        record.type === 'directory' ? '--' : (size / 1024).toFixed(2),
     },
     {
       title: 'Actions',
@@ -277,11 +283,14 @@ const FileManager = () => {
             </Tooltip>
           )}
           <Tooltip title="Rename">
-            <Button icon={<EditOutlined />} onClick={() => {
-              setSelectedItem(record);
-              setRenameNewName(record.name);
-              setRenameModalVisible(true);
-            }} />
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => {
+                setSelectedItem(record);
+                setRenameNewName(record.name);
+                setRenameModalVisible(true);
+              }}
+            />
           </Tooltip>
           <Tooltip title="Delete">
             <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
@@ -296,7 +305,7 @@ const FileManager = () => {
   const breadcrumbItems = [
     <Breadcrumb.Item key="root">
       {isRoot ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
-    </Breadcrumb.Item>
+    </Breadcrumb.Item>,
   ];
   segments.forEach((seg, index) => {
     breadcrumbItems.push(
@@ -409,7 +418,7 @@ const FileManager = () => {
           <Upload
             beforeUpload={(file) => {
               setUploadingFile(file);
-              return false; // Prevent default upload
+              return false; // Prevent default upload behavior
             }}
             maxCount={1}
           >

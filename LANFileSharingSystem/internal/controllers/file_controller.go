@@ -338,21 +338,42 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListFiles returns a list of files.
 func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
-	_, err := fc.App.GetUserFromSession(r)
-	if err != nil {
-		models.RespondError(w, http.StatusForbidden, "Forbidden")
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
 
-	files, err := fc.App.ListFiles() // Assumes ListFiles() is implemented in App.
+	// Check if user is authenticated
+	if _, err := fc.App.GetUserFromSession(r); err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Read the 'directory' query param, e.g. ?directory=Tata
+	dir := r.URL.Query().Get("directory")
+
+	// Query only files that belong to this folder (or root if dir == "")
+	files, err := fc.App.ListFilesInDirectory(dir)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error retrieving files")
 		return
 	}
 
-	models.RespondJSON(w, http.StatusOK, files)
+	// Convert FileRecord objects into JSON-friendly maps
+	var output []map[string]interface{}
+	for _, f := range files {
+		output = append(output, map[string]interface{}{
+			"name":        f.FileName,
+			"type":        "file",        // for your frontend to distinguish
+			"size":        f.Size,        // in bytes
+			"contentType": f.ContentType, // renamed from content_type
+			"uploader":    f.Uploader,
+		})
+	}
+
+	// Respond with the JSON array
+	models.RespondJSON(w, http.StatusOK, output)
 }
 
 // ShareFile generates a shareable URL for a file.
