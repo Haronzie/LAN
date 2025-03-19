@@ -1,10 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Table, Button, Upload, message, Input, Row, Col, Modal, Select } from 'antd';
-import { UploadOutlined, DeleteOutlined, DownloadOutlined, ArrowLeftOutlined, CopyOutlined } from '@ant-design/icons';
+import {
+  Layout,
+  Table,
+  Button,
+  Upload,
+  message,
+  Input,
+  Row,
+  Col,
+  Modal,
+  Select,
+  Popconfirm,
+  Tooltip,
+  Form,
+  Space
+} from 'antd';
+import {
+  UploadOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  ArrowLeftOutlined,
+  CopyOutlined
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const { Content } = Layout;
+const { Option } = Select;
 
 const UserFileManager = () => {
   const [files, setFiles] = useState([]);
@@ -13,10 +35,12 @@ const UserFileManager = () => {
   const [filteredFiles, setFilteredFiles] = useState([]);
   const [currentUsername, setCurrentUsername] = useState('');
 
-  // New state variables for Rename, Move, and Copy modals
+  // Modals
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [copyModalVisible, setCopyModalVisible] = useState(false);
+
+  // Selected file and input states
   const [selectedFile, setSelectedFile] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
   const [moveDestination, setMoveDestination] = useState('');
@@ -44,7 +68,7 @@ const UserFileManager = () => {
       const res = await axios.get('/api/user/profile', { withCredentials: true });
       setCurrentUsername(res.data.username);
     } catch (error) {
-      console.error("Error fetching user profile", error);
+      console.error('Error fetching user profile', error);
     }
   };
 
@@ -53,14 +77,19 @@ const UserFileManager = () => {
     fetchCurrentUser();
   }, []);
 
+  // Filter the files whenever searchTerm or files change
   useEffect(() => {
     const term = searchTerm.toLowerCase();
     setFilteredFiles(term ? files.filter(f => f.file_name.toLowerCase().includes(term)) : files);
   }, [searchTerm, files]);
 
+  // Delete a file
   const handleDeleteFile = async (fileName) => {
     try {
-      await axios.delete('/delete-resource', { data: { resource_type: 'file', name: fileName }, withCredentials: true });
+      await axios.delete('/delete-resource', {
+        data: { resource_type: 'file', name: fileName },
+        withCredentials: true
+      });
       message.success(`File '${fileName}' deleted successfully`);
       fetchFiles();
     } catch (error) {
@@ -68,15 +97,19 @@ const UserFileManager = () => {
     }
   };
 
-  // Function to handle renaming a file
+  // Rename a file
   const handleRenameConfirm = async () => {
     try {
-      await axios.put('/rename-resource', {
-        resource_type: 'file',
-        old_name: selectedFile,
-        new_name: renameNewName,
-      }, { withCredentials: true });
-      message.success(`File renamed successfully`);
+      await axios.put(
+        '/rename-resource',
+        {
+          resource_type: 'file',
+          old_name: selectedFile,
+          new_name: renameNewName,
+        },
+        { withCredentials: true }
+      );
+      message.success('File renamed successfully');
       setRenameModalVisible(false);
       fetchFiles();
     } catch (error) {
@@ -84,15 +117,19 @@ const UserFileManager = () => {
     }
   };
 
-  // Function to handle moving a file
+  // Move a file
   const handleMoveConfirm = async () => {
     try {
-      await axios.put('/move-resource', {
-        resource_type: 'file',
-        source: selectedFile,
-        destination: moveDestination,
-      }, { withCredentials: true });
-      message.success(`File moved successfully`);
+      await axios.put(
+        '/move-resource',
+        {
+          resource_type: 'file',
+          source: selectedFile,
+          destination: moveDestination,
+        },
+        { withCredentials: true }
+      );
+      message.success('File moved successfully');
       setMoveModalVisible(false);
       fetchFiles();
     } catch (error) {
@@ -100,14 +137,18 @@ const UserFileManager = () => {
     }
   };
 
-  // Function to handle copying a file
+  // Copy a file
   const handleCopyConfirm = async () => {
     try {
-      await axios.post('/copy-resource', {
-        file_name: selectedFile,
-        new_name: copyNewName,         // if empty, backend will use original name
-        destination: copyDestination,  // required: destination directory for the copy
-      }, { withCredentials: true });
+      await axios.post(
+        '/copy-resource',
+        {
+          file_name: selectedFile,
+          new_name: copyNewName, // if empty, backend will use original name
+          destination: copyDestination, // required: destination directory for the copy
+        },
+        { withCredentials: true }
+      );
       message.success('File copied successfully');
       setCopyModalVisible(false);
       fetchFiles();
@@ -116,6 +157,25 @@ const UserFileManager = () => {
     }
   };
 
+  // Custom upload function
+  const customUpload = async ({ file, onSuccess, onError }) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await axios.post('/upload', formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      message.success(res.data.message || 'File uploaded successfully');
+      onSuccess(null, file);
+      fetchFiles();
+    } catch (error) {
+      message.error('Error uploading file');
+      onError(error);
+    }
+  };
+
+  // Table columns
   const columns = [
     {
       title: 'File Name',
@@ -137,108 +197,137 @@ const UserFileManager = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        // Only the uploader gets to see additional buttons.
         const isUploader = record.uploader === currentUsername;
         return (
-          <>
-            <Button icon={<DownloadOutlined />} onClick={() => window.open(`/download?filename=${record.file_name}`, '_blank')}>
-              Download
-            </Button>
-            {/* Copy button visible to all users */}
-            <Button
-              icon={<CopyOutlined />}
-              onClick={() => {
-                setSelectedFile(record.file_name);
-                setCopyNewName('');
-                setCopyDestination('');
-                setCopyModalVisible(true);
-              }}
-              style={{ marginLeft: 8 }}
-            >
-              Copy
-            </Button>
+          <Space>
+            <Tooltip title="Download File">
+              <Button
+                icon={<DownloadOutlined />}
+                // Use encodeURIComponent to handle spaces and special characters in the file name
+                onClick={() => {
+                  const downloadUrl = `${window.location.origin}/download?filename=${encodeURIComponent(record.file_name)}`;
+                  // or, if your backend is on a different port, e.g. http://localhost:8080:
+                  // const downloadUrl = `http://localhost:9090/download?filename=${encodeURIComponent(record.file_name)}`;
+    
+                  window.open(downloadUrl, '_blank');
+                }}
+              />
+            </Tooltip>
+    
+            {/* Copy is visible to all users */}
+            <Tooltip title="Copy File">
+              <Button
+                icon={<CopyOutlined />}
+                onClick={() => {
+                  setSelectedFile(record.file_name);
+                  setCopyNewName('');
+                  setCopyDestination('');
+                  setCopyModalVisible(true);
+                }}
+              />
+            </Tooltip>
+    
             {isUploader && (
               <>
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleDeleteFile(record.file_name)}
-                  style={{ marginLeft: 8 }}
+                <Popconfirm
+                  title={`Delete file '${record.file_name}'?`}
+                  onConfirm={() => handleDeleteFile(record.file_name)}
+                  okText="Yes"
+                  cancelText="No"
                 >
-                  Delete
-                </Button>
-                <Button
-                  onClick={() => {
-                    setSelectedFile(record.file_name);
-                    setRenameNewName(record.file_name);
-                    setRenameModalVisible(true);
-                  }}
-                  style={{ marginLeft: 8 }}
-                >
-                  Rename
-                </Button>
-                <Button
-                  onClick={() => {
-                    setSelectedFile(record.file_name);
-                    setMoveDestination(record.file_name);
-                    setMoveModalVisible(true);
-                  }}
-                  style={{ marginLeft: 8 }}
-                >
-                  Move
-                </Button>
+                  <Tooltip title="Delete File">
+                    <Button danger icon={<DeleteOutlined />} />
+                  </Tooltip>
+                </Popconfirm>
+    
+                <Tooltip title="Rename File">
+                  <Button
+                    onClick={() => {
+                      setSelectedFile(record.file_name);
+                      setRenameNewName(record.file_name);
+                      setRenameModalVisible(true);
+                    }}
+                  >
+                    Rename
+                  </Button>
+                </Tooltip>
+    
+                <Tooltip title="Move File">
+                  <Button
+                    onClick={() => {
+                      setSelectedFile(record.file_name);
+                      setMoveDestination(record.file_name);
+                      setMoveModalVisible(true);
+                    }}
+                  >
+                    Move
+                  </Button>
+                </Tooltip>
               </>
             )}
-          </>
+          </Space>
         );
       }
     }
+    
   ];
 
-  // Custom upload function
-  const customUpload = async ({ file, onSuccess, onError }) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-      const res = await axios.post('/upload', formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      message.success(res.data.message || 'File uploaded successfully');
-      onSuccess(null, file);
-      fetchFiles();
-    } catch (error) {
-      message.error('Error uploading file');
-      onError(error);
-    }
-  };
-
   return (
-    <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
-      <Row justify="space-between" style={{ marginBottom: 16 }}>
+    <Content style={{ padding: 24, background: '#fff', minHeight: 360 }}>
+      {/* 
+        =========================
+        HEADER ROW
+        =========================
+      */}
+      <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
         <Col>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/user')}>
+          <h2 style={{ margin: 0 }}>File Manager</h2>
+        </Col>
+        <Col>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/user')}
+            style={{ marginRight: 8 }}
+          >
             Back to Dashboard
           </Button>
-        </Col>
-        <Col>
-          <h2>File Manager</h2>
-        </Col>
-        <Col>
-          <Button type="primary">
-            <Upload customRequest={customUpload} showUploadList={false}>
-              <UploadOutlined /> Upload File
-            </Upload>
-          </Button>
+          <Upload customRequest={customUpload} showUploadList={false}>
+            <Button type="primary" icon={<UploadOutlined />}>
+              Upload File
+            </Button>
+          </Upload>
         </Col>
       </Row>
-      <Input
-        placeholder="Search files"
-        value={searchTerm}
-        onChange={e => setSearchTerm(e.target.value)}
-        style={{ width: 300, marginBottom: 16 }}
+
+      {/* 
+        =========================
+        SEARCH ROW
+        =========================
+      */}
+      <Row style={{ marginBottom: 16 }} justify="start">
+        <Col>
+          <Input
+            placeholder="Search files..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            allowClear
+            style={{ width: 300 }}
+          />
+        </Col>
+      </Row>
+
+      {/* 
+        =========================
+        FILE TABLE
+        =========================
+      */}
+      <Table
+        columns={columns}
+        dataSource={filteredFiles}
+        rowKey="file_name"
+        loading={loadingFiles}
+        pagination={{ pageSize: 10 }}
       />
-      <Table columns={columns} dataSource={filteredFiles} rowKey="file_name" loading={loadingFiles} pagination={{ pageSize: 10 }} />
 
       {/* Rename Modal */}
       <Modal
@@ -246,12 +335,17 @@ const UserFileManager = () => {
         visible={renameModalVisible}
         onOk={handleRenameConfirm}
         onCancel={() => setRenameModalVisible(false)}
+        okText="Rename"
       >
-        <Input
-          placeholder="Enter new file name"
-          value={renameNewName}
-          onChange={e => setRenameNewName(e.target.value)}
-        />
+        <Form layout="vertical">
+          <Form.Item label="New File Name">
+            <Input
+              placeholder="Enter new file name"
+              value={renameNewName}
+              onChange={e => setRenameNewName(e.target.value)}
+            />
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* Move Modal */}
@@ -260,23 +354,28 @@ const UserFileManager = () => {
         visible={moveModalVisible}
         onOk={handleMoveConfirm}
         onCancel={() => setMoveModalVisible(false)}
+        okText="Move"
       >
-        <Select
-          placeholder="Select destination directory"
-          style={{ width: '100%' }}
-          onChange={(value) => {
-            if (value === 'root') {
-              setMoveDestination(selectedFile);
-            } else {
-              setMoveDestination(`${value}/${selectedFile}`);
-            }
-          }}
-        >
-          <Select.Option value="root">Root (uploads)</Select.Option>
-          <Select.Option value="Documents">Documents</Select.Option>
-          <Select.Option value="Images">Images</Select.Option>
-          <Select.Option value="Archives">Archives</Select.Option>
-        </Select>
+        <Form layout="vertical">
+          <Form.Item label="Destination Directory">
+            <Select
+              style={{ width: '100%' }}
+              onChange={(value) => {
+                if (value === 'root') {
+                  setMoveDestination(selectedFile);
+                } else {
+                  setMoveDestination(`${value}/${selectedFile}`);
+                }
+              }}
+              placeholder="Select destination directory"
+            >
+              <Option value="root">Root (uploads)</Option>
+              <Option value="Documents">Documents</Option>
+              <Option value="Images">Images</Option>
+              <Option value="Archives">Archives</Option>
+            </Select>
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* Copy Modal */}
@@ -285,20 +384,26 @@ const UserFileManager = () => {
         visible={copyModalVisible}
         onOk={handleCopyConfirm}
         onCancel={() => setCopyModalVisible(false)}
+        okText="Copy"
       >
-        <Input
-          placeholder="Enter new file name (optional; leave empty to keep original)"
-          value={copyNewName}
-          onChange={e => setCopyNewName(e.target.value)}
-          style={{ marginBottom: 16 }}
-        />
-        <Input
-          placeholder="Enter destination directory (required)"
-          value={copyDestination}
-          onChange={e => setCopyDestination(e.target.value)}
-        />
+        <Form layout="vertical">
+          <Form.Item label="New File Name (optional)">
+            <Input
+              placeholder="Leave empty to keep original name"
+              value={copyNewName}
+              onChange={e => setCopyNewName(e.target.value)}
+            />
+          </Form.Item>
+          <Form.Item label="Destination Directory (required)">
+            <Input
+              placeholder="e.g. 'Documents', 'Images'"
+              value={copyDestination}
+              onChange={e => setCopyDestination(e.target.value)}
+            />
+          </Form.Item>
+        </Form>
       </Modal>
-    </div>
+    </Content>
   );
 };
 

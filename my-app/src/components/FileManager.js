@@ -13,7 +13,7 @@ import {
   Form,
   Card,
   Breadcrumb,
-  Upload,
+  Upload
 } from 'antd';
 import {
   UploadOutlined,
@@ -22,7 +22,7 @@ import {
   FolderOpenOutlined,
   ArrowUpOutlined,
   FolderAddOutlined,
-  EditOutlined,
+  EditOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -54,12 +54,12 @@ const FileManager = () => {
   const navigate = useNavigate();
   const isRoot = currentPath === '';
 
-  // Function to navigate back to the admin dashboard
+  // Navigate back to the admin dashboard
   const handleBackToDashboard = () => {
     navigate('/admin');
   };
 
-  // Fetch items (directories and files) based on currentPath.
+  // Fetch items (directories + files) for the currentPath
   const fetchItems = async () => {
     setLoading(true);
     try {
@@ -69,7 +69,7 @@ const FileManager = () => {
         axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true }),
       ]);
 
-      // Transform each file so that the returned JSON uses the expected keys
+      // Convert files to your table structure
       const files = (filesRes.data || []).map((f) => ({
         name: f.name,
         type: 'file',
@@ -78,8 +78,8 @@ const FileManager = () => {
         uploader: f.uploader,
       }));
 
-      // Directories should already come back with "name" and "type": "directory"
-      const directories = (dirsRes.data || []);
+      // Directories should already have { name, type: 'directory' }
+      const directories = dirsRes.data || [];
 
       setItems([...directories, ...files]);
     } catch (error) {
@@ -90,23 +90,22 @@ const FileManager = () => {
     }
   };
 
-  // Fetch items on mount and whenever currentPath changes.
   useEffect(() => {
     fetchItems();
   }, [currentPath]);
 
-  // Optional polling for backend changes.
+  // Optional polling for backend changes
   useEffect(() => {
     const interval = setInterval(fetchItems, 10000);
     return () => clearInterval(interval);
   }, [currentPath]);
 
-  // Filter items based on search term.
+  // Filter items by search term
   const filteredItems = items.filter((item) =>
-    (item.name || "").toLowerCase().includes(searchTerm.toLowerCase())
+    (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Create Folder: POST to create a folder.
+  // Create Folder
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -128,27 +127,27 @@ const FileManager = () => {
     }
   };
 
-  // Navigate into a folder (update currentPath).
+  // Navigate into a folder
   const handleFolderClick = (folderName) => {
     const newPath = isRoot ? folderName : path.join(currentPath, folderName);
     setCurrentPath(newPath);
   };
 
-  // Go up one level.
+  // Go up one level
   const handleGoUp = () => {
     if (isRoot) return;
     const parent = path.dirname(currentPath);
     setCurrentPath(parent === '.' ? '' : parent);
   };
 
-  // Breadcrumb navigation.
+  // Breadcrumb
   const handleBreadcrumbClick = (index) => {
     const segments = getPathSegments(currentPath);
     const newPath = segments.slice(0, index + 1).join('/');
     setCurrentPath(newPath);
   };
 
-  // Upload: Only allow uploading when inside an existing folder.
+  // Upload modal
   const handleOpenUploadModal = () => {
     if (isRoot) {
       message.error('Please select an existing folder before uploading a file.');
@@ -158,14 +157,11 @@ const FileManager = () => {
     setUploadModalVisible(true);
   };
 
-  // Upload file with folder enforced.
   const handleUpload = async () => {
     if (!uploadingFile) {
       message.error('Please select a file first');
       return;
     }
-
-    // Double-check that we're not in the root.
     if (!currentPath) {
       message.error('Please select a folder first');
       return;
@@ -183,14 +179,14 @@ const FileManager = () => {
       message.success(res.data.message || 'File uploaded successfully');
       setUploadModalVisible(false);
       setUploadingFile(null);
-      fetchItems();  // Refresh the file list
+      fetchItems();
     } catch (error) {
       console.error('Upload error:', error);
       message.error(error.response?.data?.error || 'Error uploading file');
     }
   };
 
-  // Delete: Use appropriate endpoint for files or directories.
+  // Delete item (file or directory)
   const handleDelete = async (record) => {
     try {
       if (record.type === 'directory') {
@@ -212,12 +208,14 @@ const FileManager = () => {
     }
   };
 
-  // Download file.
+  // **Download** file - use a fully-qualified or absolute URL
   const handleDownload = (fileName) => {
-    window.open(`/download?filename=${encodeURIComponent(fileName)}`, '_blank');
+    // Use the same domain as the front-end if your server is on the same host:
+    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+window.open(downloadUrl, '_blank');
   };
 
-  // Rename for both files and directories.
+  // Rename (files or directories)
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
       message.error('New name cannot be empty');
@@ -225,16 +223,24 @@ const FileManager = () => {
     }
     try {
       if (selectedItem.type === 'directory') {
-        await axios.put('/directory/rename', {
-          old_name: selectedItem.name,
-          new_name: renameNewName,
-          parent: currentPath,
-        }, { withCredentials: true });
+        await axios.put(
+          '/directory/rename',
+          {
+            old_name: selectedItem.name,
+            new_name: renameNewName,
+            parent: currentPath,
+          },
+          { withCredentials: true }
+        );
       } else {
-        await axios.put('/file/rename', {
-          old_filename: selectedItem.name,
-          new_filename: renameNewName,
-        }, { withCredentials: true });
+        await axios.put(
+          '/file/rename',
+          {
+            old_filename: selectedItem.name,
+            new_filename: renameNewName,
+          },
+          { withCredentials: true }
+        );
       }
       message.success('Item renamed successfully');
       setRenameModalVisible(false);
@@ -246,7 +252,7 @@ const FileManager = () => {
     }
   };
 
-  // Table columns for displaying files and directories.
+  // Table columns
   const columns = [
     {
       title: 'Name',
@@ -284,7 +290,10 @@ const FileManager = () => {
         <Space>
           {record.type === 'file' && (
             <Tooltip title="Download">
-              <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={() => handleDownload(record.name)}
+              />
             </Tooltip>
           )}
           <Tooltip title="Rename">
@@ -305,7 +314,7 @@ const FileManager = () => {
     },
   ];
 
-  // Breadcrumb: Only show when inside a folder.
+  // Build breadcrumb items
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
     <Breadcrumb.Item key="root">
@@ -315,10 +324,10 @@ const FileManager = () => {
   segments.forEach((seg, index) => {
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {index === segments.length - 1 ? seg : (
-          <a onClick={() => handleBreadcrumbClick(index)}>
-            {seg}
-          </a>
+        {index === segments.length - 1 ? (
+          seg
+        ) : (
+          <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>
         )}
       </Breadcrumb.Item>
     );
@@ -441,7 +450,7 @@ const FileManager = () => {
           <Upload
             beforeUpload={(file) => {
               setUploadingFile(file);
-              return false; // Prevent default upload behavior
+              return false; // Prevent default upload
             }}
             maxCount={1}
           >

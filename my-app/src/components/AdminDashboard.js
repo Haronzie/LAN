@@ -1,14 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Button, Row, Col, Card, Statistic, List, Input, message, Typography } from 'antd';
-import { DashboardOutlined, UserOutlined, SettingOutlined, FileOutlined } from '@ant-design/icons';
+import {
+  Layout,
+  Menu,
+  Button,
+  Row,
+  Col,
+  Card,
+  Statistic,
+  List,
+  message,
+  Typography
+} from 'antd';
+import {
+  DashboardOutlined,
+  UserOutlined,
+  SettingOutlined,
+  FileOutlined
+} from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AddResourceModal from './AddResourceModal';
-import { Column } from '@ant-design/charts';
 import Settings from './Settings'; // Import your Settings component
+import { Column } from '@ant-design/charts'; // Import the chart
 
 const { Header, Content, Footer, Sider } = Layout;
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
@@ -22,13 +38,13 @@ const AdminDashboard = () => {
 
   // Retrieve stored admin username from localStorage on mount.
   useEffect(() => {
-    const storedName = localStorage.getItem("username");
+    const storedName = localStorage.getItem('username');
     if (storedName) {
       setAdminName(storedName);
     }
   }, []);
 
-  // Fetch users.
+  // Fetch users
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
@@ -41,7 +57,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // Fetch files.
+  // Fetch files
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
@@ -54,7 +70,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // Fetch activities.
+  // Fetch activities
   const fetchActivities = async () => {
     try {
       const res = await axios.get('/activities', { withCredentials: true });
@@ -70,7 +86,7 @@ const AdminDashboard = () => {
     fetchActivities();
   }, []);
 
-  // Poll for fresh data every 30 seconds.
+  // Poll for fresh data every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       fetchUsers();
@@ -80,50 +96,41 @@ const AdminDashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Summary statistics.
-  const totalUsers = Array.isArray(users) ? users.length : 0;
-const activeUsers = Array.isArray(users) ? users.filter(u => u.active).length : 0;
-const totalFiles = Array.isArray(files) ? files.length : 0;
+  // Summary statistics
+  const totalUsers = users.length;
+  const totalFiles = files.length;
 
-// Ensure activeUsers and inactiveUsers are integers (whole numbers)
-const inactiveUsers = totalUsers - activeUsers;
+  // Create chart data: number of admin users vs. regular users
+  const adminCount = users.filter((u) => u.role === 'admin').length;
+  const regularCount = users.filter((u) => u.role === 'user').length;
 
-// Prepare chart data for user statistics.
-// Ensure that userStats is formatted correctly before passing to the chart
-const userStats = [
-  { type: 'Active Users', count: Math.floor(activeUsers) },  // Ensure count is a whole number
-  { type: 'Inactive Users', count: Math.floor(inactiveUsers) },  // Ensure count is a whole number
-];
+  const userStats = [
+    { type: 'Admin Users', count: adminCount },
+    { type: 'Regular Users', count: regularCount },
+  ];
 
-// Optionally log the userStats to check the values
-console.log(userStats);
-
-// Chart configuration remains the same, as the data is now properly formatted
-const chartConfig = {
-  data: userStats,
-  xField: 'type',
-  yField: 'count',
-  label: {
-    position: 'inside', // Use inside instead of middle
-    style: {
-      fill: '#FFFFFF',
-      opacity: 0.6,
-    },
-  },
-  meta: {
-    type: { alias: 'User Status' },
-    count: { alias: 'Number of Users' },
-  },
-  columnStyle: { radius: [4, 4, 0, 0] },
-
-  yAxis: {
-    min: 0, // Ensure the starting point is 0
-    tickInterval: 1, // Set the interval between ticks (only whole numbers)
+  // Chart config
+  const chartConfig = {
+    data: userStats,
+    xField: 'type',
+    yField: 'count',
+    columnStyle: { radius: [4, 4, 0, 0] },
     label: {
-      formatter: (value) => Math.floor(value), // Ensure the value is floored to whole numbers
+      position: 'top',
+      style: {
+        fill: '#FFFFFF',
+        opacity: 0.7,
+      },
     },
-  },
-};
+    yAxis: {
+      min: 0,
+      tickInterval: 1,
+    },
+    meta: {
+      type: { alias: 'User Role' },
+      count: { alias: 'Number of Users' },
+    },
+  };
 
   const handleLogout = async () => {
     try {
@@ -151,10 +158,11 @@ const chartConfig = {
             <Link to="/admin/files">File Manager</Link>
           </Menu.Item>
           <Menu.Item key="settings" icon={<SettingOutlined />}>
-            <Link to="/admin/settings">Settings</Link> {/* Settings link in the sidebar */}
+            <Link to="/admin/settings">Settings</Link>
           </Menu.Item>
         </Menu>
       </Sider>
+
       <Layout>
         <Header
           style={{
@@ -166,20 +174,23 @@ const chartConfig = {
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
           }}
         >
+          <Title level={4} style={{ margin: 0 }}>
+            Welcome, {adminName}!
+          </Title>
           <div>
-            <Title level={4} style={{ margin: 0 }}>
-              Welcome, {adminName}!
-            </Title>
-          </div>
-          <div>
-            <Button type="primary" style={{ marginRight: 8 }} onClick={() => navigate('/admin/settings')}>
-              Settings {/* Settings button in the header */}
+            <Button
+              type="primary"
+              style={{ marginRight: 8 }}
+              onClick={() => navigate('/admin/settings')}
+            >
+              Settings
             </Button>
             <Button type="primary" onClick={handleLogout}>
               Logout
             </Button>
           </div>
         </Header>
+
         <Content style={{ margin: '24px 16px 0' }}>
           <div
             style={{
@@ -191,22 +202,26 @@ const chartConfig = {
             }}
           >
             <Row gutter={[16, 16]}>
-              <Col xs={24} sm={8}>
+              <Col xs={24} sm={12}>
                 <Card>
-                  <Statistic title="Total Users" value={totalUsers} loading={loadingUsers} />
+                  <Statistic
+                    title="Total Users"
+                    value={totalUsers}
+                    loading={loadingUsers}
+                  />
                 </Card>
               </Col>
-              <Col xs={24} sm={8}>
+              <Col xs={24} sm={12}>
                 <Card>
-                  <Statistic title="Active Users" value={activeUsers} loading={loadingUsers} />
-                </Card>
-              </Col>
-              <Col xs={24} sm={8}>
-                <Card>
-                  <Statistic title="Total Files" value={totalFiles} loading={loadingFiles} />
+                  <Statistic
+                    title="Total Files"
+                    value={totalFiles}
+                    loading={loadingFiles}
+                  />
                 </Card>
               </Col>
             </Row>
+
             <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
               <Col xs={24} md={12}>
                 <Card title="Recent Activity Log" style={{ borderRadius: '8px' }}>
@@ -215,7 +230,9 @@ const chartConfig = {
                     renderItem={(item) => (
                       <List.Item>
                         <strong>
-                          {item.timestamp ? new Date(item.timestamp).toLocaleString() : item.time}
+                          {item.timestamp
+                            ? new Date(item.timestamp).toLocaleString()
+                            : item.time}
                         </strong>
                         : {item.event || item.activity}
                       </List.Item>
@@ -226,19 +243,27 @@ const chartConfig = {
                   </Button>
                 </Card>
               </Col>
+
+              {/* Chart with admin vs. user counts */}
               <Col xs={24} md={12}>
-                <Card title="User Statistics" style={{ borderRadius: '8px' }}>
+                <Card title="User Role Distribution" style={{ borderRadius: '8px' }}>
                   <Column {...chartConfig} />
                 </Card>
               </Col>
             </Row>
           </div>
         </Content>
+
         <Footer style={{ textAlign: 'center' }}>
           © {new Date().getFullYear()} CDRRMO Official Admin Dashboard
         </Footer>
       </Layout>
-      <AddResourceModal visible={modalVisible} onClose={() => setModalVisible(false)} refreshResources={fetchFiles} />
+
+      <AddResourceModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        refreshResources={fetchFiles}
+      />
     </Layout>
   );
 };
