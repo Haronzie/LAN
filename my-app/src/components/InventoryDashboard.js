@@ -1,27 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Row, Col, Card, Statistic, List, Input, Button, Form, message, Divider } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';  // Import the arrow icon
-import { useNavigate } from 'react-router-dom';          // For navigation
+import { ArrowLeftOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const { Content } = Layout;
 
 const InventoryDashboard = () => {
-  const [equipment, setEquipment] = useState([]);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
   const navigate = useNavigate();
 
-  // Fetch equipment list from backend
+  // Fetch inventory list from backend
   const fetchInventory = async () => {
     setLoading(true);
     try {
+      // The backend returns an array of items: [{ id, item_name, quantity, created_at, updated_at }, ...]
       const res = await axios.get('/inventory', { withCredentials: true });
-      // Ensure that the equipment state is always an array
-      setEquipment(Array.isArray(res.data) ? res.data : []);
+      setItems(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       message.error('Error fetching inventory data');
-      setEquipment([]);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -31,25 +31,23 @@ const InventoryDashboard = () => {
     fetchInventory();
   }, []);
 
-  // Compute totals from the equipment array
-  const totalEquipment = equipment.reduce((sum, item) => sum + item.total_quantity, 0);
-  const remainingEquipment = equipment.reduce((sum, item) => sum + item.remaining_quantity, 0);
+  // Compute total quantity from all items
+  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Handle form submission to add new equipment
+  // Handle form submission to add a new item
   const onFinish = async (values) => {
     try {
+      // Match the backend’s expected JSON fields: { item_name, quantity }
       const payload = {
-        name: values.name,
-        total_quantity: values.total_quantity,
-        remaining_quantity: values.total_quantity, // Initially, remaining equals total
-        reorder_level: values.reorder_level || 0,
+        item_name: values.item_name,
+        quantity: Number(values.quantity),
       };
       await axios.post('/inventory', payload, { withCredentials: true });
-      message.success('Equipment added successfully');
+      message.success('Item added successfully');
       form.resetFields();
-      fetchInventory();
+      fetchInventory(); // Refresh the list
     } catch (error) {
-      message.error('Error adding equipment');
+      message.error('Error adding item');
     }
   };
 
@@ -73,31 +71,26 @@ const InventoryDashboard = () => {
         <Row gutter={[16, 16]} justify="center">
           <Col xs={24} sm={12}>
             <Card>
-              <Statistic title="Total Equipment" value={totalEquipment} />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12}>
-            <Card>
-              <Statistic title="Remaining Equipment" value={remainingEquipment} />
+              <Statistic title="Total Quantity" value={totalQuantity} />
             </Card>
           </Col>
         </Row>
 
         <Divider />
 
-        {/* Equipment List */}
+        {/* Inventory List */}
         <Row>
           <Col span={24}>
-            <Card title="Equipment List">
+            <Card title="Inventory List">
               <List
                 loading={loading}
                 itemLayout="horizontal"
-                dataSource={equipment}
+                dataSource={items}
                 renderItem={(item) => (
                   <List.Item>
                     <List.Item.Meta
-                      title={item.name}
-                      description={`Total: ${item.total_quantity}, Remaining: ${item.remaining_quantity}, Reorder Level: ${item.reorder_level}`}
+                      title={item.item_name}
+                      description={`Quantity: ${item.quantity}`}
                     />
                   </List.Item>
                 )}
@@ -108,29 +101,26 @@ const InventoryDashboard = () => {
 
         <Divider />
 
-        {/* Add Equipment Form */}
-        <Card title="Add Equipment">
+        {/* Add Inventory Item Form */}
+        <Card title="Add New Item">
           <Form form={form} layout="vertical" onFinish={onFinish}>
             <Form.Item
-              name="name"
-              label="Equipment Name"
-              rules={[{ required: true, message: 'Please input the equipment name' }]}
+              name="item_name"
+              label="Item Name"
+              rules={[{ required: true, message: 'Please enter the item name' }]}
             >
-              <Input placeholder="Enter equipment name" />
+              <Input placeholder="Enter item name" />
             </Form.Item>
             <Form.Item
-              name="total_quantity"
-              label="Total Quantity"
-              rules={[{ required: true, message: 'Please input the total quantity' }]}
+              name="quantity"
+              label="Quantity"
+              rules={[{ required: true, message: 'Please enter the quantity' }]}
             >
-              <Input type="number" placeholder="Enter total quantity" />
-            </Form.Item>
-            <Form.Item name="reorder_level" label="Reorder Level">
-              <Input type="number" placeholder="Enter reorder level (optional)" />
+              <Input type="number" placeholder="Enter quantity" />
             </Form.Item>
             <Form.Item>
               <Button type="primary" htmlType="submit">
-                Add Equipment
+                Add Item
               </Button>
             </Form.Item>
           </Form>

@@ -7,7 +7,6 @@ import TrainingDashboard from './TrainingDashboard';
 import OperationDashboard from './OperationDashboard';
 import ResearchDashboard from './ResearchDashboard';
 import InventoryDashboard from './InventoryDashboard';
-// Make sure to import your UserSettings component:
 import UserSettings from './UserSettings';
 
 const { Header, Content, Sider } = Layout;
@@ -21,11 +20,19 @@ const UserDashboard = () => {
     const checkUserRole = async () => {
       try {
         const res = await axios.get('/user-role', { withCredentials: true });
-        if (res.data.role !== 'user') {
+        
+        // If the role is admin, redirect to the admin dashboard:
+        if (res.data.role === 'admin') {
+          navigate('/admin');
+        }
+        // If the role is user, set the userRole state:
+        else if (res.data.role === 'user') {
+          setUserRole('user');
+        }
+        // Otherwise, show error and redirect to login:
+        else {
           message.error('Access Denied. Redirecting to login.');
           navigate('/login');
-        } else {
-          setUserRole(res.data.role);
         }
       } catch (error) {
         message.error('Not authenticated. Redirecting to login.');
@@ -46,13 +53,14 @@ const UserDashboard = () => {
     }
   };
 
+  // Show a loading indicator or message until we know the user’s role
   if (!userRole) {
     return <p>Loading...</p>;
   }
 
   // Determine which menu item should be highlighted based on the current path
   const pathParts = location.pathname.split('/');
-  const currentRoute = pathParts[2] || 'home';  // e.g. "/user/home" => pathParts[2] is "home"
+  const currentRoute = pathParts[2] || 'home'; // e.g. "/user/home" => pathParts[2] is "home"
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -81,8 +89,6 @@ const UserDashboard = () => {
           <Menu.Item key="inventory">
             <Link to="/user/inventory">Inventory</Link>
           </Menu.Item>
-
-          {/* NEW: Settings menu item */}
           <Menu.Item key="settings">
             <Link to="/user/settings">Settings</Link>
           </Menu.Item>
@@ -104,10 +110,7 @@ const UserDashboard = () => {
               <Route path="training" element={<TrainingDashboard />} />
               <Route path="research" element={<ResearchDashboard />} />
               <Route path="inventory" element={<InventoryDashboard />} />
-
-              {/* NEW: Settings route */}
               <Route path="settings" element={<UserSettings />} />
-
               <Route index element={<UserDashboardHome />} />
               <Route path="*" element={<div>Page not found</div>} />
             </Routes>

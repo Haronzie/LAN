@@ -55,19 +55,16 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// First user is an admin; subsequent users are "user" and inactive.
+	// First user is an admin; subsequent users are regular users.
 	role := "admin"
-	active := true
 	if ac.App.AdminExists() {
 		role = "user"
-		active = false
 	}
 
 	newUser := models.User{
 		Username: req.Username,
 		Password: hashedPass,
 		Role:     role,
-		Active:   active,
 	}
 
 	if err := ac.App.CreateUser(newUser); err != nil {
@@ -116,10 +113,8 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
 		return
 	}
-	if !user.Active {
-		models.RespondError(w, http.StatusForbidden, "Account not activated")
-		return
-	}
+	// Removed the active account check as the feature is no longer implemented.
+
 	if !models.CheckPasswordHash(req.Password, user.Password) {
 		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
 		return

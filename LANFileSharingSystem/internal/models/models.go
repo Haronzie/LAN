@@ -36,12 +36,11 @@ func NewApp(db *sql.DB, store *sessions.CookieStore) *App {
 //  Data Structures
 // -------------------------------------
 
-// User represents an application user (no email field).
+// User represents an application user.
 type User struct {
 	Username  string    `json:"username"`
 	Password  string    `json:"password"`
 	Role      string    `json:"role"`
-	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -140,12 +139,12 @@ func (app *App) GetUserFromSession(r *http.Request) (User, error) {
 //  User / Admin Operations
 // -------------------------------------
 
-// GetUserByUsername retrieves a user by username from the database (no email column).
+// GetUserByUsername retrieves a user by username from the database.
 func (app *App) GetUserByUsername(username string) (User, error) {
 	row := app.DB.QueryRow(`
-        SELECT username, password, role, active, created_at, updated_at
+        SELECT username, password, role, created_at, updated_at
         FROM users
-        WHERE username = $1
+        WHERE lower(username) = lower($1)
     `, username)
 
 	var user User
@@ -153,31 +152,29 @@ func (app *App) GetUserByUsername(username string) (User, error) {
 		&user.Username,
 		&user.Password,
 		&user.Role,
-		&user.Active,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
 	return user, err
 }
 
-// CreateUser inserts a new user into the database (no email column).
+// CreateUser inserts a new user into the database.
 func (app *App) CreateUser(user User) error {
 	_, err := app.DB.Exec(`
-        INSERT INTO users(username, password, role, active)
-        VALUES($1, $2, $3, $4)
+        INSERT INTO users(username, password, role)
+        VALUES($1, $2, $3)
     `,
 		user.Username,
 		user.Password,
 		user.Role,
-		user.Active,
 	)
 	return err
 }
 
-// ListUsers returns all users from the database (no email column).
+// ListUsers returns all users from the database.
 func (app *App) ListUsers() ([]User, error) {
 	rows, err := app.DB.Query(`
-        SELECT username, password, role, active, created_at, updated_at
+        SELECT username, password, role, created_at, updated_at
         FROM users
         ORDER BY username
     `)
@@ -193,7 +190,6 @@ func (app *App) ListUsers() ([]User, error) {
 			&u.Username,
 			&u.Password,
 			&u.Role,
-			&u.Active,
 			&u.CreatedAt,
 			&u.UpdatedAt,
 		); err != nil {
@@ -214,7 +210,7 @@ func (app *App) AdminExists() bool {
 	return count > 0
 }
 
-// UpdateUserProfile updates only the username (no email).
+// UpdateUserProfile updates only the username.
 func (app *App) UpdateUserProfile(oldUsername, newUsername string) error {
 	_, err := app.DB.Exec(`
         UPDATE users
@@ -432,8 +428,6 @@ func (app *App) ListDirectory(parent string) ([]map[string]interface{}, error) {
 	return directories, nil
 }
 
-// models.go
-// models.go
 func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 	var rows *sql.Rows
 	var err error

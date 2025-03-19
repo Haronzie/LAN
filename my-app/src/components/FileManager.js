@@ -54,6 +54,11 @@ const FileManager = () => {
   const navigate = useNavigate();
   const isRoot = currentPath === '';
 
+  // Function to navigate back to the admin dashboard
+  const handleBackToDashboard = () => {
+    navigate('/admin');
+  };
+
   // Fetch items (directories and files) based on currentPath.
   const fetchItems = async () => {
     setLoading(true);
@@ -66,10 +71,10 @@ const FileManager = () => {
 
       // Transform each file so that the returned JSON uses the expected keys
       const files = (filesRes.data || []).map((f) => ({
-        name: f.name,            // expects "name" as provided by the backend
+        name: f.name,
         type: 'file',
         size: f.size,
-        contentType: f.contentType, // using updated key from backend
+        contentType: f.contentType,
         uploader: f.uploader,
       }));
 
@@ -168,7 +173,7 @@ const FileManager = () => {
 
     const formData = new FormData();
     formData.append('file', uploadingFile);
-    formData.append('directory', currentPath);  // e.g. "Tata" or "Operation/Tata"
+    formData.append('directory', currentPath);
 
     try {
       const res = await axios.post('/upload', formData, {
@@ -310,7 +315,11 @@ const FileManager = () => {
   segments.forEach((seg, index) => {
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {index === segments.length - 1 ? seg : <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>}
+        {index === segments.length - 1 ? seg : (
+          <a onClick={() => handleBreadcrumbClick(index)}>
+            {seg}
+          </a>
+        )}
       </Breadcrumb.Item>
     );
   });
@@ -318,12 +327,23 @@ const FileManager = () => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
+
+        {/* Top row: Title, Back to Dashboard, and Upload */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <h2 style={{ margin: 0 }}>File Manager</h2>
+            <Space>
+              <h2 style={{ margin: 0 }}>File Manager</h2>
+              <Button onClick={handleBackToDashboard}>
+                Back to Dashboard
+              </Button>
+            </Space>
           </Col>
           <Col>
-            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+            <Button
+              type="primary"
+              icon={<UploadOutlined />}
+              onClick={handleOpenUploadModal}
+            >
               Upload File
             </Button>
           </Col>
@@ -346,7 +366,10 @@ const FileManager = () => {
             </Col>
           )}
           <Col>
-            <Button icon={<FolderAddOutlined />} onClick={() => setCreateFolderModal(true)}>
+            <Button
+              icon={<FolderAddOutlined />}
+              onClick={() => setCreateFolderModal(true)}
+            >
               Create Folder
             </Button>
           </Col>
@@ -430,6 +453,7 @@ const FileManager = () => {
             </Card>
           )}
         </Modal>
+
       </Content>
     </Layout>
   );

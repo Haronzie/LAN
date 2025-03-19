@@ -27,7 +27,7 @@ func (uc *UserController) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	users, err := uc.App.ListUsers() // Assumes ListUsers() is implemented.
+	users, err := uc.App.ListUsers()
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error retrieving users")
 		return
@@ -59,11 +59,18 @@ func (uc *UserController) AddUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Use a case-insensitive search to see if the user already exists.
+	_, err = uc.App.GetUserByUsername(req.Username)
+	if err == nil {
+		models.RespondError(w, http.StatusBadRequest, fmt.Sprintf("User '%s' already exists", req.Username))
+		return
+	}
+
+	// Create new user. The 'active' field has been removed.
 	newUser := models.User{
 		Username: req.Username,
-		Password: req.Password, // Ensure CreateUser hashes the password.
+		Password: req.Password,
 		Role:     "user",
-		Active:   false,
 	}
 	if err := uc.App.CreateUser(newUser); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error adding user")
@@ -187,5 +194,21 @@ func (uc *UserController) AssignAdmin(w http.ResponseWriter, r *http.Request) {
 	uc.App.LogActivity(fmt.Sprintf("Admin '%s' assigned admin role to user '%s'.", user.Username, req.Username))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("User '%s' is now an admin", req.Username),
+	})
+}
+
+// GetUserRole returns the role of the currently authenticated user.
+func (uc *UserController) GetUserRole(w http.ResponseWriter, r *http.Request) {
+	// Attempt to retrieve the user from session
+	user, err := uc.App.GetUserFromSession(r)
+	if err != nil {
+		// If not found or any error, respond with 401 Unauthorized
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Otherwise, return the user's role as JSON
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"role": user.Role,
 	})
 }

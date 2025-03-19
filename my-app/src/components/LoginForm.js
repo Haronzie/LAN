@@ -29,9 +29,7 @@ const LoginForm = () => {
       hideLoading();
 
       if (error.response) {
-        if (error.response.status === 403) {
-          message.error('Your account is not activated. Please contact an admin.');
-        } else if (error.response.status === 401) {
+        if (error.response.status === 401) {
           message.error('Invalid username or password. Please try again.');
         } else {
           message.error(error.response.data.message || 'Login failed. Please try again later.');
@@ -78,7 +76,6 @@ const LoginForm = () => {
             name="username"
             rules={[{ required: true, message: 'Please input your username!' }]}
           >
-            {/* autoFocus ensures the username field is focused immediately */}
             <Input placeholder="Enter your username" autoFocus />
           </Form.Item>
           <Form.Item

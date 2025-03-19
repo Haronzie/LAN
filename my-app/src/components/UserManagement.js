@@ -30,14 +30,15 @@ const UserManagement = () => {
 
   const navigate = useNavigate();
 
-  // Fetch users
+  // Fetch users from the backend
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const res = await axios.get('/users', { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
-      message.error('Error fetching users');
+      const errMsg = error.response?.data?.error || 'Error fetching users';
+      message.error(errMsg);
     } finally {
       setLoading(false);
     }
@@ -57,26 +58,12 @@ const UserManagement = () => {
   const adminCount = users.filter(u => u.role === 'admin').length;
   const adminName = localStorage.getItem('username') || 'Admin';
 
-  const handleToggleActive = async (username, isActive) => {
-    try {
-      await axios.put(
-        '/update-user-status',
-        { username, active: !isActive },
-        { withCredentials: true }
-      );
-      message.success(`User '${username}' is now ${!isActive ? 'activated' : 'deactivated'}`);
-      fetchUsers();
-    } catch (error) {
-      message.error('Error updating user status');
-    }
-  };
-
-  // Handler for adding a user
+  // Handler for adding a new user
   const handleAddUserOk = async () => {
     try {
       const values = await addUserForm.validateFields();
       await axios.post(
-        '/add-user',
+        '/user/add', // Updated endpoint
         { username: values.username, password: values.password },
         { withCredentials: true }
       );
@@ -85,10 +72,12 @@ const UserManagement = () => {
       addUserForm.resetFields();
       fetchUsers();
     } catch (error) {
-      message.error('Error adding user');
+      const errMsg = error.response?.data?.error || 'Error adding user';
+      message.error(errMsg);
     }
   };
 
+  // Handler for deleting a user
   const handleDeleteUser = (username) => {
     Modal.confirm({
       title: 'Delete User',
@@ -98,16 +87,21 @@ const UserManagement = () => {
       cancelText: 'No',
       onOk: async () => {
         try {
-          await axios.delete('/delete-user', { data: { username }, withCredentials: true });
+          await axios.delete('/user/delete', { // Updated endpoint
+            data: { username },
+            withCredentials: true
+          });
           message.success(`User '${username}' has been deleted successfully`);
           fetchUsers();
         } catch (error) {
-          message.error('Error deleting user');
+          const errMsg = error.response?.data?.error || 'Error deleting user';
+          message.error(errMsg);
         }
       }
     });
   };
 
+  // Open the update modal and set form fields
   const openUpdateModal = (record) => {
     setCurrentUserToUpdate(record);
     updateForm.setFieldsValue({
@@ -118,29 +112,37 @@ const UserManagement = () => {
     setIsUpdateUserModalOpen(true);
   };
 
+  // Handler for updating a user
   const handleUpdateUser = async () => {
     try {
       const values = await updateForm.validateFields();
       await axios.put(
-        '/update-user',
-        { old_username: values.old_username, new_username: values.new_username, new_password: values.new_password },
+        '/user/update', // Updated endpoint
+        {
+          old_username: values.old_username,
+          new_username: values.new_username,
+          new_password: values.new_password
+        },
         { withCredentials: true }
       );
       message.success(`User '${values.old_username}' updated successfully`);
       setIsUpdateUserModalOpen(false);
       fetchUsers();
     } catch (error) {
-      message.error('Error updating user');
+      const errMsg = error.response?.data?.error || 'Error updating user';
+      message.error(errMsg);
     }
   };
 
+  // Handler for promoting a user to admin
   const handleAssignAdmin = async (username) => {
     try {
       await axios.post('/assign-admin', { username }, { withCredentials: true });
       message.success(`User '${username}' is now an admin`);
       fetchUsers();
     } catch (error) {
-      message.error('Error assigning admin role');
+      const errMsg = error.response?.data?.error || 'Error assigning admin role';
+      message.error(errMsg);
     }
   };
 
@@ -166,15 +168,11 @@ const UserManagement = () => {
       key: 'actions',
       render: (record) => (
         <Space>
-          {(record.role !== 'admin' || (record.role === 'admin' && adminCount > 1)) && (
-            <Button
-              size="small"
-              onClick={() => handleToggleActive(record.username, record.active)}
-            >
-              {record.active ? 'Deactivate' : 'Activate'}
-            </Button>
-          )}
-          <Button size="small" icon={<EditOutlined />} onClick={() => openUpdateModal(record)}>
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => openUpdateModal(record)}
+          >
             Edit
           </Button>
           {record.username !== adminName && (
@@ -188,7 +186,11 @@ const UserManagement = () => {
             </Button>
           )}
           {record.role !== 'admin' && (
-            <Button size="small" type="default" onClick={() => handleAssignAdmin(record.username)}>
+            <Button
+              size="small"
+              type="default"
+              onClick={() => handleAssignAdmin(record.username)}
+            >
               Make Admin
             </Button>
           )}
@@ -238,14 +240,6 @@ const UserManagement = () => {
         okText="Add"
         destroyOnClose
         centered
-        afterOpenChange={(open) => {
-          if (open && usernameRef.current) {
-            // Focus username input after modal is fully open
-            setTimeout(() => {
-              usernameRef.current.focus({ cursor: 'end' });
-            }, 50);
-          }
-        }}
       >
         <Form form={addUserForm} layout="vertical">
           <Form.Item
