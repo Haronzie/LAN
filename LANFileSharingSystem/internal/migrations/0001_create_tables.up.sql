@@ -1,6 +1,5 @@
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,
-    
     password TEXT NOT NULL,
     role TEXT NOT NULL,
     active BOOLEAN NOT NULL DEFAULT false,
@@ -14,10 +13,9 @@ CREATE TABLE IF NOT EXISTS files (
     file_path TEXT,
     size BIGINT,
     content_type TEXT,
-    uploader TEXT
+    uploader TEXT,
     confidential BOOLEAN NOT NULL DEFAULT false
 );
-
 CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);
 
 CREATE TABLE IF NOT EXISTS directories (
@@ -35,6 +33,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
     event TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_log (timestamp);
+
 CREATE TABLE IF NOT EXISTS inventory (
     id SERIAL PRIMARY KEY,
     item_name TEXT NOT NULL,
@@ -42,6 +41,4 @@ CREATE TABLE IF NOT EXISTS inventory (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
--- Add an index if needed
 CREATE INDEX IF NOT EXISTS idx_inventory_item_name ON inventory (item_name);

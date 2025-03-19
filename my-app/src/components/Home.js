@@ -9,10 +9,9 @@ const { Title, Paragraph } = Typography;
 
 const Home = () => {
   const [adminExists, setAdminExists] = useState(false);
-  const [loadingDefaultFolders, setLoadingDefaultFolders] = useState(false);
   const navigate = useNavigate();
 
-  // Check if an admin exists
+  // Check if an admin exists on component mount.
   useEffect(() => {
     const checkAdmin = async () => {
       try {
@@ -42,19 +41,6 @@ const Home = () => {
       });
     } else {
       navigate('/login');
-    }
-  };
-
-  // (Optional) Handler to initialize default folders dynamically in the backend.
-  const handleInitDefaultFolders = async () => {
-    setLoadingDefaultFolders(true);
-    try {
-      const res = await axios.post('/directory/create-default', {}, { withCredentials: true });
-      message.success(res.data.message || 'Default folders created successfully');
-    } catch (error) {
-      message.error(error.response?.data?.error || 'Error initializing default folders');
-    } finally {
-      setLoadingDefaultFolders(false);
     }
   };
 
@@ -88,7 +74,6 @@ const Home = () => {
           <Title level={2}>Welcome to the CDRRMO File Sharing System</Title>
           <Paragraph className="amazing-paragraph">
             The official secure system for managing and sharing files across your organization.
-            Please log in or register to access your dashboard and manage your documents.
           </Paragraph>
           <div className="button-group" style={{ marginTop: 24 }}>
             <Tooltip title="Click here to log in">
@@ -106,20 +91,6 @@ const Home = () => {
                 <Link to="/register">
                   <Button type="default" size="large">Register</Button>
                 </Link>
-              </Tooltip>
-            )}
-            {/* Optional: Show default folder initialization button for admins */}
-            {adminExists && (
-              <Tooltip title="Initialize default folders (Operation, Research, Training)">
-                <Button
-                  type="dashed"
-                  size="large"
-                  loading={loadingDefaultFolders}
-                  style={{ marginLeft: '10px' }}
-                  onClick={handleInitDefaultFolders}
-                >
-                  Init Folders
-                </Button>
               </Tooltip>
             )}
           </div>
