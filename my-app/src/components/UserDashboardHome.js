@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Layout, Row, Col, Card, Typography, Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { BarChartOutlined, ReadOutlined, BookOutlined, DatabaseOutlined, SettingOutlined } from '@ant-design/icons';
-import axios from 'axios';
 
 const { Title } = Typography;
 const { Content } = Layout;
@@ -12,15 +11,11 @@ const UserDashboardHome = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await axios.get('/api/user/profile', { withCredentials: true });
-        setUsername(res.data.username);
-      } catch (error) {
-        console.error('Error fetching user profile:', error);
-      }
-    };
-    fetchProfile();
+    // Retrieve the username from local storage
+    const storedUsername = localStorage.getItem('username');
+    if (storedUsername) {
+      setUsername(storedUsername);
+    }
   }, []);
 
   const dashboards = [
@@ -61,20 +56,18 @@ const UserDashboardHome = () => {
             </Title>
           </Col>
           <Col>
-            {username && (
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <Title level={5} style={{ margin: 0, marginRight: 16 }}>
-                  Welcome, <strong>{username}</strong>!
-                </Title>
-                <Button
-                  type="primary"
-                  icon={<SettingOutlined />}
-                  onClick={() => navigate('/user/settings')}
-                >
-                  Settings
-                </Button>
-              </div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Title level={5} style={{ margin: 0, marginRight: 16 }}>
+                Welcome, <strong>{username || 'Guest'}</strong>!
+              </Title>
+              <Button
+                type="primary"
+                icon={<SettingOutlined />}
+                onClick={() => navigate('/user/settings')}
+              >
+                Settings
+              </Button>
+            </div>
           </Col>
         </Row>
 

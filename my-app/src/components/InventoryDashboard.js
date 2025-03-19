@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Row, Col, Card, Statistic, List, Input, Button, Form, message, Divider } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import {
+  Layout, Row, Col, Card, Statistic, List, Button, Modal, Form, Input, message, Divider,
+} from 'antd';
+import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { Bar, Pie } from '@ant-design/charts';
 
 const { Content } = Layout;
 
@@ -10,13 +13,13 @@ const InventoryDashboard = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
+  const [modalVisible, setModalVisible] = useState(false);
   const navigate = useNavigate();
 
-  // Fetch inventory list from backend
+  // Fetch inventory from backend
   const fetchInventory = async () => {
     setLoading(true);
     try {
-      // The backend returns an array of items: [{ id, item_name, quantity, created_at, updated_at }, ...]
       const res = await axios.get('/inventory', { withCredentials: true });
       setItems(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
@@ -31,13 +34,12 @@ const InventoryDashboard = () => {
     fetchInventory();
   }, []);
 
-  // Compute total quantity from all items
+  // Compute total quantity
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Handle form submission to add a new item
+  // Handle form submission
   const onFinish = async (values) => {
     try {
-      // Match the backend’s expected JSON fields: { item_name, quantity }
       const payload = {
         item_name: values.item_name,
         quantity: Number(values.quantity),
@@ -45,33 +47,70 @@ const InventoryDashboard = () => {
       await axios.post('/inventory', payload, { withCredentials: true });
       message.success('Item added successfully');
       form.resetFields();
-      fetchInventory(); // Refresh the list
+      setModalVisible(false);
+      fetchInventory();
     } catch (error) {
       message.error('Error adding item');
     }
+  };
+
+  // Bar chart data
+  const barConfig = {
+    data: items.map((item) => ({ name: item.item_name, quantity: item.quantity })),
+    xField: 'quantity',
+    yField: 'name',
+    seriesField: 'name',
+    legend: false,
+  };
+
+  // Pie chart data
+  const pieConfig = {
+    data: items.map((item) => ({ type: item.item_name, value: item.quantity })),
+    angleField: 'value',
+    colorField: 'type',
+    radius: 0.8,
+    label: { type: 'inner', content: '{name} ({percentage})' },
   };
 
   return (
     <Content style={{ padding: '24px', background: '#f0f2f5' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
 
-        {/* Row for "Back to Dashboard" button */}
+        {/* Back Button */}
         <Row style={{ marginBottom: 16 }}>
           <Col>
-            <Button
-              icon={<ArrowLeftOutlined />}
-              onClick={() => navigate('/user/home')}
-            >
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/user/home')}>
               Back to Dashboard
             </Button>
           </Col>
         </Row>
 
-        {/* Statistics */}
-        <Row gutter={[16, 16]} justify="center">
-          <Col xs={24} sm={12}>
+        {/* Statistics & Add Item Button */}
+        <Row gutter={[16, 16]} justify="space-between">
+          <Col xs={24} sm={12} lg={8}>
             <Card>
-              <Statistic title="Total Quantity" value={totalQuantity} />
+              <Statistic title="Total Inventory Quantity" value={totalQuantity} />
+            </Card>
+          </Col>
+          <Col>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>
+              Add New Item
+            </Button>
+          </Col>
+        </Row>
+
+        <Divider />
+
+        {/* Charts */}
+        <Row gutter={[16, 16]}>
+          <Col xs={24} md={12}>
+            <Card title="Inventory Distribution">
+              <Pie {...pieConfig} />
+            </Card>
+          </Col>
+          <Col xs={24} md={12}>
+            <Card title="Inventory Breakdown">
+              <Bar {...barConfig} />
             </Card>
           </Col>
         </Row>
@@ -88,10 +127,7 @@ const InventoryDashboard = () => {
                 dataSource={items}
                 renderItem={(item) => (
                   <List.Item>
-                    <List.Item.Meta
-                      title={item.item_name}
-                      description={`Quantity: ${item.quantity}`}
-                    />
+                    <List.Item.Meta title={item.item_name} description={`Quantity: ${item.quantity}`} />
                   </List.Item>
                 )}
               />
@@ -99,10 +135,13 @@ const InventoryDashboard = () => {
           </Col>
         </Row>
 
-        <Divider />
-
-        {/* Add Inventory Item Form */}
-        <Card title="Add New Item">
+        {/* Add Item Modal */}
+        <Modal
+          title="Add New Item"
+          open={modalVisible}
+          onCancel={() => setModalVisible(false)}
+          footer={null}
+        >
           <Form form={form} layout="vertical" onFinish={onFinish}>
             <Form.Item
               name="item_name"
@@ -124,7 +163,7 @@ const InventoryDashboard = () => {
               </Button>
             </Form.Item>
           </Form>
-        </Card>
+        </Modal>
 
       </div>
     </Content>
