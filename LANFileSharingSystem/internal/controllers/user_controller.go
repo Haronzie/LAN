@@ -36,6 +36,8 @@ func (uc *UserController) ListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // AddUser allows an admin to add a new user.
+// user_controller.go
+
 func (uc *UserController) AddUser(w http.ResponseWriter, r *http.Request) {
 	user, err := uc.App.GetUserFromSession(r)
 	if err != nil || user.Role != "admin" {
@@ -66,10 +68,17 @@ func (uc *UserController) AddUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create new user. The 'active' field has been removed.
+	// IMPORTANT: Hash the password before saving
+	hashedPass, err := models.HashPassword(req.Password)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error hashing password")
+		return
+	}
+
+	// Create new user with hashed password
 	newUser := models.User{
 		Username: req.Username,
-		Password: req.Password,
+		Password: hashedPass,
 		Role:     "user",
 	}
 	if err := uc.App.CreateUser(newUser); err != nil {

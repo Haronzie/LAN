@@ -36,10 +36,9 @@ const { Option } = Select;
 const TrainingDashboard = () => {
   const navigate = useNavigate();
 
-  // Current user from localStorage
+  // 1. Current user from localStorage
   const [currentUser, setCurrentUser] = useState('');
 
-  // On mount, load username from localStorage
   useEffect(() => {
     const storedUsername = localStorage.getItem('username');
     if (storedUsername) {
@@ -47,9 +46,9 @@ const TrainingDashboard = () => {
     }
   }, []);
 
-  // The path within "uploads". Empty string means "root".
+  // 2. Path & Items
   const [currentPath, setCurrentPath] = useState('');
-  const [items, setItems] = useState([]); // Combined list of directories + files
+  const [items, setItems] = useState([]); 
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -77,20 +76,20 @@ const TrainingDashboard = () => {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      // 1) Fetch directories from /directory/list?directory=...
       const dirParam = encodeURIComponent(currentPath);
+      // 1) Directories
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
         withCredentials: true
       });
       const directories = Array.isArray(dirRes.data) ? dirRes.data : [];
 
-      // 2) Fetch files from /files?directory=...
+      // 2) Files
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true
       });
       const files = Array.isArray(fileRes.data) ? fileRes.data : [];
 
-      // Combine them into a single array
+      // Combine them
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
@@ -108,7 +107,7 @@ const TrainingDashboard = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // Automatically set the selected folder for uploading whenever currentPath changes
+  // Whenever currentPath changes, set selected folder for uploading
   useEffect(() => {
     setSelectedFolder(currentPath || '');
   }, [currentPath]);
@@ -153,7 +152,7 @@ const TrainingDashboard = () => {
   };
 
   const handleGoUp = () => {
-    if (!currentPath) return; // already at root
+    if (!currentPath) return; // at root
     if (currentPath === 'Training') {
       setCurrentPath('');
       return;
@@ -287,7 +286,6 @@ const TrainingDashboard = () => {
     const oldName = selectedItem.name;
     try {
       if (selectedItem.type === 'directory') {
-        // /directory/rename
         await axios.put(
           '/directory/rename',
           {
@@ -298,7 +296,6 @@ const TrainingDashboard = () => {
           { withCredentials: true }
         );
       } else {
-        // /file/rename
         await axios.put(
           '/file/rename',
           {
@@ -340,7 +337,6 @@ const TrainingDashboard = () => {
 
     const oldName = copySelectedItem.name;
     try {
-      // /copy-file expects { source_file, new_file_name }
       await axios.post(
         '/copy-file',
         {
@@ -402,9 +398,9 @@ const TrainingDashboard = () => {
       render: (record) => {
         // Check ownership
         const isFolderOwner =
-          record.type === 'directory' && record.created_by === currentUser.username;
+          record.type === 'directory' && record.created_by === currentUser;
         const isFileOwner =
-          record.type === 'file' && record.uploader === currentUser.username;
+          record.type === 'file' && record.uploader === currentUser;
 
         return (
           <Space>
@@ -553,7 +549,20 @@ const TrainingDashboard = () => {
 
         {/* Breadcrumb */}
         <Breadcrumb style={{ marginBottom: 16 }}>
-          {breadcrumbItems}
+          <Breadcrumb.Item key="root">
+            {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
+          </Breadcrumb.Item>
+          {segments.map((seg, index) => (
+            <Breadcrumb.Item key={index}>
+              {index === segments.length - 1 ? (
+                seg
+              ) : (
+                <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
+                  {seg}
+                </a>
+              )}
+            </Breadcrumb.Item>
+          ))}
         </Breadcrumb>
 
         {/* Table of Items */}
