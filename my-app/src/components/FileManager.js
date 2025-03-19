@@ -58,15 +58,27 @@ const FileManager = () => {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      // Use currentPath as the parent directory parameter.
       const directoryParam = encodeURIComponent(currentPath);
       const [filesRes, dirsRes] = await Promise.all([
         axios.get(`/files?directory=${directoryParam}`, { withCredentials: true }),
         axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true }),
       ]);
-      const files = filesRes.data || [];
-      const directories = dirsRes.data || [];
-      // Merge directories and files. If none exist, items will be an empty array.
+  
+      // Transform files so that 'file_name' becomes 'name' and set type = 'file'
+      const files = (filesRes.data || []).map((f) => ({
+        name: f.file_name,
+        type: 'file',
+        size: f.size,
+        contentType: f.content_type,
+        uploader: f.uploader,
+      }));
+  
+      // Ensure directories also have "type": "directory"
+      const directories = (dirsRes.data || []).map((d) => ({
+        ...d,
+        type: 'directory',
+      }));
+  
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching items:', error);
@@ -75,6 +87,7 @@ const FileManager = () => {
       setLoading(false);
     }
   };
+  
 
   // Fetch items on mount and whenever currentPath changes.
   useEffect(() => {

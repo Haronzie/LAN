@@ -402,9 +402,34 @@ func (app *App) UpdateDirectoryRecord(oldName, newName string) error {
 }
 
 // ListDirectory is a placeholder that can be implemented as needed.
-func (app *App) ListDirectory(directory string) ([]map[string]interface{}, error) {
-	// Return an empty list or implement your logic (DB queries, file system, etc.).
-	return []map[string]interface{}{}, nil
+func (app *App) ListDirectory(parent string) ([]map[string]interface{}, error) {
+	query := `
+        SELECT directory_name, parent_directory, created_by, created_at
+        FROM directories
+        WHERE parent_directory = $1
+    `
+	rows, err := app.DB.Query(query, parent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var directories []map[string]interface{}
+	for rows.Next() {
+		var name, parentDir, createdBy string
+		var createdAt time.Time
+		if err := rows.Scan(&name, &parentDir, &createdBy, &createdAt); err != nil {
+			continue
+		}
+		directories = append(directories, map[string]interface{}{
+			"name":       name,
+			"type":       "directory", // this helps the UI distinguish folders from files
+			"parent":     parentDir,
+			"created_by": createdBy,
+			"created_at": createdAt,
+		})
+	}
+	return directories, nil
 }
 
 // DirectoryExists checks if a directory with the given name exists under the specified parent.
