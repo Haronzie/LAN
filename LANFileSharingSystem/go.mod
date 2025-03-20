@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	github.com/dutchcoders/go-clamd v0.0.0-20170520113014-b970184f4d9e
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/golang-migrate/migrate/v4 v4.18.2
 	github.com/gorilla/handlers v1.5.2

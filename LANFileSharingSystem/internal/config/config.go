@@ -31,6 +31,8 @@ func LoadConfig() Config {
 
 	}
 
+	//biot
+
 	// Set a default session key if not provided.
 	if cfg.SessionKey == "" {
 		cfg.SessionKey = "your-default-secret-key"

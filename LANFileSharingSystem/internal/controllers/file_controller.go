@@ -1,6 +1,9 @@
 package controllers
 
 import (
+	"LANFileSharingSystem/internal/encryption"
+	"LANFileSharingSystem/internal/models"
+	"LANFileSharingSystem/internal/services"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,8 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"LANFileSharingSystem/internal/models"
 )
 
 type FileController struct {
@@ -38,6 +39,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get the uploaded file.
 	file, handler, err := r.FormFile("file")
 	if err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Error retrieving the file")
@@ -54,53 +56,73 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// We'll store files in "uploads/<targetDir>/<filename>" on disk,
-	// but only store "<targetDir>/<filename>" in the DB.
 	uploadBase := "uploads"
 	rawFileName := handler.Filename
-
-	// Build a relative path to store in the DB, e.g. "RootFolder/myFile.jpg"
 	relativePath := filepath.Join(targetDir, rawFileName)
+	finalDiskPath := filepath.Join(uploadBase, relativePath)
 
-	// Build the actual disk path, e.g. "uploads/RootFolder/myFile.jpg"
-	fullDiskPath := filepath.Join(uploadBase, relativePath)
-
-	// Ensure the directory exists.
-	if err := os.MkdirAll(filepath.Dir(fullDiskPath), 0755); err != nil {
+	// Ensure the target directory exists.
+	if err := os.MkdirAll(filepath.Dir(finalDiskPath), 0755); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error creating target directory")
 		return
 	}
 
-	// Create the file on disk.
-	dst, err := os.Create(fullDiskPath)
+	// Save the uploaded file as a temporary plaintext file.
+	tempFilePath := finalDiskPath + ".tmp"
+	tempFile, err := os.Create(tempFilePath)
 	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error saving file")
+		models.RespondError(w, http.StatusInternalServerError, "Error creating temporary file")
 		return
 	}
-	defer dst.Close()
+	if _, err := io.Copy(tempFile, file); err != nil {
+		tempFile.Close()
+		os.Remove(tempFilePath)
+		models.RespondError(w, http.StatusInternalServerError, "Error saving temporary file")
+		return
+	}
+	tempFile.Close()
 
-	if _, err := io.Copy(dst, file); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error copying file content")
+	// --- New: Virus Scanning via services package ---
+	scanResult, err := services.ScanFile(tempFilePath)
+	if err != nil || !scanResult.Clean {
+		os.Remove(tempFilePath)
+		models.RespondError(w, http.StatusBadRequest, fmt.Sprintf("File rejected: %v", scanResult.Description))
+		return
+	}
+	// --------------------------------------------------
+
+	// Load the encryption key (must be 32 bytes for AES-256).
+	key := []byte(os.Getenv("ENCRYPTION_KEY"))
+	if len(key) != 32 {
+		models.RespondError(w, http.StatusInternalServerError, "Invalid encryption key")
 		return
 	}
 
-	// Save file metadata, storing only the relative path in DB.
+	// Encrypt the temporary file and write to finalDiskPath.
+	if err := encryption.EncryptFile(key, tempFilePath, finalDiskPath); err != nil {
+		os.Remove(tempFilePath)
+		models.RespondError(w, http.StatusInternalServerError, "Error encrypting file")
+		return
+	}
+	// Remove the temporary plaintext file.
+	os.Remove(tempFilePath)
+
+	// Save file metadata in the database.
 	fr := models.FileRecord{
-		FileName:    rawFileName,  // e.g. "myFile.jpg"
-		FilePath:    relativePath, // e.g. "RootFolder/myFile.jpg"
+		FileName:    rawFileName,
+		FilePath:    relativePath,
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
 		Uploader:    user.Username,
 	}
-
 	if err := fc.App.CreateFileRecord(fr); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving file record")
 		return
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded file '%s'.", user.Username, rawFileName))
+	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded and encrypted file '%s'.", user.Username, rawFileName))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("File '%s' uploaded successfully", rawFileName),
+		"message": fmt.Sprintf("File '%s' uploaded and encrypted successfully", rawFileName),
 	})
 }
 
@@ -214,7 +236,7 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Download handles file download requests.
+// Download handles file download requests by decrypting files before sending.
 func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -239,20 +261,42 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build the full disk path from the stored relative path.
-	filePath := filepath.Join("uploads", fr.FilePath)
-	f, err := os.Open(filePath)
+	encryptedFilePath := filepath.Join("uploads", fr.FilePath)
+	// Create a temporary file path for the decrypted file.
+	tempDecryptedPath := encryptedFilePath + ".dec"
+
+	key := []byte(os.Getenv("ENCRYPTION_KEY"))
+	if len(key) != 32 {
+		models.RespondError(w, http.StatusInternalServerError, "Invalid encryption key")
+		return
+	}
+
+	// Decrypt the file into the temporary decrypted file.
+	if err := encryption.DecryptFile(key, encryptedFilePath, tempDecryptedPath); err != nil {
+		os.Remove(tempDecryptedPath)
+		models.RespondError(w, http.StatusInternalServerError, "Error decrypting file")
+		return
+	}
+
+	// Open the decrypted file.
+	f, err := os.Open(tempDecryptedPath)
 	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error opening file")
+		os.Remove(tempDecryptedPath)
+		models.RespondError(w, http.StatusInternalServerError, "Error opening decrypted file")
 		return
 	}
 	defer f.Close()
+	// Remove the temporary decrypted file after streaming.
+	defer os.Remove(tempDecryptedPath)
 
 	w.Header().Set("Content-Type", fr.ContentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
-	io.Copy(w, f)
+	if _, err := io.Copy(w, f); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error sending file")
+		return
+	}
 
-	fc.App.LogActivity(fmt.Sprintf("User downloaded file '%s'.", fileName))
+	fc.App.LogActivity(fmt.Sprintf("User downloaded and decrypted file '%s'.", fileName))
 }
 
 // CopyFile creates a copy of an existing file in the storage and inserts a new record in the database.
