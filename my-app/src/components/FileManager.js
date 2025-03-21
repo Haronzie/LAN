@@ -539,18 +539,19 @@ const FileManager = () => {
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         {/* Top row: Title, Back to Dashboard, and Upload */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-          <Col>
-            <Space>
-              <h2 style={{ margin: 0 }}>File Manager</h2>
-              <Button onClick={() => navigate('/admin')}>Back to Dashboard</Button>
-            </Space>
-          </Col>
-          <Col>
-            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
-              Upload File
-            </Button>
-          </Col>
-        </Row>
+  <Col xs={8} style={{ textAlign: 'left' }}>
+    <Button onClick={() => navigate('/admin')}>Back to Dashboard</Button>
+  </Col>
+  <Col xs={8} style={{ textAlign: 'center' }}>
+    <h2 style={{ margin: 0 }}>File Manager</h2>
+  </Col>
+  <Col xs={8} style={{ textAlign: 'right' }}>
+    <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+      Upload File
+    </Button>
+  </Col>
+</Row>
+
 
         {/* Breadcrumb */}
         {segments.length > 0 && (
