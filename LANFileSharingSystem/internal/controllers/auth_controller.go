@@ -172,6 +172,62 @@ func (ac *AuthController) Logout(w http.ResponseWriter, r *http.Request) {
 	ac.App.LogActivity(fmt.Sprintf("User '%s' logged out.", user.Username))
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Logout successful"})
 }
+
+// ForgotPassword handles resetting a user's password.
+func (ac *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	var req struct {
+		Username    string `json:"username"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	req.NewPassword = strings.TrimSpace(req.NewPassword)
+	if req.Username == "" || req.NewPassword == "" {
+		models.RespondError(w, http.StatusBadRequest, "Username and new password are required")
+		return
+	}
+
+	// Check if the user exists.
+	user, err := ac.App.GetUserByUsername(req.Username)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "Username does not exist")
+		return
+	}
+
+	// Optional: Re-check password strength
+	if ok, msg := isStrongPassword(req.NewPassword); !ok {
+		models.RespondError(w, http.StatusBadRequest, msg)
+		return
+	}
+
+	// Hash the new password.
+	hashedPass, err := models.HashPassword(req.NewPassword)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error hashing new password")
+		return
+	}
+
+	// Update the user's password in the database (assuming a method like UpdateUserPassword exists).
+	if err := ac.App.UpdateUserPassword(user.Username, hashedPass); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error updating password")
+		return
+	}
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Password updated for user '%s'.", user.Username),
+	})
+}
+
+// isStrongPassword checks if the given password meets your strength criteria.
 func isStrongPassword(pw string) (bool, string) {
 	var (
 		hasMinLen  = false
@@ -199,7 +255,6 @@ func isStrongPassword(pw string) (bool, string) {
 		}
 	}
 
-	// Build an error message if needed
 	if !hasMinLen {
 		return false, "Password must be at least 8 characters long"
 	}
@@ -216,6 +271,5 @@ func isStrongPassword(pw string) (bool, string) {
 		return false, "Password must contain at least one special character"
 	}
 
-	// If all checks pass
 	return true, ""
 }

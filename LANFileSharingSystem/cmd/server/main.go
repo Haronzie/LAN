@@ -77,6 +77,7 @@ func main() {
 	// Define routes.
 	router.HandleFunc("/register", authController.Register).Methods("POST")
 	router.HandleFunc("/login", authController.Login).Methods("POST")
+	router.HandleFunc("/forgot-password", authController.ForgotPassword).Methods("POST")
 	router.HandleFunc("/logout", authController.Logout).Methods("POST")
 	router.HandleFunc("/upload", fileController.Upload).Methods("POST")
 	router.HandleFunc("/copy-file", fileController.CopyFile).Methods("POST")

@@ -697,3 +697,11 @@ func (app *App) MoveDirectoryRecord(name, oldParent, newParent string) error {
 	err = app.UpdateFilePathsForRenamedFolder(oldFullPath, newFullPath)
 	return err
 }
+func (app *App) UpdateUserPassword(username, hashedPassword string) error {
+	_, err := app.DB.Exec(`
+        UPDATE users
+        SET password = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE username = $2
+    `, hashedPassword, username)
+	return err
+}
