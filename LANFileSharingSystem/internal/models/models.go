@@ -47,7 +47,9 @@ type User struct {
 
 // FileRecord represents a file stored in the system.
 type FileRecord struct {
+	ID           int    `json:"id"`
 	FileName     string `json:"file_name"`
+	Directory    string `json:"directory"` // <-- New field
 	FilePath     string `json:"file_path"`
 	Size         int64  `json:"size"`
 	ContentType  string `json:"content_type"`
@@ -314,10 +316,17 @@ func (app *App) ListActivities() ([]map[string]interface{}, error) {
 
 func (app *App) CreateFileRecord(fr FileRecord) error {
 	_, err := app.DB.Exec(`
-        INSERT INTO files(file_name, file_path, size, content_type, uploader) 
-        VALUES($1, $2, $3, $4, $5)
-    `,
-		fr.FileName, fr.FilePath, fr.Size, fr.ContentType, fr.Uploader)
+		INSERT INTO files (file_name, directory, file_path, size, content_type, uploader, confidential)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`,
+		fr.FileName,
+		fr.Directory, // must match your new schema
+		fr.FilePath,
+		fr.Size,
+		fr.ContentType,
+		fr.Uploader,
+		fr.Confidential,
+	)
 	return err
 }
 
@@ -364,7 +373,7 @@ func (app *App) ListFiles() ([]FileRecord, error) {
 func (app *App) CreateDirectoryRecord(name, parent, createdBy string) error {
 	_, err := app.DB.Exec(`
         INSERT INTO directories(directory_name, parent_directory, created_by, created_at)
-        VALUES($1, $2, $3, CURRENT_TIMESTAMP)
+        VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
     `, name, parent, createdBy)
 	return err
 }
@@ -645,16 +654,4 @@ func (app *App) DeleteDirectoryAndSubdirectories(parent, name string) error {
         WHERE (parent_directory || '/' || directory_name) LIKE $1 || '/%'
     `, prefix)
 	return err
-}
-
-type TreeNode struct {
-	Title    string     `json:"title"`
-	Value    string     `json:"value"`
-	Children []TreeNode `json:"children"`
-}
-
-// DirectoryData is a simple struct to hold a row from your 'directories' table.
-type DirectoryData struct {
-	Name   string
-	Parent string
 }

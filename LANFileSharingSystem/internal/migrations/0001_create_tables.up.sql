@@ -9,21 +9,26 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 
 CREATE TABLE IF NOT EXISTS files (
-    file_name TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
+    file_name TEXT NOT NULL,
+    directory TEXT NOT NULL,
     file_path TEXT,
     size BIGINT,
     content_type TEXT,
     uploader TEXT,
-    confidential BOOLEAN NOT NULL DEFAULT false
+    confidential BOOLEAN NOT NULL DEFAULT false,
+    UNIQUE (directory, file_name)
 );
 CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);
 
-CREATE TABLE IF NOT EXISTS directories (
-    directory_name TEXT PRIMARY KEY,
-    parent_directory TEXT,
+CREATE TABLE directories (
+    id SERIAL PRIMARY KEY,
+    directory_name TEXT NOT NULL,
+    parent_directory TEXT NOT NULL,
     created_by TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (parent_directory, directory_name)
 );
 CREATE INDEX IF NOT EXISTS idx_directories_parent ON directories (parent_directory);
 

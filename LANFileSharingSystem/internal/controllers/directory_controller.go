@@ -284,6 +284,7 @@ func (dc *DirectoryController) List(w http.ResponseWriter, r *http.Request) {
 
 // Copy handles copying a folder (directory) along with its files.
 
+// Copy handles copying a folder (directory) along with its files and subdirectories.
 func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -313,27 +314,30 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 	req.NewName = strings.TrimSpace(req.NewName)
 	req.DestinationParent = strings.TrimSpace(req.DestinationParent)
 
-	// Validate
+	// Validate: source must be provided; fallback new_name if not provided.
 	if req.SourceName == "" {
 		models.RespondError(w, http.StatusBadRequest, "Source folder name is required")
 		return
 	}
 	if req.NewName == "" {
-		// If the user didn’t provide a new_name, fallback to using the same as source
 		req.NewName = req.SourceName
 	}
 
-	// If user didn’t specify a destination, fallback to copying within the same parent
+	// If no destination parent is provided, copy within the same parent.
 	destParent := req.DestinationParent
 	if destParent == "" {
 		destParent = req.SourceParent
 	}
 
-	// Build full disk paths for source and destination
+	// Build relative paths for source and destination.
+	sourceRelPath := filepath.Join(req.SourceParent, req.SourceName)
+	destRelPath := filepath.Join(destParent, req.NewName)
+
+	// Build full disk paths.
 	srcPath := getResourcePath(req.SourceName, req.SourceParent)
 	dstPath := getResourcePath(req.NewName, destParent)
 
-	// 1) Verify the source folder exists
+	// 1) Verify the source folder exists.
 	srcInfo, err := os.Stat(srcPath)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, fmt.Sprintf("Source folder '%s' not found on disk", srcPath))
@@ -344,54 +348,130 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2) Ensure the destination folder does not already exist
+	// 2) Ensure the destination folder does not already exist.
 	if _, err := os.Stat(dstPath); err == nil {
 		models.RespondError(w, http.StatusConflict, fmt.Sprintf("Destination folder '%s' already exists", dstPath))
 		return
 	}
 
-	// 3) Recursively copy the folder on disk
+	// 3) Recursively copy the folder on disk.
 	if err := copyDir(srcPath, dstPath); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error copying folder: "+err.Error())
 		return
 	}
 
-	// 4) Create a new directory record in the DB
+	// 4) Create the top-level directory record for the destination folder.
 	if err := dc.App.CreateDirectoryRecord(req.NewName, destParent, user.Username); err != nil {
-		// Optionally rollback by removing the copied folder on disk
-		os.RemoveAll(dstPath)
+		os.RemoveAll(dstPath) // rollback disk copy on error
 		models.RespondError(w, http.StatusInternalServerError, "Error saving folder record to database")
 		return
 	}
 
-	// 5) Duplicate file records for items directly in the source folder
-	sourceFolderPath := filepath.Join(req.SourceParent, req.SourceName)
-	fileRecords, err := dc.App.ListFilesInDirectory(sourceFolderPath)
+	// 5) Recursively duplicate file and directory records from the source to the destination.
+	if err := duplicateRecords(sourceRelPath, destRelPath, dc, user.Username); err != nil {
+		log.Println("Warning: error duplicating nested records:", err)
+		// Optionally, rollback changes on disk and/or in DB here.
+	}
+
+	dc.App.LogActivity(fmt.Sprintf("User '%s' copied folder from '%s' to '%s'.",
+		user.Username, sourceRelPath, destRelPath))
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Folder copied to '%s' successfully", destRelPath),
+	})
+}
+
+// duplicateRecords recursively creates directory and file records in the DB.
+
+func duplicateRecords(srcRelPath, destRelPath string, dc *DirectoryController, username string) error {
+	// 1) Duplicate file records for the current directory.
+	fileRecords, err := dc.App.ListFilesInDirectory(srcRelPath)
 	if err == nil {
 		for _, f := range fileRecords {
-			// Build the new file path under the destination
-			newFilePath := filepath.Join(destParent, req.NewName, f.FileName)
+			newFilePath := filepath.Join(destRelPath, f.FileName)
 			newFR := models.FileRecord{
 				FileName:    f.FileName,
 				FilePath:    newFilePath,
 				Size:        f.Size,
 				ContentType: f.ContentType,
-				Uploader:    user.Username,
+				Uploader:    username,
 			}
-			if err := dc.App.CreateFileRecord(newFR); err != nil {
-				log.Println("Error duplicating file record:", err)
+
+			// Attempt to create the file record.
+			if createErr := dc.App.CreateFileRecord(newFR); createErr != nil {
+				// If it's a duplicate key constraint, rename and retry.
+				if strings.Contains(createErr.Error(), "duplicate key value violates unique constraint") {
+					log.Println("Auto-renaming duplicate file:", newFR.FileName)
+					newFR.FileName = generateCopyName(newFR.FileName) // e.g. "filename.csv" -> "filename_copy.csv"
+					newFR.FilePath = filepath.Join(destRelPath, newFR.FileName)
+
+					if retryErr := dc.App.CreateFileRecord(newFR); retryErr != nil {
+						log.Println("Error creating file record even after rename:", retryErr)
+					}
+				} else {
+					log.Println("Error duplicating file record for", f.FileName, ":", createErr)
+				}
 			}
 		}
 	} else {
-		log.Println("Warning: could not list source folder files:", err)
+		log.Println("Warning: could not list files in", srcRelPath, ":", err)
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' copied folder from '%s/%s' to '%s/%s'.",
-		user.Username, req.SourceParent, req.SourceName, destParent, req.NewName))
+	// 2) Look for subdirectories in the source directory.
+	srcFullPath := filepath.Join("uploads", srcRelPath)
+	entries, err := os.ReadDir(srcFullPath)
+	if err != nil {
+		return err
+	}
 
-	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("Folder copied to '%s' successfully", filepath.Join(destParent, req.NewName)),
-	})
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// Build new relative paths for the subdirectory.
+			srcSubRel := filepath.Join(srcRelPath, entry.Name())
+			destSubRel := filepath.Join(destRelPath, entry.Name())
+
+			// Create a directory record for this subdirectory.
+			if createErr := dc.App.CreateDirectoryRecord(entry.Name(), destRelPath, username); createErr != nil {
+				// If it's a duplicate key constraint, rename and retry.
+				if strings.Contains(createErr.Error(), "duplicate key value violates unique constraint") {
+					log.Println("Auto-renaming duplicate directory:", entry.Name())
+					renamed := generateCopyName(entry.Name()) // e.g. "Report" -> "Report_copy"
+					if retryErr := dc.App.CreateDirectoryRecord(renamed, destRelPath, username); retryErr != nil {
+						log.Println("Error creating directory record even after rename:", retryErr)
+						// We can continue recursion or skip it. Here, we skip recursion if we can’t create the folder.
+						continue
+					}
+					// Adjust destSubRel to the newly renamed directory.
+					destSubRel = filepath.Join(destRelPath, renamed)
+				} else {
+					log.Println("Error creating directory record for", entry.Name(), ":", createErr)
+				}
+			}
+
+			// 3) Recursively duplicate records for the subdirectory.
+			if err := duplicateRecords(srcSubRel, destSubRel, dc, username); err != nil {
+				log.Println("Error duplicating records for subdirectory", entry.Name(), ":", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// generateCopyName("meeting.csv") -> "meeting_copy.csv"
+// generateCopyName("Report") -> "Report_copy"
+func generateCopyName(original string) string {
+	ext := filepath.Ext(original)             // e.g. ".csv"
+	base := strings.TrimSuffix(original, ext) // e.g. "meeting"
+	if base == "" && ext == "" {
+		return original + "_copy" // fallback
+	}
+	if ext == "" {
+		// Folder has no extension
+		return base + "_copy"
+	}
+	// File with extension
+	return base + "_copy" + ext
 }
 
 // copyDir recursively copies a directory from src to dst.

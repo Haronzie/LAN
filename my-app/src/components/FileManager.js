@@ -14,7 +14,7 @@ import {
   Card,
   Breadcrumb,
   Upload,
-  TreeSelect
+  TreeSelect,
 } from 'antd';
 import {
   UploadOutlined,
@@ -24,7 +24,7 @@ import {
   ArrowUpOutlined,
   FolderAddOutlined,
   EditOutlined,
-  CopyOutlined
+  CopyOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -321,7 +321,7 @@ const FileManager = () => {
 
     try {
       if (copyItem.type === 'directory') {
-        // Copy folder
+        // Copy folder using the updated endpoint
         await axios.post(
           '/directory/copy',
           {
@@ -330,18 +330,18 @@ const FileManager = () => {
             new_name: copyNewName,
             // If user selected a destination from the TreeSelect, use that;
             // otherwise fallback to the currentPath.
-            destination_parent: selectedDestination || currentPath
+            destination_parent: selectedDestination || currentPath,
           },
           { withCredentials: true }
         );
       } else {
-        // Copy file
+        // Copy file remains unchanged
         await axios.post(
           '/copy-file',
           {
             source_file: copyItem.name,
             new_file_name: copyNewName,
-            destination_folder: selectedDestination || currentPath
+            destination_folder: selectedDestination || currentPath,
           },
           { withCredentials: true }
         );
@@ -377,9 +377,7 @@ const FileManager = () => {
           return (
             <Space>
               <FolderOpenOutlined />
-              <a onClick={() => handleFolderClick(record.name)}>
-                {name}
-              </a>
+              <a onClick={() => handleFolderClick(record.name)}>{name}</a>
             </Space>
           );
         }
@@ -406,10 +404,7 @@ const FileManager = () => {
         <Space>
           {record.type === 'file' && (
             <Tooltip title="Download">
-              <Button
-                icon={<DownloadOutlined />}
-                onClick={() => handleDownload(record.name)}
-              />
+              <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
             </Tooltip>
           )}
           <Tooltip title="Rename">
@@ -423,17 +418,10 @@ const FileManager = () => {
             />
           </Tooltip>
           <Tooltip title="Copy">
-            <Button
-              icon={<CopyOutlined />}
-              onClick={() => handleCopy(record)}
-            />
+            <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
           </Tooltip>
           <Tooltip title="Delete">
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => handleDelete(record)}
-            />
+            <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
           </Tooltip>
         </Space>
       ),
@@ -450,11 +438,7 @@ const FileManager = () => {
   segments.forEach((seg, index) => {
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {index === segments.length - 1 ? (
-          seg
-        ) : (
-          <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>
-        )}
+        {index === segments.length - 1 ? seg : <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>}
       </Breadcrumb.Item>
     );
   });
@@ -462,7 +446,6 @@ const FileManager = () => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
-
         {/* Top row: Title, Back to Dashboard, and Upload */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
@@ -472,11 +455,7 @@ const FileManager = () => {
             </Space>
           </Col>
           <Col>
-            <Button
-              type="primary"
-              icon={<UploadOutlined />}
-              onClick={handleOpenUploadModal}
-            >
+            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
               Upload File
             </Button>
           </Col>
@@ -500,10 +479,7 @@ const FileManager = () => {
             </Col>
           )}
           <Col>
-            <Button
-              icon={<FolderAddOutlined />}
-              onClick={() => setCreateFolderModal(true)}
-            >
+            <Button icon={<FolderAddOutlined />} onClick={() => setCreateFolderModal(true)}>
               Create Folder
             </Button>
           </Col>
@@ -604,7 +580,6 @@ const FileManager = () => {
                 placeholder="Enter new name"
               />
             </Form.Item>
-
             {/* TreeSelect for optional destination folder */}
             <Form.Item label="Destination Folder (Optional)">
               <TreeSelect
