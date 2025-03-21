@@ -598,3 +598,63 @@ func (app *App) DeleteInventoryItem(id int) error {
     `, id)
 	return err
 }
+
+type TreeNode struct {
+	Title    string     `json:"title"`
+	Value    string     `json:"value"`
+	Children []TreeNode `json:"children"`
+}
+
+// DirectoryData is a simple struct to hold a row from your 'directories' table.
+type DirectoryData struct {
+	Name   string
+	Parent string
+}
+
+func (app *App) DeleteFilesWithPrefix(prefix string) error {
+	query := `
+        DELETE FROM files
+        WHERE file_path = $1
+           OR file_path LIKE $1 || '/%'
+    `
+	// For empty parent, you might just have "FolderName" in file_path.
+	// The first condition (`file_path = $1`) catches the exact match (rare for a folder).
+	// The second condition matches subpaths, e.g. "FolderName/anything..."
+	_, err := app.DB.Exec(query, prefix)
+	return err
+}
+func (app *App) DeleteDirectoriesWithPrefix(prefix string) error {
+	query := `DELETE FROM directories WHERE (parent_directory || '/' || directory_name) LIKE $1 || '%'`
+	_, err := app.DB.Exec(query, prefix)
+	return err
+}
+
+// DeleteDirectoryAndSubdirectories removes exactly the (parent, name) directory record,
+// then removes all subdirectories that reside under it.
+func (app *App) DeleteDirectoryAndSubdirectories(parent, name string) error {
+	// Build a prefix for subfolders
+	// e.g. if parent = "", prefix = "Tata"
+	//      if parent = "Root", prefix = "Root/Tata"
+	prefix := parent
+	if prefix != "" {
+		prefix += "/"
+	}
+	prefix += name
+
+	// 1) Delete the main directory itself
+	_, err := app.DB.Exec(`
+        DELETE FROM directories
+        WHERE parent_directory = $1
+          AND directory_name = $2
+    `, parent, name)
+	if err != nil {
+		return err
+	}
+
+	// 2) Delete any subfolders whose path starts with prefix
+	_, err = app.DB.Exec(`
+        DELETE FROM directories
+        WHERE (parent_directory || '/' || directory_name) LIKE $1 || '/%'
+    `, prefix)
+	return err
+}

@@ -13,7 +13,8 @@ import {
   Form,
   Card,
   Breadcrumb,
-  Upload
+  Upload,
+  TreeSelect
 } from 'antd';
 import {
   UploadOutlined,
@@ -23,7 +24,6 @@ import {
   ArrowUpOutlined,
   FolderAddOutlined,
   EditOutlined,
-  // NEW:
   CopyOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -32,52 +32,56 @@ import path from 'path-browserify';
 
 const { Content } = Layout;
 
-// Helper: split a path into segments (e.g., "Folder/Subfolder")
+// Helper: split a path like "Folder/Subfolder" into segments
 function getPathSegments(p) {
   if (!p) return [];
   return p.split('/').filter(Boolean);
 }
 
 const FileManager = () => {
-  const [items, setItems] = useState([]); // files and directories
+  const [items, setItems] = useState([]); // files + directories
   const [loading, setLoading] = useState(false);
-  const [currentPath, setCurrentPath] = useState(''); // root: empty string
+  const [currentPath, setCurrentPath] = useState(''); // "" = root
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Modal states
+  // Create folder modal
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+
+  // Upload modal
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
+
+  // Rename modal
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
 
-  // NEW: Copy modal states
+  // Copy modal
   const [copyModalVisible, setCopyModalVisible] = useState(false);
   const [copyNewName, setCopyNewName] = useState('');
   const [copyItem, setCopyItem] = useState(null);
 
+  // Folder tree for optional destination selection
+  const [folderTreeData, setFolderTreeData] = useState([]);
+  const [selectedDestination, setSelectedDestination] = useState('');
+
   const navigate = useNavigate();
   const isRoot = currentPath === '';
 
-  // Navigate back to the admin dashboard
-  const handleBackToDashboard = () => {
-    navigate('/admin');
-  };
-
-  // Fetch items (directories + files) for the currentPath
+  // ---------------------------------------------
+  // Fetch items for the current folder
+  // ---------------------------------------------
   const fetchItems = async () => {
     setLoading(true);
     try {
       const directoryParam = encodeURIComponent(currentPath);
-      // We call both endpoints in parallel:
       const [filesRes, dirsRes] = await Promise.all([
         axios.get(`/files?directory=${directoryParam}`, { withCredentials: true }),
         axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true }),
       ]);
 
-      // Convert files to your table structure
+      // Convert files to table items
       const files = (filesRes.data || []).map((f) => ({
         name: f.name,
         type: 'file',
@@ -86,7 +90,7 @@ const FileManager = () => {
         uploader: f.uploader,
       }));
 
-      // Directories should already have { name, type: 'directory' }
+      // Directories are already in { name, type: 'directory' }
       const directories = dirsRes.data || [];
 
       setItems([...directories, ...files]);
@@ -98,22 +102,42 @@ const FileManager = () => {
     }
   };
 
+  // ---------------------------------------------
+  // Fetch entire folder tree once on mount
+  // ---------------------------------------------
+  const fetchFolderTree = async () => {
+    try {
+      const res = await axios.get('/directory/tree', { withCredentials: true });
+      setFolderTreeData(res.data || []);
+    } catch (error) {
+      console.error('Error fetching folder tree:', error);
+      // not fatal
+    }
+  };
+
+  useEffect(() => {
+    fetchFolderTree();
+  }, []);
+
+  // Whenever currentPath changes, reload items
   useEffect(() => {
     fetchItems();
   }, [currentPath]);
 
-  // Optional polling for backend changes (e.g. every 10s)
+  // (Optional) Poll for changes every 10s
   useEffect(() => {
     const interval = setInterval(fetchItems, 10000);
     return () => clearInterval(interval);
   }, [currentPath]);
 
-  // Filter items by search term
+  // Filter by search term
   const filteredItems = items.filter((item) =>
     (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Create Folder
+  // ---------------------------------------------
+  // Create folder
+  // ---------------------------------------------
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -129,33 +153,37 @@ const FileManager = () => {
       setCreateFolderModal(false);
       setNewFolderName('');
       fetchItems();
+      // Refresh the folder tree so new folder appears
+      fetchFolderTree();
     } catch (error) {
       console.error('Create folder error:', error);
       message.error(error.response?.data?.error || 'Error creating folder');
     }
   };
 
-  // Navigate into a folder
+  // ---------------------------------------------
+  // Folder navigation
+  // ---------------------------------------------
   const handleFolderClick = (folderName) => {
     const newPath = isRoot ? folderName : path.join(currentPath, folderName);
     setCurrentPath(newPath);
   };
 
-  // Go up one level
   const handleGoUp = () => {
     if (isRoot) return;
     const parent = path.dirname(currentPath);
     setCurrentPath(parent === '.' ? '' : parent);
   };
 
-  // Breadcrumb
   const handleBreadcrumbClick = (index) => {
     const segments = getPathSegments(currentPath);
     const newPath = segments.slice(0, index + 1).join('/');
     setCurrentPath(newPath);
   };
 
-  // Upload modal
+  // ---------------------------------------------
+  // Upload
+  // ---------------------------------------------
   const handleOpenUploadModal = () => {
     if (isRoot) {
       message.error('Please select an existing folder before uploading a file.');
@@ -194,7 +222,9 @@ const FileManager = () => {
     }
   };
 
-  // Delete item (file or directory)
+  // ---------------------------------------------
+  // Delete (file or folder)
+  // ---------------------------------------------
   const handleDelete = async (record) => {
     try {
       if (record.type === 'directory') {
@@ -210,20 +240,27 @@ const FileManager = () => {
       }
       message.success(`${record.name} deleted successfully`);
       fetchItems();
+      // Refresh the folder tree if a folder was deleted
+      if (record.type === 'directory') {
+        fetchFolderTree();
+      }
     } catch (error) {
       console.error('Delete error:', error);
       message.error(error.response?.data?.error || `Error deleting ${record.name}`);
     }
   };
 
+  // ---------------------------------------------
   // Download file
+  // ---------------------------------------------
   const handleDownload = (fileName) => {
-    // Adjust the base URL as needed (e.g. if your server is not localhost:8080)
     const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
     window.open(downloadUrl, '_blank');
   };
 
-  // Rename (files or directories)
+  // ---------------------------------------------
+  // Rename
+  // ---------------------------------------------
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
       message.error('New name cannot be empty');
@@ -240,6 +277,8 @@ const FileManager = () => {
           },
           { withCredentials: true }
         );
+        // Refresh folder tree so renamed folder is updated
+        fetchFolderTree();
       } else {
         await axios.put(
           '/file/rename',
@@ -260,16 +299,16 @@ const FileManager = () => {
     }
   };
 
-  // NEW: handleCopy - opens the Copy modal
+  // ---------------------------------------------
+  // Copy
+  // ---------------------------------------------
   const handleCopy = (record) => {
-    // Suggest a new name by appending "_copy"
     const suggestedName = record.name + '_copy';
     setCopyItem(record);
     setCopyNewName(suggestedName);
     setCopyModalVisible(true);
   };
 
-  // NEW: handleCopyConfirm - calls the correct endpoint for file or folder
   const handleCopyConfirm = async () => {
     if (!copyNewName.trim()) {
       message.error('New name cannot be empty');
@@ -282,39 +321,52 @@ const FileManager = () => {
 
     try {
       if (copyItem.type === 'directory') {
-        // Copy a folder
+        // Copy folder
         await axios.post(
           '/directory/copy',
           {
             source_name: copyItem.name,
             source_parent: currentPath,
             new_name: copyNewName,
+            // If user selected a destination from the TreeSelect, use that;
+            // otherwise fallback to the currentPath.
+            destination_parent: selectedDestination || currentPath
           },
           { withCredentials: true }
         );
       } else {
-        // Copy a file
+        // Copy file
         await axios.post(
           '/copy-file',
           {
             source_file: copyItem.name,
             new_file_name: copyNewName,
+            destination_folder: selectedDestination || currentPath
           },
           { withCredentials: true }
         );
       }
+
       message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
       setCopyModalVisible(false);
       setCopyNewName('');
       setCopyItem(null);
+      setSelectedDestination('');
       fetchItems();
+
+      // If a folder was copied, refresh the tree so the new folder shows
+      if (copyItem.type === 'directory') {
+        fetchFolderTree();
+      }
     } catch (error) {
       console.error('Copy error:', error);
       message.error(error.response?.data?.error || 'Error copying item');
     }
   };
 
+  // ---------------------------------------------
   // Table columns
+  // ---------------------------------------------
   const columns = [
     {
       title: 'Name',
@@ -325,7 +377,9 @@ const FileManager = () => {
           return (
             <Space>
               <FolderOpenOutlined />
-              <a onClick={() => handleFolderClick(record.name)}>{name}</a>
+              <a onClick={() => handleFolderClick(record.name)}>
+                {name}
+              </a>
             </Space>
           );
         }
@@ -368,7 +422,6 @@ const FileManager = () => {
               }}
             />
           </Tooltip>
-          {/* NEW: Copy button */}
           <Tooltip title="Copy">
             <Button
               icon={<CopyOutlined />}
@@ -387,7 +440,7 @@ const FileManager = () => {
     },
   ];
 
-  // Build breadcrumb items
+  // Build breadcrumb
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
     <Breadcrumb.Item key="root">
@@ -415,7 +468,7 @@ const FileManager = () => {
           <Col>
             <Space>
               <h2 style={{ margin: 0 }}>File Manager</h2>
-              <Button onClick={handleBackToDashboard}>Back to Dashboard</Button>
+              <Button onClick={() => navigate('/admin')}>Back to Dashboard</Button>
             </Space>
           </Col>
           <Col>
@@ -535,7 +588,7 @@ const FileManager = () => {
           )}
         </Modal>
 
-        {/* NEW: Copy Modal */}
+        {/* Copy Modal */}
         <Modal
           title="Copy Item"
           visible={copyModalVisible}
@@ -549,6 +602,19 @@ const FileManager = () => {
                 value={copyNewName}
                 onChange={(e) => setCopyNewName(e.target.value)}
                 placeholder="Enter new name"
+              />
+            </Form.Item>
+
+            {/* TreeSelect for optional destination folder */}
+            <Form.Item label="Destination Folder (Optional)">
+              <TreeSelect
+                style={{ width: '100%' }}
+                treeData={folderTreeData}
+                placeholder="Select folder or leave blank"
+                value={selectedDestination}
+                onChange={(val) => setSelectedDestination(val)}
+                treeDefaultExpandAll
+                allowClear
               />
             </Form.Item>
           </Form>

@@ -300,6 +300,8 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 }
 
 // CopyFile creates a copy of an existing file in the storage and inserts a new record in the database.
+// CopyFile creates a copy of an existing file in the storage and inserts a new record in the DB.
+// Now it accepts "destination_folder" so you can paste it into another folder.
 func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -313,45 +315,72 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		SourceFile  string `json:"source_file"`
-		NewFileName string `json:"new_file_name"`
+		SourceFile        string `json:"source_file"`
+		NewFileName       string `json:"new_file_name"`
+		DestinationFolder string `json:"destination_folder"` // optional
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
+	// Trim
 	req.SourceFile = strings.TrimSpace(req.SourceFile)
 	req.NewFileName = strings.TrimSpace(req.NewFileName)
-	if req.SourceFile == "" || req.NewFileName == "" {
-		models.RespondError(w, http.StatusBadRequest, "Source file and new file name are required")
+	req.DestinationFolder = strings.TrimSpace(req.DestinationFolder)
+
+	// Validate
+	if req.SourceFile == "" {
+		models.RespondError(w, http.StatusBadRequest, "Source file is required")
 		return
 	}
+	if req.NewFileName == "" {
+		// fallback to same name
+		// e.g. user is doing a "paste" with the same file name
+		parts := strings.Split(req.SourceFile, "/")
+		originalName := parts[len(parts)-1]
+		req.NewFileName = originalName
+	}
 
-	// 1. Retrieve the source file record from DB to get the relative path.
+	// 1. Retrieve the source file record
 	oldFR, err := fc.App.GetFileRecord(req.SourceFile)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "Source file not found in database")
 		return
 	}
 
-	// 2. Build the disk paths for source and destination.
+	// 2. Build the disk path for the source
 	srcPath := filepath.Join("uploads", oldFR.FilePath)
 
-	// We'll store the new copy in the same folder as the source, just with a new file name:
-	newRelativePath := filepath.Join(filepath.Dir(oldFR.FilePath), req.NewFileName)
+	// Decide where the new file goes
+	var newRelativePath string
+	if req.DestinationFolder == "" {
+		// If no destination_folder given, copy into the same folder
+		newRelativePath = filepath.Join(filepath.Dir(oldFR.FilePath), req.NewFileName)
+	} else {
+		// Paste into the user-specified folder
+		newRelativePath = filepath.Join(req.DestinationFolder, req.NewFileName)
+	}
 	dstPath := filepath.Join("uploads", newRelativePath)
 
-	// 3. Copy the file on disk.
+	// 3. Copy the file on disk
 	in, err := os.Open(srcPath)
 	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error opening source file")
+		models.RespondError(w, http.StatusInternalServerError, "Error opening source file on disk")
 		return
 	}
 	defer in.Close()
 
+	// If the destination file already exists, decide if you want to fail or overwrite
+	if _, errStat := os.Stat(dstPath); errStat == nil {
+		// For safety, we’ll fail if the file exists
+		models.RespondError(w, http.StatusConflict, "Destination file already exists")
+		return
+	}
+
 	out, err := os.Create(dstPath)
 	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error creating destination file")
+		models.RespondError(w, http.StatusInternalServerError, "Error creating destination file on disk")
 		return
 	}
 	defer out.Close()
@@ -361,24 +390,26 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Build a new record for the copied file.
-	//    We can copy the content type and other metadata from the old record.
+	// 4. Insert new DB record
 	newRecord := models.FileRecord{
 		FileName:    req.NewFileName,
 		FilePath:    newRelativePath,
-		Size:        oldFR.Size, // or you can re-check with os.Stat(dstPath) for exact size
+		Size:        oldFR.Size,
 		ContentType: oldFR.ContentType,
 		Uploader:    user.Username, // or oldFR.Uploader, depending on your policy
 	}
-
 	if err := fc.App.CreateFileRecord(newRecord); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error creating file record for copied file")
+		// Optionally remove the newly-copied file from disk if DB insert fails
+		os.Remove(dstPath)
+		models.RespondError(w, http.StatusInternalServerError, "Error creating file record in database")
 		return
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' copied file from '%s' to '%s'.", user.Username, req.SourceFile, req.NewFileName))
+	fc.App.LogActivity(fmt.Sprintf("User '%s' copied file from '%s' to '%s'.",
+		user.Username, req.SourceFile, newRelativePath))
+
 	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("File copied to '%s' successfully", req.NewFileName),
+		"message": fmt.Sprintf("File copied to '%s' successfully", newRelativePath),
 	})
 }
 

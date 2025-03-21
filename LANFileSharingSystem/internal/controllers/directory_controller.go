@@ -97,7 +97,9 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // Delete handles directory deletion from both the filesystem and the database.
-// It expects a JSON payload with "name" and an optional "parent".
+// It recursively deletes the folder, its subfolders, and files.
+// Delete handles directory deletion from both the filesystem and the database.
+// It recursively deletes the folder, its subfolders, and files.
 func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -126,29 +128,42 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1) Build the absolute path for disk deletion
 	resourcePath := getResourcePath(req.Name, req.Parent)
 
-	// Delete the directory on the filesystem.
+	// 2) Remove the directory (and its sub-contents) from the filesystem
 	if err := os.RemoveAll(resourcePath); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory on disk")
 		return
 	}
 
-	// Delete the directory record from the database.
-	if err := dc.App.DeleteDirectoryRecord(req.Name); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory record from database")
-		return
-	}
-	if err := dc.App.DeleteFilesInFolder(resourcePath); err != nil {
+	// 3) Build the relative path (for database deletion)
+	//    e.g. If parent is "Root" and name is "FolderA", this becomes "Root/FolderA"
+	relativeFolder := filepath.Join(req.Parent, req.Name)
+
+	// -- SNIPPET STARTS HERE --
+	// 4) Delete files whose file_path starts with relativeFolder
+	if err := dc.App.DeleteFilesWithPrefix(relativeFolder); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file records in the folder")
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' deleted directory '%s' (parent: '%s').",
+	// 5) Delete directories whose (parent||'/'||name) starts with relativeFolder
+	if err := dc.App.DeleteDirectoriesWithPrefix(relativeFolder); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory records from database")
+		return
+	}
+	if err := dc.App.DeleteDirectoryAndSubdirectories(req.Parent, req.Name); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory records from database")
+		return
+	}
+	// -- SNIPPET ENDS HERE --
+
+	dc.App.LogActivity(fmt.Sprintf("User '%s' deleted directory '%s' (parent: '%s') and all its contents.",
 		user.Username, req.Name, req.Parent))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("Directory '%s' deleted successfully", req.Name),
+		"message": fmt.Sprintf("Directory '%s' and its contents deleted successfully", req.Name),
 	})
 }
 
@@ -268,11 +283,7 @@ func (dc *DirectoryController) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // Copy handles copying a folder (directory) along with its files.
-// It expects a JSON payload with:
-//   - source_name: the name of the folder to copy
-//   - source_parent: the parent folder of the source (can be empty)
-//   - new_name: the new name for the copied folder
-//   - destination_parent: (optional) parent folder for the new folder; if empty, source_parent is used.
+
 func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -301,25 +312,31 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 	req.SourceParent = strings.TrimSpace(req.SourceParent)
 	req.NewName = strings.TrimSpace(req.NewName)
 	req.DestinationParent = strings.TrimSpace(req.DestinationParent)
-	if req.SourceName == "" || req.NewName == "" {
-		models.RespondError(w, http.StatusBadRequest, "Source folder and new folder names are required")
+
+	// Validate
+	if req.SourceName == "" {
+		models.RespondError(w, http.StatusBadRequest, "Source folder name is required")
 		return
 	}
+	if req.NewName == "" {
+		// If the user didn’t provide a new_name, fallback to using the same as source
+		req.NewName = req.SourceName
+	}
 
-	// Use source_parent as destination if none provided.
+	// If user didn’t specify a destination, fallback to copying within the same parent
 	destParent := req.DestinationParent
 	if destParent == "" {
 		destParent = req.SourceParent
 	}
 
-	// Build full paths for source and destination.
+	// Build full disk paths for source and destination
 	srcPath := getResourcePath(req.SourceName, req.SourceParent)
 	dstPath := getResourcePath(req.NewName, destParent)
 
-	// Verify the source folder exists and is a directory.
+	// 1) Verify the source folder exists
 	srcInfo, err := os.Stat(srcPath)
 	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "Source folder not found")
+		models.RespondError(w, http.StatusNotFound, fmt.Sprintf("Source folder '%s' not found on disk", srcPath))
 		return
 	}
 	if !srcInfo.IsDir() {
@@ -327,32 +344,32 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ensure the destination folder does not already exist.
+	// 2) Ensure the destination folder does not already exist
 	if _, err := os.Stat(dstPath); err == nil {
-		models.RespondError(w, http.StatusConflict, "Destination folder already exists")
+		models.RespondError(w, http.StatusConflict, fmt.Sprintf("Destination folder '%s' already exists", dstPath))
 		return
 	}
 
-	// Recursively copy the source folder to the destination.
+	// 3) Recursively copy the folder on disk
 	if err := copyDir(srcPath, dstPath); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error copying folder: "+err.Error())
 		return
 	}
 
-	// Create the new folder record in the database.
+	// 4) Create a new directory record in the DB
 	if err := dc.App.CreateDirectoryRecord(req.NewName, destParent, user.Username); err != nil {
-		// Optionally, remove the copied folder to rollback if DB insert fails
+		// Optionally rollback by removing the copied folder on disk
 		os.RemoveAll(dstPath)
 		models.RespondError(w, http.StatusInternalServerError, "Error saving folder record to database")
 		return
 	}
 
-	// Duplicate file records for files directly inside the source folder.
+	// 5) Duplicate file records for items directly in the source folder
 	sourceFolderPath := filepath.Join(req.SourceParent, req.SourceName)
 	fileRecords, err := dc.App.ListFilesInDirectory(sourceFolderPath)
 	if err == nil {
 		for _, f := range fileRecords {
-			// Build the new file path by replacing the source folder with the destination folder.
+			// Build the new file path under the destination
 			newFilePath := filepath.Join(destParent, req.NewName, f.FileName)
 			newFR := models.FileRecord{
 				FileName:    f.FileName,
@@ -362,7 +379,6 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 				Uploader:    user.Username,
 			}
 			if err := dc.App.CreateFileRecord(newFR); err != nil {
-				// Log the error and continue copying other records.
 				log.Println("Error duplicating file record:", err)
 			}
 		}
@@ -370,12 +386,8 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 		log.Println("Warning: could not list source folder files:", err)
 	}
 
-	dc.App.LogActivity(fmt.Sprintf(
-		"User '%s' copied folder from '%s' to '%s'.",
-		user.Username,
-		filepath.Join(req.SourceParent, req.SourceName),
-		filepath.Join(destParent, req.NewName),
-	))
+	dc.App.LogActivity(fmt.Sprintf("User '%s' copied folder from '%s/%s' to '%s/%s'.",
+		user.Username, req.SourceParent, req.SourceName, destParent, req.NewName))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Folder copied to '%s' successfully", filepath.Join(destParent, req.NewName)),
@@ -433,4 +445,102 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return nil
+}
+func (dc *DirectoryController) Tree(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	// (Optional) check user session if only authenticated users can see the tree.
+	_, err := dc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// 1) Query all directories from your database
+	dirs, err := dc.getAllDirectories()
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error fetching directories from DB")
+		return
+	}
+
+	// 2) Build a map of parent -> []child
+	//    e.g. map[""] = [FolderA, FolderB], map["FolderA"] = [SubFolder1], etc.
+	parentMap := make(map[string][]string)
+	for _, d := range dirs {
+		parentMap[d.Parent] = append(parentMap[d.Parent], d.Name)
+	}
+
+	// 3) Recursively build a tree from parent = "" (root).
+	tree := buildTree("", parentMap)
+
+	// 4) Return the tree as JSON
+	models.RespondJSON(w, http.StatusOK, tree)
+}
+
+// buildTree recursively builds a slice of TreeNode for the given parent.
+func buildTree(parent string, parentMap map[string][]string) []TreeNode {
+	var result []TreeNode
+	// Get children of this parent
+	children := parentMap[parent]
+
+	for _, childName := range children {
+		// For the 'title' and 'value' fields, we combine parent+childName
+		// If parent is empty, it's just childName. Otherwise, parent/childName
+		var fullPath string
+		if parent == "" {
+			fullPath = childName
+		} else {
+			fullPath = filepath.Join(parent, childName)
+		}
+
+		// Recursively build children
+		childNodes := buildTree(fullPath, parentMap)
+
+		node := TreeNode{
+			Title:    childName,
+			Value:    fullPath, // or some logic if you want a different path
+			Children: childNodes,
+		}
+		result = append(result, node)
+	}
+
+	return result
+}
+
+// getAllDirectories fetches all rows from the 'directories' table into []DirectoryData
+func (dc *DirectoryController) getAllDirectories() ([]DirectoryData, error) {
+	rows, err := dc.App.DB.Query(`
+        SELECT directory_name, parent_directory
+        FROM directories
+        ORDER BY directory_name
+    `)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []DirectoryData
+	for rows.Next() {
+		var d DirectoryData
+		if err := rows.Scan(&d.Name, &d.Parent); err != nil {
+			return nil, err
+		}
+		results = append(results, d)
+	}
+	return results, rows.Err()
+}
+
+type TreeNode struct {
+	Title    string     `json:"title"`
+	Value    string     `json:"value"`
+	Children []TreeNode `json:"children"`
+}
+
+// DirectoryData is a simple struct to hold a row from your 'directories' table.
+type DirectoryData struct {
+	Name   string
+	Parent string
 }
