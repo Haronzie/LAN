@@ -106,14 +106,16 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	// Remove the temporary plaintext file.
 	os.Remove(tempFilePath)
-
+	confidentialStr := r.FormValue("confidential")
+	isConfidential := (confidentialStr == "true")
 	// Save file metadata in the database.
 	fr := models.FileRecord{
-		FileName:    rawFileName,
-		FilePath:    relativePath,
-		Size:        handler.Size,
-		ContentType: handler.Header.Get("Content-Type"),
-		Uploader:    user.Username,
+		FileName:     rawFileName,
+		FilePath:     relativePath,
+		Size:         handler.Size,
+		ContentType:  handler.Header.Get("Content-Type"),
+		Uploader:     user.Username,
+		Confidential: isConfidential,
 	}
 	if err := fc.App.CreateFileRecord(fr); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving file record")
@@ -533,4 +535,88 @@ func (fc *FileController) DownloadShare(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", fr.ContentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
 	io.Copy(w, f)
+}
+
+// MoveFileRequest represents the payload for moving a file.
+type MoveFileRequest struct {
+	Filename  string `json:"filename"`
+	OldParent string `json:"old_parent"`
+	NewParent string `json:"new_parent"`
+}
+
+// MoveFile handles moving a file from one directory to another.
+func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	var req MoveFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	req.Filename = strings.TrimSpace(req.Filename)
+	req.OldParent = strings.TrimSpace(req.OldParent)
+	req.NewParent = strings.TrimSpace(req.NewParent)
+
+	if req.Filename == "" {
+		models.RespondError(w, http.StatusBadRequest, "Filename is required")
+		return
+	}
+	if req.OldParent == req.NewParent {
+		models.RespondError(w, http.StatusBadRequest, "Old parent and new parent are the same")
+		return
+	}
+
+	// 1) Retrieve the file record from the database.
+	fr, err := fc.App.GetFileRecord(req.Filename)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "File not found in database")
+		return
+	}
+
+	// 2) Check that the file is located in the specified old parent.
+	expectedOldPath := filepath.Join(req.OldParent, req.Filename)
+	if fr.FilePath != expectedOldPath {
+		models.RespondError(w, http.StatusBadRequest, "File is not in the specified old parent")
+		return
+	}
+
+	// 3) Check that the destination folder exists on disk.
+	newParentDiskPath := filepath.Join("uploads", req.NewParent)
+	if _, err := os.Stat(newParentDiskPath); os.IsNotExist(err) {
+		models.RespondError(w, http.StatusBadRequest, "Destination folder does not exist on disk")
+		return
+	}
+
+	// 4) Move the file on disk.
+	oldDiskPath := filepath.Join("uploads", fr.FilePath)
+	newRelativePath := filepath.Join(req.NewParent, req.Filename)
+	newDiskPath := filepath.Join("uploads", newRelativePath)
+	if err := os.Rename(oldDiskPath, newDiskPath); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error moving file on disk")
+		return
+	}
+
+	// 5) Update the file record in the database.
+	if err := fc.App.RenameFileRecord(fr.FileName, fr.FileName, newRelativePath); err != nil {
+		// Attempt rollback on disk move.
+		os.Rename(newDiskPath, oldDiskPath)
+		models.RespondError(w, http.StatusInternalServerError, "Error updating file record in DB")
+		return
+	}
+
+	fc.App.LogActivity(fmt.Sprintf("User '%s' moved file '%s' from '%s' to '%s'.",
+		user.Username, req.Filename, req.OldParent, req.NewParent))
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("File '%s' moved successfully", req.Filename),
+	})
 }

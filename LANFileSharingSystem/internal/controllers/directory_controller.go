@@ -624,3 +624,99 @@ type DirectoryData struct {
 	Name   string
 	Parent string
 }
+
+// MoveDirectoryRequest represents the payload for moving a directory.
+type MoveDirectoryRequest struct {
+	Name      string `json:"name"`       // Directory name to move.
+	OldParent string `json:"old_parent"` // Current parent folder (can be empty for root).
+	NewParent string `json:"new_parent"` // Destination parent folder (must exist).
+}
+
+// Move handles moving a directory (folder) from one parent to another.
+func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := dc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	var req MoveDirectoryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.OldParent = strings.TrimSpace(req.OldParent)
+	req.NewParent = strings.TrimSpace(req.NewParent)
+
+	if req.Name == "" {
+		models.RespondError(w, http.StatusBadRequest, "Directory name is required")
+		return
+	}
+	if req.OldParent == req.NewParent {
+		models.RespondError(w, http.StatusBadRequest, "Old parent and new parent are the same")
+		return
+	}
+
+	// Check that the source directory exists.
+	exists, err := dc.App.DirectoryExists(req.Name, req.OldParent)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error checking directory existence")
+		return
+	}
+	if !exists {
+		models.RespondError(w, http.StatusNotFound, "Source directory not found")
+		return
+	}
+
+	// Check that the destination parent exists (unless moving to root).
+	if req.NewParent != "" {
+		destExists, err := dc.App.DirectoryExists(req.NewParent, "")
+		if err != nil {
+			models.RespondError(w, http.StatusInternalServerError, "Error checking destination folder")
+			return
+		}
+		if !destExists {
+			models.RespondError(w, http.StatusBadRequest, "Destination folder does not exist")
+			return
+		}
+	}
+
+	// Build full disk paths.
+	oldPath := filepath.Join("uploads", req.OldParent, req.Name)
+	newPath := filepath.Join("uploads", req.NewParent, req.Name)
+
+	// Ensure destination does not already exist.
+	if _, err := os.Stat(newPath); err == nil {
+		models.RespondError(w, http.StatusConflict, "A folder with that name already exists in the destination")
+		return
+	}
+
+	// Move the directory on disk.
+	if err := os.Rename(oldPath, newPath); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error moving directory on disk")
+		return
+	}
+
+	// Update the directory record in the database.
+	// (Implement a helper method that updates the directory's parent and optionally
+	// adjusts file paths of contained files, e.g., MoveDirectoryRecord.)
+	if err := dc.App.MoveDirectoryRecord(req.Name, req.OldParent, req.NewParent); err != nil {
+		// Rollback the disk move.
+		os.Rename(newPath, oldPath)
+		models.RespondError(w, http.StatusInternalServerError, "Error updating directory record in DB")
+		return
+	}
+
+	dc.App.LogActivity(fmt.Sprintf("User '%s' moved directory '%s' from '%s' to '%s'.",
+		user.Username, req.Name, req.OldParent, req.NewParent))
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Directory '%s' moved successfully", req.Name),
+	})
+}

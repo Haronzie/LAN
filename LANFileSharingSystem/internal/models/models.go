@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -653,5 +654,24 @@ func (app *App) DeleteDirectoryAndSubdirectories(parent, name string) error {
         DELETE FROM directories
         WHERE (parent_directory || '/' || directory_name) LIKE $1 || '/%'
     `, prefix)
+	return err
+}
+
+// MoveDirectoryRecord updates the parent_directory of a directory.
+func (app *App) MoveDirectoryRecord(name, oldParent, newParent string) error {
+	// Update the directory record for the folder being moved.
+	_, err := app.DB.Exec(`
+		UPDATE directories
+		SET parent_directory = $1, updated_at = CURRENT_TIMESTAMP
+		WHERE directory_name = $2 AND parent_directory = $3
+	`, newParent, name, oldParent)
+	if err != nil {
+		return err
+	}
+
+	// Optionally: Update file paths of files inside the moved directory.
+	oldFolderPath := filepath.Join(oldParent, name)
+	newFolderPath := filepath.Join(newParent, name)
+	err = app.UpdateFilePathsForRenamedFolder(oldFolderPath, newFolderPath)
 	return err
 }

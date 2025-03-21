@@ -15,6 +15,7 @@ import {
   Breadcrumb,
   Upload,
   TreeSelect,
+  Checkbox
 } from 'antd';
 import {
   UploadOutlined,
@@ -25,6 +26,7 @@ import {
   FolderAddOutlined,
   EditOutlined,
   CopyOutlined,
+  SwapOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -48,9 +50,10 @@ const FileManager = () => {
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
-  // Upload modal
+  // Upload modal states
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
+  const [uploadConfidential, setUploadConfidential] = useState(false);
 
   // Rename modal
   const [renameModalVisible, setRenameModalVisible] = useState(false);
@@ -61,6 +64,12 @@ const FileManager = () => {
   const [copyModalVisible, setCopyModalVisible] = useState(false);
   const [copyNewName, setCopyNewName] = useState('');
   const [copyItem, setCopyItem] = useState(null);
+
+  // Move modal
+  const [moveModalVisible, setMoveModalVisible] = useState(false);
+  const [moveDestination, setMoveDestination] = useState('');
+  const [moveItem, setMoveItem] = useState(null);
+  const [moveConfidential, setMoveConfidential] = useState(false);
 
   // Folder tree for optional destination selection
   const [folderTreeData, setFolderTreeData] = useState([]);
@@ -88,6 +97,7 @@ const FileManager = () => {
         size: f.size,
         contentType: f.contentType,
         uploader: f.uploader,
+        confidential: f.confidential,
       }));
 
       // Directories are already in { name, type: 'directory' }
@@ -190,7 +200,35 @@ const FileManager = () => {
       return;
     }
     setUploadingFile(null);
+    setUploadConfidential(false);
     setUploadModalVisible(true);
+  };
+
+  // Confirmed upload helper
+  const doUpload = async (isConfidential) => {
+    const formData = new FormData();
+    if (!uploadingFile) {
+      message.error('Please select a file first');
+      return;
+    }
+    formData.append('file', uploadingFile);
+    formData.append('directory', currentPath);
+    formData.append('confidential', isConfidential ? 'true' : 'false');
+
+    try {
+      const res = await axios.post('/upload', formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      message.success(res.data.message || 'File uploaded successfully');
+      setUploadModalVisible(false);
+      setUploadingFile(null);
+      setUploadConfidential(false);
+      fetchItems();
+    } catch (error) {
+      console.error('Upload error:', error);
+      message.error(error.response?.data?.error || 'Error uploading file');
+    }
   };
 
   const handleUpload = async () => {
@@ -203,22 +241,16 @@ const FileManager = () => {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', uploadingFile);
-    formData.append('directory', currentPath);
-
-    try {
-      const res = await axios.post('/upload', formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' },
+    // If user did NOT mark confidential, ask for confirmation
+    if (!uploadConfidential) {
+      Modal.confirm({
+        title: 'Upload as non-confidential?',
+        content: 'Are you sure you want to upload this file without marking it as confidential?',
+        onOk: () => doUpload(false),
       });
-      message.success(res.data.message || 'File uploaded successfully');
-      setUploadModalVisible(false);
-      setUploadingFile(null);
-      fetchItems();
-    } catch (error) {
-      console.error('Upload error:', error);
-      message.error(error.response?.data?.error || 'Error uploading file');
+    } else {
+      // If user DID mark confidential, just proceed
+      doUpload(true);
     }
   };
 
@@ -328,8 +360,6 @@ const FileManager = () => {
             source_name: copyItem.name,
             source_parent: currentPath,
             new_name: copyNewName,
-            // If user selected a destination from the TreeSelect, use that;
-            // otherwise fallback to the currentPath.
             destination_parent: selectedDestination || currentPath,
           },
           { withCredentials: true }
@@ -361,6 +391,64 @@ const FileManager = () => {
     } catch (error) {
       console.error('Copy error:', error);
       message.error(error.response?.data?.error || 'Error copying item');
+    }
+  };
+
+  // ---------------------------------------------
+  // Move
+  // ---------------------------------------------
+  const handleMove = (record) => {
+    setMoveItem(record);
+    setMoveDestination(currentPath);
+    if (record.type === 'file' && record.confidential !== undefined) {
+      setMoveConfidential(record.confidential);
+    }
+    setMoveModalVisible(true);
+  };
+
+  const handleMoveConfirm = async () => {
+    if (!moveDestination.trim()) {
+      message.error('Please select a destination folder');
+      return;
+    }
+    if (!moveItem) {
+      message.error('No item selected to move');
+      return;
+    }
+    try {
+      if (moveItem.type === 'directory') {
+        await axios.post(
+          '/directory/move',
+          {
+            name: moveItem.name,
+            old_parent: currentPath,
+            new_parent: moveDestination,
+          },
+          { withCredentials: true }
+        );
+      } else {
+        await axios.post(
+          '/file/move',
+          {
+            filename: moveItem.name,
+            old_parent: currentPath,
+            new_parent: moveDestination,
+            confidential: moveConfidential,
+          },
+          { withCredentials: true }
+        );
+      }
+      message.success(`Moved '${moveItem.name}' successfully`);
+      setMoveModalVisible(false);
+      setMoveDestination('');
+      setMoveItem(null);
+      fetchItems();
+      if (moveItem.type === 'directory') {
+        fetchFolderTree();
+      }
+    } catch (error) {
+      console.error('Move error:', error);
+      message.error(error.response?.data?.error || 'Error moving item');
     }
   };
 
@@ -419,6 +507,9 @@ const FileManager = () => {
           </Tooltip>
           <Tooltip title="Copy">
             <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
+          </Tooltip>
+          <Tooltip title="Move">
+            <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
           </Tooltip>
           <Tooltip title="Delete">
             <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
@@ -544,7 +635,11 @@ const FileManager = () => {
           title="Upload File"
           visible={uploadModalVisible}
           onOk={handleUpload}
-          onCancel={() => setUploadModalVisible(false)}
+          onCancel={() => {
+            setUploadModalVisible(false);
+            setUploadingFile(null);
+            setUploadConfidential(false);
+          }}
           okText="Upload"
         >
           <p>Target Folder: {currentPath || 'None (Please create a folder first)'}</p>
@@ -562,6 +657,17 @@ const FileManager = () => {
               <strong>Selected File:</strong> {uploadingFile.name}
             </Card>
           )}
+
+          <Form layout="vertical" style={{ marginTop: 16 }}>
+            <Form.Item label="Mark as Confidential?">
+              <Checkbox
+                checked={uploadConfidential}
+                onChange={(e) => setUploadConfidential(e.target.checked)}
+              >
+                Confidential
+              </Checkbox>
+            </Form.Item>
+          </Form>
         </Modal>
 
         {/* Copy Modal */}
@@ -592,6 +698,37 @@ const FileManager = () => {
                 allowClear
               />
             </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* Move Modal */}
+        <Modal
+          title="Move Item"
+          visible={moveModalVisible}
+          onOk={handleMoveConfirm}
+          onCancel={() => setMoveModalVisible(false)}
+          okText="Move"
+        >
+          <Form layout="vertical">
+            <Form.Item label="Destination Folder" required>
+              <TreeSelect
+                style={{ width: '100%' }}
+                treeData={folderTreeData}
+                placeholder="Select destination folder"
+                value={moveDestination}
+                onChange={(val) => setMoveDestination(val)}
+                treeDefaultExpandAll
+                allowClear
+              />
+            </Form.Item>
+            {moveItem && moveItem.type === 'file' && (
+              <Form.Item label="Confidential">
+                <Checkbox
+                  checked={moveConfidential}
+                  onChange={(e) => setMoveConfidential(e.target.checked)}
+                />
+              </Form.Item>
+            )}
           </Form>
         </Modal>
       </Content>
