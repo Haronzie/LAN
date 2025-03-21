@@ -1,13 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Table, Button, Input, message, Modal, Form, Space } from 'antd';
+import { Table, Button, Input, message, Modal, Form, Space, Popover } from 'antd'; // <-- ADDED Popover
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  ArrowLeftOutlined
+  ArrowLeftOutlined,
+  InfoCircleOutlined // <-- ADDED InfoCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+
+// NEW: Same password policy text from your RegisterForm
+const passwordPolicyContent = (
+  <div style={{ maxWidth: 250 }}>
+    <p>Your password should have:</p>
+    <ul style={{ paddingLeft: '20px' }}>
+      <li>At least 8 characters</li>
+      <li>One uppercase letter</li>
+      <li>One lowercase letter</li>
+      <li>One digit</li>
+      <li>One special character (e.g., !@#$)</li>
+    </ul>
+  </div>
+);
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -87,7 +102,7 @@ const UserManagement = () => {
       cancelText: 'No',
       onOk: async () => {
         try {
-          await axios.delete('/user/delete', { // Updated endpoint
+          await axios.delete('/user/delete', {
             data: { username },
             withCredentials: true
           });
@@ -117,7 +132,7 @@ const UserManagement = () => {
     try {
       const values = await updateForm.validateFields();
       await axios.put(
-        '/user/update', // Updated endpoint
+        '/user/update',
         {
           old_username: values.old_username,
           new_username: values.new_username,
@@ -214,12 +229,14 @@ const UserManagement = () => {
           Add User
         </Button>
       </div>
+
       <Input
         placeholder="Search by username"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         style={{ width: 300, marginBottom: 16 }}
       />
+
       <Table
         columns={columns}
         dataSource={filteredUsers}
@@ -257,8 +274,17 @@ const UserManagement = () => {
               }}
             />
           </Form.Item>
+
+          {/* Modified label to include Popover + icon */}
           <Form.Item
-            label="Password"
+            label={
+              <span>
+                Password
+                <Popover content={passwordPolicyContent} title="Password Requirements">
+                  <InfoCircleOutlined style={{ marginLeft: 8, color: '#1890ff', cursor: 'pointer' }} />
+                </Popover>
+              </span>
+            }
             name="password"
             rules={[{ required: true, message: 'Please input a password!' }]}
           >
