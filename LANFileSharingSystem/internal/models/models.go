@@ -599,18 +599,6 @@ func (app *App) DeleteInventoryItem(id int) error {
 	return err
 }
 
-type TreeNode struct {
-	Title    string     `json:"title"`
-	Value    string     `json:"value"`
-	Children []TreeNode `json:"children"`
-}
-
-// DirectoryData is a simple struct to hold a row from your 'directories' table.
-type DirectoryData struct {
-	Name   string
-	Parent string
-}
-
 func (app *App) DeleteFilesWithPrefix(prefix string) error {
 	query := `
         DELETE FROM files
@@ -657,4 +645,16 @@ func (app *App) DeleteDirectoryAndSubdirectories(parent, name string) error {
         WHERE (parent_directory || '/' || directory_name) LIKE $1 || '/%'
     `, prefix)
 	return err
+}
+
+type TreeNode struct {
+	Title    string     `json:"title"`
+	Value    string     `json:"value"`
+	Children []TreeNode `json:"children"`
+}
+
+// DirectoryData is a simple struct to hold a row from your 'directories' table.
+type DirectoryData struct {
+	Name   string
+	Parent string
 }
