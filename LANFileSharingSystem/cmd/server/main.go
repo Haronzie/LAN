@@ -95,6 +95,7 @@ func main() {
 	router.HandleFunc("/delete-file", fileController.DeleteFile).Methods("DELETE")
 	router.HandleFunc("/admin-exists", userController.AdminExists).Methods("GET")
 	router.HandleFunc("/user-role", userController.GetUserRole).Methods("GET")
+	router.HandleFunc("/get-user-role", authController.GetUserRole).Methods("GET")
 
 	// Directory routes.
 	router.HandleFunc("/directory/create", directoryController.Create).Methods("POST")

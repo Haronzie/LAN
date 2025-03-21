@@ -181,8 +181,9 @@ func (ac *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		Username    string `json:"username"`
-		NewPassword string `json:"newPassword"`
+		Username        string `json:"username"`
+		NewPassword     string `json:"newPassword"`
+		ConfirmPassword string `json:"confirmPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
@@ -191,12 +192,21 @@ func (ac *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request)
 
 	req.Username = strings.TrimSpace(req.Username)
 	req.NewPassword = strings.TrimSpace(req.NewPassword)
-	if req.Username == "" || req.NewPassword == "" {
-		models.RespondError(w, http.StatusBadRequest, "Username and new password are required")
+	req.ConfirmPassword = strings.TrimSpace(req.ConfirmPassword)
+
+	// Check for empty fields
+	if req.Username == "" || req.NewPassword == "" || req.ConfirmPassword == "" {
+		models.RespondError(w, http.StatusBadRequest, "Username, new password, and confirm password are required")
 		return
 	}
 
-	// Check if the user exists.
+	// Confirm that newPassword matches confirmPassword
+	if req.NewPassword != req.ConfirmPassword {
+		models.RespondError(w, http.StatusBadRequest, "New password and confirm password do not match")
+		return
+	}
+
+	// Check if the user exists
 	user, err := ac.App.GetUserByUsername(req.Username)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "Username does not exist")
@@ -209,14 +219,14 @@ func (ac *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Hash the new password.
+	// Hash the new password
 	hashedPass, err := models.HashPassword(req.NewPassword)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error hashing new password")
 		return
 	}
 
-	// Update the user's password in the database (assuming a method like UpdateUserPassword exists).
+	// Update the user's password in the database (assuming UpdateUserPassword exists).
 	if err := ac.App.UpdateUserPassword(user.Username, hashedPass); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error updating password")
 		return
@@ -272,4 +282,26 @@ func isStrongPassword(pw string) (bool, string) {
 	}
 
 	return true, ""
+}
+
+// GetUserRole returns the role of a given username, e.g. {"role": "admin"} or {"role": "user"}.
+func (ac *AuthController) GetUserRole(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		models.RespondError(w, http.StatusBadRequest, "Username is required")
+		return
+	}
+
+	user, err := ac.App.GetUserByUsername(username)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "User not found")
+		return
+	}
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{"role": user.Role})
 }
