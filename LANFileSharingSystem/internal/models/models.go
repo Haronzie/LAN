@@ -8,7 +8,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -659,19 +658,42 @@ func (app *App) DeleteDirectoryAndSubdirectories(parent, name string) error {
 
 // MoveDirectoryRecord updates the parent_directory of a directory.
 func (app *App) MoveDirectoryRecord(name, oldParent, newParent string) error {
-	// Update the directory record for the folder being moved.
+	// 1) Update the directory record for the folder itself
 	_, err := app.DB.Exec(`
-		UPDATE directories
-		SET parent_directory = $1, updated_at = CURRENT_TIMESTAMP
-		WHERE directory_name = $2 AND parent_directory = $3
-	`, newParent, name, oldParent)
+        UPDATE directories
+        SET parent_directory = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE directory_name = $2 AND parent_directory = $3
+    `, newParent, name, oldParent)
 	if err != nil {
 		return err
 	}
 
-	// Optionally: Update file paths of files inside the moved directory.
-	oldFolderPath := filepath.Join(oldParent, name)
-	newFolderPath := filepath.Join(newParent, name)
-	err = app.UpdateFilePathsForRenamedFolder(oldFolderPath, newFolderPath)
+	// 2) Now fix subfolders that used to have "oldParent/name" in their parent path
+	oldFullPath := oldParent
+	if oldFullPath != "" {
+		oldFullPath += "/"
+	}
+	oldFullPath += name
+
+	newFullPath := newParent
+	if newFullPath != "" {
+		newFullPath += "/"
+	}
+	newFullPath += name
+
+	// Example approach: any directory whose parent_directory starts with oldFullPath
+	// should replace that prefix with newFullPath.
+	_, err = app.DB.Exec(`
+        UPDATE directories
+        SET parent_directory = regexp_replace(parent_directory, '^' || $1, $2)
+        WHERE parent_directory LIKE $1 || '/%'
+    `, oldFullPath, newFullPath)
+	if err != nil {
+		return err
+	}
+
+	// 3) Also update file paths if needed
+	// If your file paths start with "oldParent/name", do a similar approach
+	err = app.UpdateFilePathsForRenamedFolder(oldFullPath, newFullPath)
 	return err
 }

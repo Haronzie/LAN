@@ -706,10 +706,11 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 	// Update the directory record in the database.
 	// (Implement a helper method that updates the directory's parent and optionally
 	// adjusts file paths of contained files, e.g., MoveDirectoryRecord.)
+	// After os.Rename(oldPath, newPath) succeeds...
 	if err := dc.App.MoveDirectoryRecord(req.Name, req.OldParent, req.NewParent); err != nil {
-		// Rollback the disk move.
+		// Rollback disk move if DB fails
 		os.Rename(newPath, oldPath)
-		models.RespondError(w, http.StatusInternalServerError, "Error updating directory record in DB")
+		models.RespondError(w, http.StatusInternalServerError, "Error updating directory records")
 		return
 	}
 
