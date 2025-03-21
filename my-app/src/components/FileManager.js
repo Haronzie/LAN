@@ -22,7 +22,9 @@ import {
   FolderOpenOutlined,
   ArrowUpOutlined,
   FolderAddOutlined,
-  EditOutlined
+  EditOutlined,
+  // NEW:
+  CopyOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -51,6 +53,11 @@ const FileManager = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
 
+  // NEW: Copy modal states
+  const [copyModalVisible, setCopyModalVisible] = useState(false);
+  const [copyNewName, setCopyNewName] = useState('');
+  const [copyItem, setCopyItem] = useState(null);
+
   const navigate = useNavigate();
   const isRoot = currentPath === '';
 
@@ -64,6 +71,7 @@ const FileManager = () => {
     setLoading(true);
     try {
       const directoryParam = encodeURIComponent(currentPath);
+      // We call both endpoints in parallel:
       const [filesRes, dirsRes] = await Promise.all([
         axios.get(`/files?directory=${directoryParam}`, { withCredentials: true }),
         axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true }),
@@ -94,7 +102,7 @@ const FileManager = () => {
     fetchItems();
   }, [currentPath]);
 
-  // Optional polling for backend changes
+  // Optional polling for backend changes (e.g. every 10s)
   useEffect(() => {
     const interval = setInterval(fetchItems, 10000);
     return () => clearInterval(interval);
@@ -208,11 +216,11 @@ const FileManager = () => {
     }
   };
 
-  // **Download** file - use a fully-qualified or absolute URL
+  // Download file
   const handleDownload = (fileName) => {
-    // Use the same domain as the front-end if your server is on the same host:
+    // Adjust the base URL as needed (e.g. if your server is not localhost:8080)
     const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
-window.open(downloadUrl, '_blank');
+    window.open(downloadUrl, '_blank');
   };
 
   // Rename (files or directories)
@@ -248,7 +256,61 @@ window.open(downloadUrl, '_blank');
       fetchItems();
     } catch (error) {
       console.error('Rename error:', error);
-      message.error('Error renaming item');
+      message.error(error.response?.data?.error || 'Error renaming item');
+    }
+  };
+
+  // NEW: handleCopy - opens the Copy modal
+  const handleCopy = (record) => {
+    // Suggest a new name by appending "_copy"
+    const suggestedName = record.name + '_copy';
+    setCopyItem(record);
+    setCopyNewName(suggestedName);
+    setCopyModalVisible(true);
+  };
+
+  // NEW: handleCopyConfirm - calls the correct endpoint for file or folder
+  const handleCopyConfirm = async () => {
+    if (!copyNewName.trim()) {
+      message.error('New name cannot be empty');
+      return;
+    }
+    if (!copyItem) {
+      message.error('No item selected to copy');
+      return;
+    }
+
+    try {
+      if (copyItem.type === 'directory') {
+        // Copy a folder
+        await axios.post(
+          '/directory/copy',
+          {
+            source_name: copyItem.name,
+            source_parent: currentPath,
+            new_name: copyNewName,
+          },
+          { withCredentials: true }
+        );
+      } else {
+        // Copy a file
+        await axios.post(
+          '/copy-file',
+          {
+            source_file: copyItem.name,
+            new_file_name: copyNewName,
+          },
+          { withCredentials: true }
+        );
+      }
+      message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
+      setCopyModalVisible(false);
+      setCopyNewName('');
+      setCopyItem(null);
+      fetchItems();
+    } catch (error) {
+      console.error('Copy error:', error);
+      message.error(error.response?.data?.error || 'Error copying item');
     }
   };
 
@@ -306,8 +368,19 @@ window.open(downloadUrl, '_blank');
               }}
             />
           </Tooltip>
+          {/* NEW: Copy button */}
+          <Tooltip title="Copy">
+            <Button
+              icon={<CopyOutlined />}
+              onClick={() => handleCopy(record)}
+            />
+          </Tooltip>
           <Tooltip title="Delete">
-            <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(record)}
+            />
           </Tooltip>
         </Space>
       ),
@@ -342,9 +415,7 @@ window.open(downloadUrl, '_blank');
           <Col>
             <Space>
               <h2 style={{ margin: 0 }}>File Manager</h2>
-              <Button onClick={handleBackToDashboard}>
-                Back to Dashboard
-              </Button>
+              <Button onClick={handleBackToDashboard}>Back to Dashboard</Button>
             </Space>
           </Col>
           <Col>
@@ -358,6 +429,7 @@ window.open(downloadUrl, '_blank');
           </Col>
         </Row>
 
+        {/* Breadcrumb */}
         {segments.length > 0 && (
           <Row style={{ marginBottom: 16 }}>
             <Col>
@@ -450,7 +522,7 @@ window.open(downloadUrl, '_blank');
           <Upload
             beforeUpload={(file) => {
               setUploadingFile(file);
-              return false; // Prevent default upload
+              return false; // Prevent auto-upload
             }}
             maxCount={1}
           >
@@ -463,6 +535,24 @@ window.open(downloadUrl, '_blank');
           )}
         </Modal>
 
+        {/* NEW: Copy Modal */}
+        <Modal
+          title="Copy Item"
+          visible={copyModalVisible}
+          onOk={handleCopyConfirm}
+          onCancel={() => setCopyModalVisible(false)}
+          okText="Copy"
+        >
+          <Form layout="vertical">
+            <Form.Item label="New Name" required>
+              <Input
+                value={copyNewName}
+                onChange={(e) => setCopyNewName(e.target.value)}
+                placeholder="Enter new name"
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
       </Content>
     </Layout>
   );

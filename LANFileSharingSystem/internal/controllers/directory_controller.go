@@ -3,6 +3,8 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -86,7 +88,9 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' created directory '%s' (parent: '%s').", user.Username, req.Name, req.Parent))
+	dc.App.LogActivity(fmt.Sprintf("User '%s' created directory '%s' (parent: '%s').",
+		user.Username, req.Name, req.Parent))
+
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Directory '%s' created successfully", req.Name),
 	})
@@ -140,7 +144,9 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' deleted directory '%s' (parent: '%s').", user.Username, req.Name, req.Parent))
+	dc.App.LogActivity(fmt.Sprintf("User '%s' deleted directory '%s' (parent: '%s').",
+		user.Username, req.Name, req.Parent))
+
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Directory '%s' deleted successfully", req.Name),
 	})
@@ -219,9 +225,13 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' renamed directory from '%s' to '%s' (parent: '%s').", user.Username, req.OldName, req.NewName, req.Parent))
+	dc.App.LogActivity(fmt.Sprintf(
+		"User '%s' renamed directory from '%s' to '%s' (parent: '%s').",
+		user.Username, req.OldName, req.NewName, req.Parent))
+
 	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("Directory renamed from '%s' to '%s' successfully", req.OldName, req.NewName),
+		"message": fmt.Sprintf("Directory renamed from '%s' to '%s' successfully",
+			req.OldName, req.NewName),
 	})
 }
 
@@ -251,6 +261,176 @@ func (dc *DirectoryController) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' listed contents of directory '%s'.", user.Username, parentParam))
+	dc.App.LogActivity(fmt.Sprintf("User '%s' listed contents of directory '%s'.",
+		user.Username, parentParam))
+
 	models.RespondJSON(w, http.StatusOK, items)
+}
+
+// Copy handles copying a folder (directory) along with its files.
+// It expects a JSON payload with:
+//   - source_name: the name of the folder to copy
+//   - source_parent: the parent folder of the source (can be empty)
+//   - new_name: the new name for the copied folder
+//   - destination_parent: (optional) parent folder for the new folder; if empty, source_parent is used.
+func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := dc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	var req struct {
+		SourceName        string `json:"source_name"`
+		SourceParent      string `json:"source_parent"`
+		NewName           string `json:"new_name"`
+		DestinationParent string `json:"destination_parent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Trim inputs
+	req.SourceName = strings.TrimSpace(req.SourceName)
+	req.SourceParent = strings.TrimSpace(req.SourceParent)
+	req.NewName = strings.TrimSpace(req.NewName)
+	req.DestinationParent = strings.TrimSpace(req.DestinationParent)
+	if req.SourceName == "" || req.NewName == "" {
+		models.RespondError(w, http.StatusBadRequest, "Source folder and new folder names are required")
+		return
+	}
+
+	// Use source_parent as destination if none provided.
+	destParent := req.DestinationParent
+	if destParent == "" {
+		destParent = req.SourceParent
+	}
+
+	// Build full paths for source and destination.
+	srcPath := getResourcePath(req.SourceName, req.SourceParent)
+	dstPath := getResourcePath(req.NewName, destParent)
+
+	// Verify the source folder exists and is a directory.
+	srcInfo, err := os.Stat(srcPath)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "Source folder not found")
+		return
+	}
+	if !srcInfo.IsDir() {
+		models.RespondError(w, http.StatusBadRequest, "Source path is not a directory")
+		return
+	}
+
+	// Ensure the destination folder does not already exist.
+	if _, err := os.Stat(dstPath); err == nil {
+		models.RespondError(w, http.StatusConflict, "Destination folder already exists")
+		return
+	}
+
+	// Recursively copy the source folder to the destination.
+	if err := copyDir(srcPath, dstPath); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error copying folder: "+err.Error())
+		return
+	}
+
+	// Create the new folder record in the database.
+	if err := dc.App.CreateDirectoryRecord(req.NewName, destParent, user.Username); err != nil {
+		// Optionally, remove the copied folder to rollback if DB insert fails
+		os.RemoveAll(dstPath)
+		models.RespondError(w, http.StatusInternalServerError, "Error saving folder record to database")
+		return
+	}
+
+	// Duplicate file records for files directly inside the source folder.
+	sourceFolderPath := filepath.Join(req.SourceParent, req.SourceName)
+	fileRecords, err := dc.App.ListFilesInDirectory(sourceFolderPath)
+	if err == nil {
+		for _, f := range fileRecords {
+			// Build the new file path by replacing the source folder with the destination folder.
+			newFilePath := filepath.Join(destParent, req.NewName, f.FileName)
+			newFR := models.FileRecord{
+				FileName:    f.FileName,
+				FilePath:    newFilePath,
+				Size:        f.Size,
+				ContentType: f.ContentType,
+				Uploader:    user.Username,
+			}
+			if err := dc.App.CreateFileRecord(newFR); err != nil {
+				// Log the error and continue copying other records.
+				log.Println("Error duplicating file record:", err)
+			}
+		}
+	} else {
+		log.Println("Warning: could not list source folder files:", err)
+	}
+
+	dc.App.LogActivity(fmt.Sprintf(
+		"User '%s' copied folder from '%s' to '%s'.",
+		user.Username,
+		filepath.Join(req.SourceParent, req.SourceName),
+		filepath.Join(destParent, req.NewName),
+	))
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Folder copied to '%s' successfully", filepath.Join(destParent, req.NewName)),
+	})
+}
+
+// copyDir recursively copies a directory from src to dst.
+func copyDir(src string, dst string) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	// Create the destination directory.
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// copyFile copies a file from src to dst.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := out.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+
+	if _, err = io.Copy(out, in); err != nil {
+		return err
+	}
+	return nil
 }

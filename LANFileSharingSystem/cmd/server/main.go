@@ -79,6 +79,9 @@ func main() {
 	router.HandleFunc("/login", authController.Login).Methods("POST")
 	router.HandleFunc("/logout", authController.Logout).Methods("POST")
 	router.HandleFunc("/upload", fileController.Upload).Methods("POST")
+	// Add this line among your other file routes
+	router.HandleFunc("/copy-file", fileController.CopyFile).Methods("POST")
+
 	router.HandleFunc("/download", fileController.Download).Methods("GET")
 	router.HandleFunc("/files", fileController.ListFiles).Methods("GET")
 	router.HandleFunc("/share", fileController.ShareFile).Methods("POST")
@@ -98,6 +101,7 @@ func main() {
 	router.HandleFunc("/directory/delete", directoryController.Delete).Methods("DELETE")
 	router.HandleFunc("/directory/rename", directoryController.Rename).Methods("PUT")
 	router.HandleFunc("/directory/list", directoryController.List).Methods("GET")
+	router.HandleFunc("/directory/copy", directoryController.Copy).Methods("POST")
 
 	// Inventory routes
 	router.HandleFunc("/inventory", inventoryController.List).Methods("GET")
