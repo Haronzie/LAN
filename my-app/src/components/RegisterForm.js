@@ -1,20 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Input, Button, Card, Typography, message, Spin } from 'antd';
+import { Form, Input, Button, Card, Typography, message, Spin, Popover } from 'antd';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const { Title } = Typography;
+
+const passwordPolicyContent = (
+  <div style={{ maxWidth: 250 }}>
+    <p>Your password should have:</p>
+    <ul style={{ paddingLeft: '20px' }}>
+      <li>At least 8 characters</li>
+      <li>One uppercase letter</li>
+      <li>One lowercase letter</li>
+      <li>One digit</li>
+      <li>One special character (e.g., !@#$)</li>
+    </ul>
+  </div>
+);
 
 const RegisterForm = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [adminExists, setAdminExists] = useState(false);
 
-  // Check if an admin exists
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exists'); // Uses proxy
+        const res = await axios.get('/admin-exists');
         setAdminExists(res.data.exists);
       } catch (error) {
         message.error('Failed to check admin status.');
@@ -63,14 +76,23 @@ const RegisterForm = () => {
           >
             <Input placeholder="Enter your username" autoFocus />
           </Form.Item>
+
           <Form.Item
-            label="Password"
+            label={
+              <span>
+                Password
+                <Popover content={passwordPolicyContent} title="Password Requirements">
+                  <InfoCircleOutlined style={{ marginLeft: 8, color: '#1890ff', cursor: 'pointer' }} />
+                </Popover>
+              </span>
+            }
             name="password"
             rules={[{ required: true, message: 'Please input your password!' }]}
             hasFeedback
           >
             <Input.Password placeholder="Enter your password" />
           </Form.Item>
+
           <Form.Item
             label="Confirm Password"
             name="confirmPassword"
@@ -89,6 +111,7 @@ const RegisterForm = () => {
           >
             <Input.Password placeholder="Confirm your password" />
           </Form.Item>
+
           <Form.Item>
             <Button type="primary" htmlType="submit" block>
               Register

@@ -60,6 +60,10 @@ func (uc *UserController) AddUser(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusBadRequest, "Username and password cannot be empty")
 		return
 	}
+	if ok, msg := isStrongPassword(req.Password); !ok {
+		models.RespondError(w, http.StatusBadRequest, msg)
+		return
+	}
 
 	// Use a case-insensitive search to see if the user already exists.
 	_, err = uc.App.GetUserByUsername(req.Username)

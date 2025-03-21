@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode"
 
 	"LANFileSharingSystem/internal/models"
 )
@@ -39,6 +40,10 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 	req.Password = strings.TrimSpace(req.Password)
 	if req.Username == "" || req.Password == "" {
 		models.RespondError(w, http.StatusBadRequest, "Username and password cannot be empty")
+		return
+	}
+	if ok, msg := isStrongPassword(req.Password); !ok {
+		models.RespondError(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -166,4 +171,51 @@ func (ac *AuthController) Logout(w http.ResponseWriter, r *http.Request) {
 
 	ac.App.LogActivity(fmt.Sprintf("User '%s' logged out.", user.Username))
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Logout successful"})
+}
+func isStrongPassword(pw string) (bool, string) {
+	var (
+		hasMinLen  = false
+		hasUpper   = false
+		hasLower   = false
+		hasDigit   = false
+		hasSpecial = false
+	)
+
+	// Adjust minimum length as needed
+	if len(pw) >= 8 {
+		hasMinLen = true
+	}
+
+	for _, char := range pw {
+		switch {
+		case unicode.IsUpper(char):
+			hasUpper = true
+		case unicode.IsLower(char):
+			hasLower = true
+		case unicode.IsDigit(char):
+			hasDigit = true
+		case unicode.IsPunct(char) || unicode.IsSymbol(char):
+			hasSpecial = true
+		}
+	}
+
+	// Build an error message if needed
+	if !hasMinLen {
+		return false, "Password must be at least 8 characters long"
+	}
+	if !hasUpper {
+		return false, "Password must contain at least one uppercase letter"
+	}
+	if !hasLower {
+		return false, "Password must contain at least one lowercase letter"
+	}
+	if !hasDigit {
+		return false, "Password must contain at least one digit"
+	}
+	if !hasSpecial {
+		return false, "Password must contain at least one special character"
+	}
+
+	// If all checks pass
+	return true, ""
 }
