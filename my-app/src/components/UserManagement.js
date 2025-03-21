@@ -177,20 +177,23 @@ const UserManagement = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        // Conditions to hide the delete button:
-        // 1) if record.role === 'admin'
-        // 2) or if record.username === adminName
+        // Conditions:
+        // 1) Hide the "Delete" button if record.role === 'admin' OR record.username === adminName
         const canDelete = !(record.role === 'admin' || record.username === adminName);
+        // 2) Only edit if record.role === 'user' OR record.username === adminName
+        const canEdit = record.role === 'user' || record.username === adminName;
 
         return (
           <Space>
-            <Button
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => openUpdateModal(record)}
-            >
-              Edit
-            </Button>
+            {canEdit && (
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => openUpdateModal(record)}
+              >
+                Edit
+              </Button>
+            )}
             {canDelete && (
               <Button
                 size="small"
