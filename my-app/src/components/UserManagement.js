@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Table, Button, Input, message, Modal, Form, Space, Popover } from 'antd'; // <-- ADDED Popover
+import { Table, Button, Input, message, Modal, Form, Space, Popover } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   ArrowLeftOutlined,
-  InfoCircleOutlined // <-- ADDED InfoCircleOutlined
+  InfoCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-// NEW: Same password policy text from your RegisterForm
+// Password policy text from your RegisterForm
 const passwordPolicyContent = (
   <div style={{ maxWidth: 250 }}>
     <p>Your password should have:</p>
@@ -45,6 +45,9 @@ const UserManagement = () => {
 
   const navigate = useNavigate();
 
+  // Logged-in admin’s username from localStorage
+  const adminName = localStorage.getItem('username') || 'Admin';
+
   // Fetch users from the backend
   const fetchUsers = async () => {
     setLoading(true);
@@ -70,15 +73,12 @@ const UserManagement = () => {
     );
   }, [searchTerm, users]);
 
-  const adminCount = users.filter(u => u.role === 'admin').length;
-  const adminName = localStorage.getItem('username') || 'Admin';
-
   // Handler for adding a new user
   const handleAddUserOk = async () => {
     try {
       const values = await addUserForm.validateFields();
       await axios.post(
-        '/user/add', // Updated endpoint
+        '/user/add',
         { username: values.username, password: values.password },
         { withCredentials: true }
       );
@@ -161,6 +161,7 @@ const UserManagement = () => {
     }
   };
 
+  // Table columns
   const columns = [
     {
       title: 'Username',
@@ -173,44 +174,45 @@ const UserManagement = () => {
       key: 'role'
     },
     {
-      title: 'Active',
-      dataIndex: 'active',
-      key: 'active',
-      render: (active) => (active ? 'Yes' : 'No')
-    },
-    {
       title: 'Actions',
       key: 'actions',
-      render: (record) => (
-        <Space>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => openUpdateModal(record)}
-          >
-            Edit
-          </Button>
-          {record.username !== adminName && (
+      render: (record) => {
+        // Conditions to hide the delete button:
+        // 1) if record.role === 'admin'
+        // 2) or if record.username === adminName
+        const canDelete = !(record.role === 'admin' || record.username === adminName);
+
+        return (
+          <Space>
             <Button
               size="small"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => handleDeleteUser(record.username)}
+              icon={<EditOutlined />}
+              onClick={() => openUpdateModal(record)}
             >
-              Delete
+              Edit
             </Button>
-          )}
-          {record.role !== 'admin' && (
-            <Button
-              size="small"
-              type="default"
-              onClick={() => handleAssignAdmin(record.username)}
-            >
-              Make Admin
-            </Button>
-          )}
-        </Space>
-      )
+            {canDelete && (
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDeleteUser(record.username)}
+              >
+                Delete
+              </Button>
+            )}
+            {record.role !== 'admin' && (
+              <Button
+                size="small"
+                type="default"
+                onClick={() => handleAssignAdmin(record.username)}
+              >
+                Make Admin
+              </Button>
+            )}
+          </Space>
+        );
+      }
     }
   ];
 
@@ -275,7 +277,7 @@ const UserManagement = () => {
             />
           </Form.Item>
 
-          {/* Modified label to include Popover + icon */}
+          {/* Password field with popover hint */}
           <Form.Item
             label={
               <span>
