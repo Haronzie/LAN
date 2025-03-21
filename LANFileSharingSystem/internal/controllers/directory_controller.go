@@ -258,31 +258,25 @@ func (dc *DirectoryController) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// (Optional) Check authentication if you want only logged-in users to list directories.
-	user, err := dc.App.GetUserFromSession(r)
+	// Check authentication if you want only logged-in users to list directories.
+	_, err := dc.App.GetUserFromSession(r)
 	if err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	// Example: We read the parent folder from a query param called "directory" or "parent".
-	parentParam := r.URL.Query().Get("directory")
-	parentParam = strings.TrimSpace(parentParam)
+	// Read the parent folder from a query param called "directory" or "parent".
+	parentParam := strings.TrimSpace(r.URL.Query().Get("directory"))
 
-	// Use a method in your App to retrieve directories/files from the DB (and/or filesystem).
+	// Retrieve directories/files from the DB (and/or filesystem).
 	items, err := dc.App.ListDirectory(parentParam)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error listing directory")
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' listed contents of directory '%s'.",
-		user.Username, parentParam))
-
 	models.RespondJSON(w, http.StatusOK, items)
 }
-
-// Copy handles copying a folder (directory) along with its files.
 
 // Copy handles copying a folder (directory) along with its files and subdirectories.
 func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
