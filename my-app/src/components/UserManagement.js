@@ -66,11 +66,34 @@ const UserManagement = () => {
     fetchUsers();
   }, []);
 
+  // Sort admins first (alphabetically), then users (alphabetically),
+  // then apply search filtering.
   useEffect(() => {
+    // 1. Sort the entire users array
+    const sorted = [...users].sort((a, b) => {
+      // If both admin, compare by username
+      if (a.role === 'admin' && b.role === 'admin') {
+        return a.username.localeCompare(b.username);
+      }
+      // If a is admin, b is user => a first
+      if (a.role === 'admin' && b.role === 'user') {
+        return -1;
+      }
+      // If a is user, b is admin => b first
+      if (a.role === 'user' && b.role === 'admin') {
+        return 1;
+      }
+      // If both user => compare by username
+      return a.username.localeCompare(b.username);
+    });
+
+    // 2. Filter by search term after sorting
     const term = searchTerm.toLowerCase();
-    setFilteredUsers(
-      term ? users.filter(u => u.username.toLowerCase().includes(term)) : users
-    );
+    const filtered = term
+      ? sorted.filter(u => u.username.toLowerCase().includes(term))
+      : sorted;
+
+    setFilteredUsers(filtered);
   }, [searchTerm, users]);
 
   // Handler for adding a new user
