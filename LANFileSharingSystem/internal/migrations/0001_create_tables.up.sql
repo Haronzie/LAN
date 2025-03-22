@@ -46,3 +46,12 @@ CREATE TABLE IF NOT EXISTS inventory (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_inventory_item_name ON inventory (item_name);
+
+CREATE TABLE IF NOT EXISTS file_versions (
+    id SERIAL PRIMARY KEY,
+    file_id INT NOT NULL,
+    version_number INT NOT NULL,
+    file_path TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (file_id) REFERENCES files(id)
+);

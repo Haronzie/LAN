@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -82,14 +83,14 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	tempFile.Close()
 
-	// --- New: Virus Scanning via services package ---
+	// Virus scan (if integrated):
 	scanResult, err := services.ScanFile(tempFilePath)
 	if err != nil || !scanResult.Clean {
 		os.Remove(tempFilePath)
-		models.RespondError(w, http.StatusBadRequest, fmt.Sprintf("File rejected: %v", scanResult.Description))
+		models.RespondError(w, http.StatusBadRequest,
+			fmt.Sprintf("File rejected: %v", scanResult.Description))
 		return
 	}
-	// --------------------------------------------------
 
 	// Load the encryption key (must be 32 bytes for AES-256).
 	key := []byte(os.Getenv("ENCRYPTION_KEY"))
@@ -98,17 +99,18 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Encrypt the temporary file and write to finalDiskPath.
+	// Encrypt and save to final path.
 	if err := encryption.EncryptFile(key, tempFilePath, finalDiskPath); err != nil {
 		os.Remove(tempFilePath)
 		models.RespondError(w, http.StatusInternalServerError, "Error encrypting file")
 		return
 	}
-	// Remove the temporary plaintext file.
 	os.Remove(tempFilePath)
+
 	confidentialStr := r.FormValue("confidential")
 	isConfidential := (confidentialStr == "true")
-	// Save file metadata in the database.
+
+	// Build FileRecord.
 	fr := models.FileRecord{
 		FileName:     rawFileName,
 		FilePath:     relativePath,
@@ -117,12 +119,34 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		Uploader:     user.Username,
 		Confidential: isConfidential,
 	}
+
+	// Create the file record in the DB.
 	if err := fc.App.CreateFileRecord(fr); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving file record")
 		return
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded and encrypted file '%s'.", user.Username, rawFileName))
+	// -----------------------------
+	// ADD VERSIONING HERE
+	// -----------------------------
+	fileID, err := fc.App.GetFileIDByPath(fr.FilePath)
+	if err == nil {
+		// If we found the file ID, figure out the next version
+		latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
+		newVer := latestVer + 1
+
+		// Insert a version record
+		if verr := fc.App.CreateFileVersion(fileID, newVer, fr.FilePath); verr != nil {
+			// Not critical if version insertion fails; just log
+			log.Println("Warning: failed to create file version record:", verr)
+		}
+	}
+	// -----------------------------
+
+	// Log activity
+	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded and encrypted file '%s'.",
+		user.Username, rawFileName))
+
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("File '%s' uploaded and encrypted successfully", rawFileName),
 	})
@@ -179,6 +203,24 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusInternalServerError, "Error updating file record")
 		return
 	}
+
+	// -----------------------------
+	// ADD VERSIONING HERE
+	// -----------------------------
+	// Attempt to retrieve the file ID by its new path
+	fileID, err := fc.App.GetFileIDByPath(newRelativePath)
+	if err == nil {
+		// If we found the file ID, figure out the next version
+		latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
+		newVer := latestVer + 1
+
+		// Insert a version record for the new name/path
+		if verr := fc.App.CreateFileVersion(fileID, newVer, newRelativePath); verr != nil {
+			// Not critical if version insertion fails; just log
+			log.Println("Warning: failed to create file version record:", verr)
+		}
+	}
+	// -----------------------------
 
 	fc.App.LogActivity(fmt.Sprintf("User '%s' renamed file from '%s' to '%s'.", user.Username, req.OldFilename, req.NewFilename))
 	models.RespondJSON(w, http.StatusOK, map[string]string{

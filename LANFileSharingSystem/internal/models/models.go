@@ -47,14 +47,15 @@ type User struct {
 
 // FileRecord represents a file stored in the system.
 type FileRecord struct {
-	ID           int    `json:"id"`
-	FileName     string `json:"file_name"`
-	Directory    string `json:"directory"` // <-- New field
-	FilePath     string `json:"file_path"`
-	Size         int64  `json:"size"`
-	ContentType  string `json:"content_type"`
-	Uploader     string `json:"uploader"`
-	Confidential bool   `json:"confidential"`
+	ID            int    `json:"id"`
+	FileName      string `json:"file_name"`
+	Directory     string `json:"directory"` // <-- New field
+	FilePath      string `json:"file_path"`
+	Size          int64  `json:"size"`
+	ContentType   string `json:"content_type"`
+	Uploader      string `json:"uploader"`
+	Confidential  bool   `json:"confidential"`
+	VersionNumber int    `json:"version_number"`
 }
 
 // -------------------------------------
@@ -704,4 +705,33 @@ func (app *App) UpdateUserPassword(username, hashedPassword string) error {
         WHERE username = $2
     `, hashedPassword, username)
 	return err
+}
+func (app *App) CreateFileVersion(fileID, versionNum int, path string) error {
+	_, err := app.DB.Exec(`
+        INSERT INTO file_versions (file_id, version_number, file_path)
+        VALUES ($1, $2, $3)
+    `, fileID, versionNum, path)
+	return err
+}
+
+// GetLatestVersionNumber retrieves the highest version_number for a given file_id.
+func (app *App) GetLatestVersionNumber(fileID int) (int, error) {
+	var maxVer int
+	err := app.DB.QueryRow(`
+        SELECT COALESCE(MAX(version_number), 0)
+        FROM file_versions
+        WHERE file_id = $1
+    `, fileID).Scan(&maxVer)
+	return maxVer, err
+}
+
+// GetFileIDByPath returns the files.id for a given file_path.
+func (app *App) GetFileIDByPath(path string) (int, error) {
+	var id int
+	err := app.DB.QueryRow(`
+        SELECT id
+        FROM files
+        WHERE file_path = $1
+    `, path).Scan(&id)
+	return id, err
 }
