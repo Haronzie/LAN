@@ -735,3 +735,72 @@ func (app *App) GetFileIDByPath(path string) (int, error) {
     `, path).Scan(&id)
 	return id, err
 }
+
+// DeleteFileVersions removes all version records for a given file ID.
+func (app *App) DeleteFileVersions(fileID int) error {
+	_, err := app.DB.Exec(`
+        DELETE FROM file_versions
+        WHERE file_id = $1
+    `, fileID)
+	return err
+}
+func (app *App) GetFileRecordByPath(filePath string) (FileRecord, error) {
+	var fr FileRecord
+	err := app.DB.QueryRow(`
+        SELECT id, file_name, file_path, size, content_type, uploader, confidential
+        FROM files
+        WHERE file_path = $1
+    `, filePath).Scan(
+		&fr.ID,
+		&fr.FileName,
+		&fr.FilePath,
+		&fr.Size,
+		&fr.ContentType,
+		&fr.Uploader,
+		&fr.Confidential,
+	)
+	return fr, err
+}
+func (app *App) UpdateFileMetadata(fileID int, newSize int64, newContentType string, newConfidential bool) error {
+	_, err := app.DB.Exec(`
+        UPDATE files
+        SET size = $1,
+            content_type = $2,
+            confidential = $3
+        WHERE id = $4
+    `, newSize, newContentType, newConfidential, fileID)
+	return err
+}
+
+// DeleteFileVersionsInFolder removes file_versions rows for all files whose
+// file_path starts with the given folderPath prefix.
+func (app *App) DeleteFileVersionsInFolder(folderPath string) error {
+	// Step 1: Gather all file IDs in that folder (including subfolders).
+	rows, err := app.DB.Query(`
+        SELECT id
+        FROM files
+        WHERE file_path = $1
+           OR file_path LIKE $1 || '/%'
+    `, folderPath)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var fileIDs []int
+	for rows.Next() {
+		var fid int
+		if err := rows.Scan(&fid); err != nil {
+			return err
+		}
+		fileIDs = append(fileIDs, fid)
+	}
+
+	// Step 2: For each file ID, delete any version rows in file_versions.
+	for _, fid := range fileIDs {
+		if _, err := app.DB.Exec(`DELETE FROM file_versions WHERE file_id = $1`, fid); err != nil {
+			return err
+		}
+	}
+	return nil
+}

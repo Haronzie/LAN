@@ -40,7 +40,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the uploaded file.
+	// 1) Retrieve the uploaded file from the form
 	file, handler, err := r.FormFile("file")
 	if err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Error retrieving the file")
@@ -62,13 +62,13 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	relativePath := filepath.Join(targetDir, rawFileName)
 	finalDiskPath := filepath.Join(uploadBase, relativePath)
 
-	// Ensure the target directory exists.
+	// 2) Ensure the target directory exists on disk
 	if err := os.MkdirAll(filepath.Dir(finalDiskPath), 0755); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error creating target directory")
 		return
 	}
 
-	// Save the uploaded file as a temporary plaintext file.
+	// 3) Save the uploaded file to a temp path (plaintext) before encryption
 	tempFilePath := finalDiskPath + ".tmp"
 	tempFile, err := os.Create(tempFilePath)
 	if err != nil {
@@ -83,7 +83,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	tempFile.Close()
 
-	// Virus scan (if integrated):
+	// 4) Virus scan (if integrated)
 	scanResult, err := services.ScanFile(tempFilePath)
 	if err != nil || !scanResult.Clean {
 		os.Remove(tempFilePath)
@@ -92,63 +92,84 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load the encryption key (must be 32 bytes for AES-256).
+	// 5) Load the encryption key (must be 32 bytes for AES-256).
 	key := []byte(os.Getenv("ENCRYPTION_KEY"))
 	if len(key) != 32 {
+		os.Remove(tempFilePath)
 		models.RespondError(w, http.StatusInternalServerError, "Invalid encryption key")
 		return
 	}
 
-	// Encrypt and save to final path.
+	// 6) Encrypt the file into finalDiskPath
 	if err := encryption.EncryptFile(key, tempFilePath, finalDiskPath); err != nil {
 		os.Remove(tempFilePath)
 		models.RespondError(w, http.StatusInternalServerError, "Error encrypting file")
 		return
 	}
+	// Remove the temp plaintext
 	os.Remove(tempFilePath)
 
+	// 7) Determine if this is a brand-new file or an existing one
 	confidentialStr := r.FormValue("confidential")
 	isConfidential := (confidentialStr == "true")
 
-	// Build FileRecord.
+	// We'll try to see if there's already a record in DB with the same path
+	existingFR, getErr := fc.App.GetFileRecordByPath(relativePath)
+	if getErr == nil {
+		// Means we found an existing file => treat as RE-UPLOAD
+		// 7a) Update the existing file's metadata
+		updateErr := fc.App.UpdateFileMetadata(existingFR.ID, handler.Size, handler.Header.Get("Content-Type"), isConfidential)
+		if updateErr != nil {
+			models.RespondError(w, http.StatusInternalServerError, "Error updating file record")
+			return
+		}
+
+		// 7b) Insert a new version record
+		latestVer, _ := fc.App.GetLatestVersionNumber(existingFR.ID)
+		newVer := latestVer + 1
+		if verr := fc.App.CreateFileVersion(existingFR.ID, newVer, relativePath); verr != nil {
+			log.Println("Warning: failed to create file version record:", verr)
+		}
+
+		// 7c) Log activity
+		fc.App.LogActivity(fmt.Sprintf("User '%s' re-uploaded file '%s' (version %d).", user.Username, rawFileName, newVer))
+
+		models.RespondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("File '%s' updated (version %d) successfully", rawFileName, newVer),
+		})
+		return
+	}
+
+	// If we get here, it means no existing record => brand-new file
+	// 8) Create a brand-new record
 	fr := models.FileRecord{
 		FileName:     rawFileName,
+		Directory:    targetDir,
 		FilePath:     relativePath,
 		Size:         handler.Size,
 		ContentType:  handler.Header.Get("Content-Type"),
 		Uploader:     user.Username,
 		Confidential: isConfidential,
 	}
-
-	// Create the file record in the DB.
 	if err := fc.App.CreateFileRecord(fr); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving file record")
 		return
 	}
 
-	// -----------------------------
-	// ADD VERSIONING HERE
-	// -----------------------------
-	fileID, err := fc.App.GetFileIDByPath(fr.FilePath)
-	if err == nil {
-		// If we found the file ID, figure out the next version
-		latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
-		newVer := latestVer + 1
-
-		// Insert a version record
-		if verr := fc.App.CreateFileVersion(fileID, newVer, fr.FilePath); verr != nil {
-			// Not critical if version insertion fails; just log
-			log.Println("Warning: failed to create file version record:", verr)
+	// 8a) Insert version=1 for brand-new file
+	fileID, _ := fc.App.GetFileIDByPath(fr.FilePath)
+	if fileID > 0 {
+		if verr := fc.App.CreateFileVersion(fileID, 1, fr.FilePath); verr != nil {
+			log.Println("Warning: failed to create version record:", verr)
 		}
 	}
-	// -----------------------------
 
-	// Log activity
-	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded and encrypted file '%s'.",
+	// 8b) Log activity
+	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded new file '%s' (version 1).",
 		user.Username, rawFileName))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("File '%s' uploaded and encrypted successfully", rawFileName),
+		"message": fmt.Sprintf("File '%s' uploaded (version 1) successfully", rawFileName),
 	})
 }
 
@@ -254,21 +275,39 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Retrieve the file record from DB to get its relative path.
+	// 1) Retrieve the file record from the DB to get its file_path and (later) file ID.
 	fr, err := fc.App.GetFileRecord(req.Filename)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "File not found in database")
 		return
 	}
 
-	// 2. Remove the file from disk using the stored path.
+	// 2) Remove the file from disk using the stored path.
 	fullPath := filepath.Join("uploads", fr.FilePath)
-	if err := os.Remove(fullPath); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error deleting file from local storage")
-		return
+	if removeErr := os.Remove(fullPath); removeErr != nil {
+		if !os.IsNotExist(removeErr) {
+			models.RespondError(w, http.StatusInternalServerError, "Error deleting file from local storage")
+			return
+		}
+		// If the file didn't exist on disk, just log a warning.
+		log.Printf("Warning: Tried to delete %s but it wasn't on disk.\n", fullPath)
 	}
 
-	// 3. Delete the file record from the database.
+	// 2.5) [ADDED LINES] Delete file versions if any.
+	//     This only works if you have a method like `DeleteFileVersions(fileID int) error`.
+	//     We first get the file's ID from its path (assuming you have GetFileIDByPath).
+	fileID, getIDErr := fc.App.GetFileIDByPath(fr.FilePath)
+	if getIDErr == nil {
+		// If found, attempt to delete versions for this file_id.
+		if delVerErr := fc.App.DeleteFileVersions(fileID); delVerErr != nil {
+			log.Printf("Warning: could not delete file versions for ID %d: %v\n", fileID, delVerErr)
+		}
+	} else {
+		log.Printf("Warning: No file ID found for path %s; ignoring versions.\n", fr.FilePath)
+	}
+	// [END OF ADDED LINES]
+
+	// 3) Delete the file record from the database.
 	if err := fc.App.DeleteFileRecord(req.Filename); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file record from database")
 		return

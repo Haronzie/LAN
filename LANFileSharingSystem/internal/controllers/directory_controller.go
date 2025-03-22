@@ -97,7 +97,7 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // Delete handles directory deletion from both the filesystem and the database.
-// It recursively deletes the folder, its subfolders, and files.
+
 // Delete handles directory deletion from both the filesystem and the database.
 // It recursively deletes the folder, its subfolders, and files.
 func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
@@ -137,18 +137,24 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3) Build the relative path (for database deletion)
-	//    e.g. If parent is "Root" and name is "FolderA", this becomes "Root/FolderA"
+	// 3) Build the relative path (for database deletion).
+	//    e.g. If parent="Root" and name="FolderA", this becomes "Root/FolderA"
 	relativeFolder := filepath.Join(req.Parent, req.Name)
 
-	// -- SNIPPET STARTS HERE --
-	// 4) Delete files whose file_path starts with relativeFolder
+	// *** NEW STEP: Delete file_versions for any files in this folder.
+	if err := dc.App.DeleteFileVersionsInFolder(relativeFolder); err != nil {
+		models.RespondError(w, http.StatusInternalServerError,
+			"Error deleting file version records in the folder")
+		return
+	}
+
+	// 4) Delete the file records in that folder
 	if err := dc.App.DeleteFilesWithPrefix(relativeFolder); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file records in the folder")
 		return
 	}
 
-	// 5) Delete directories whose (parent||'/'||name) starts with relativeFolder
+	// 5) Delete any subdirectories
 	if err := dc.App.DeleteDirectoriesWithPrefix(relativeFolder); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory records from database")
 		return
@@ -157,9 +163,9 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory records from database")
 		return
 	}
-	// -- SNIPPET ENDS HERE --
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' deleted directory '%s' (parent: '%s') and all its contents.",
+	dc.App.LogActivity(fmt.Sprintf(
+		"User '%s' deleted directory '%s' (parent: '%s') and all its contents.",
 		user.Username, req.Name, req.Parent))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
