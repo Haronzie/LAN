@@ -17,6 +17,7 @@ import (
 
 	"LANFileSharingSystem/internal/config"
 	"LANFileSharingSystem/internal/controllers"
+	"LANFileSharingSystem/internal/middleware"
 	"LANFileSharingSystem/internal/models"
 )
 
@@ -114,6 +115,7 @@ func main() {
 
 	// Activity routes.
 	router.HandleFunc("/activities", activityController.List).Methods("GET")
+	router.Use(middleware.RateLimitMiddleware)
 
 	// Wrap your router with CORS middleware.
 	corsRouter := handlers.CORS(
