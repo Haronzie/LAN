@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"time"
 
+	"LANFileSharingSystem/internal/ws"
+
 	"github.com/gorilla/sessions"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -20,6 +22,7 @@ type App struct {
 	Store           *sessions.CookieStore
 	FileCache       map[string]FileRecord
 	FileShareTokens map[string]string // token -> file name mapping
+	NotificationHub *ws.Hub
 }
 
 // NewApp creates a new App instance.

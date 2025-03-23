@@ -19,6 +19,7 @@ import (
 	"LANFileSharingSystem/internal/controllers"
 	"LANFileSharingSystem/internal/middleware"
 	"LANFileSharingSystem/internal/models"
+	"LANFileSharingSystem/internal/ws"
 )
 
 func main() {
@@ -38,7 +39,6 @@ func main() {
 	log.Println("Successfully connected to database!")
 
 	// AUTOMATICALLY RUN MIGRATIONS HERE
-
 	migrationsPath := "file://../../internal/migrations"
 	m, err := migrate.New(migrationsPath, cfg.DatabaseURL)
 	if err != nil {
@@ -55,14 +55,15 @@ func main() {
 	// Initialize the application model (shared context).
 	app := models.NewApp(db, store)
 
+	// IMPORTANT: Initialize the notification hub and attach it to your app context.
+	hub := ws.NewHub()
+	go hub.Run()
+	app.NotificationHub = hub
+
 	// Ensure the 'uploads' folder exists.
 	if err := os.MkdirAll("uploads", 0755); err != nil {
 		log.Fatal("Error creating 'uploads' folder:", err)
 	}
-
-	// OPTIONAL: Create subfolders if needed
-	// (Same logic you already have—omitted for brevity)
-	// ...
 
 	// Create a new router.
 	router := mux.NewRouter()
@@ -75,7 +76,7 @@ func main() {
 	activityController := controllers.NewActivityController(app)
 	inventoryController := controllers.NewInventoryController(app)
 
-	// Define routes.
+	// Define your existing routes.
 	router.HandleFunc("/register", authController.Register).Methods("POST")
 	router.HandleFunc("/login", authController.Login).Methods("POST")
 	router.HandleFunc("/forgot-password", authController.ForgotPassword).Methods("POST")
@@ -106,7 +107,8 @@ func main() {
 	router.HandleFunc("/directory/copy", directoryController.Copy).Methods("POST")
 	router.HandleFunc("/directory/tree", directoryController.Tree).Methods("GET")
 	router.HandleFunc("/directory/move", directoryController.Move).Methods("POST")
-	// Inventory routes
+
+	// Inventory routes.
 	router.HandleFunc("/inventory", inventoryController.List).Methods("GET")
 	router.HandleFunc("/inventory", inventoryController.Create).Methods("POST")
 	router.HandleFunc("/inventory/{id}", inventoryController.Get).Methods("GET")
@@ -115,6 +117,13 @@ func main() {
 
 	// Activity routes.
 	router.HandleFunc("/activities", activityController.List).Methods("GET")
+
+	// Add a WebSocket route.
+	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		ws.ServeWs(hub, w, r)
+	}).Methods("GET")
+
+	// Add any middleware.
 	router.Use(middleware.RateLimitMiddleware)
 
 	// Wrap your router with CORS middleware.

@@ -134,6 +134,14 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		// 7c) Log activity
 		fc.App.LogActivity(fmt.Sprintf("User '%s' re-uploaded file '%s' (version %d).", user.Username, rawFileName, newVer))
 
+		// 7d) Broadcast the re-upload notification
+		notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, newVer))
+		if fc.App.NotificationHub != nil {
+			if fc.App.NotificationHub != nil {
+				fc.App.NotificationHub.Broadcast(notification)
+			}
+		}
+
 		models.RespondJSON(w, http.StatusOK, map[string]string{
 			"message": fmt.Sprintf("File '%s' updated (version %d) successfully", rawFileName, newVer),
 		})
@@ -165,8 +173,15 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 8b) Log activity
-	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded new file '%s' (version 1).",
-		user.Username, rawFileName))
+	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded new file '%s' (version 1).", user.Username, rawFileName))
+
+	// 8c) Broadcast the new file upload notification
+	notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, 1))
+	if fc.App.NotificationHub != nil {
+		if fc.App.NotificationHub != nil {
+			fc.App.NotificationHub.Broadcast(notification)
+		}
+	}
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("File '%s' uploaded (version 1) successfully", rawFileName),

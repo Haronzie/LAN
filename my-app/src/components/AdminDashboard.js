@@ -36,6 +36,47 @@ const AdminDashboard = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const navigate = useNavigate();
 
+  // ---------------------------------------------------
+  // WebSocket notification integration using native API
+  // ---------------------------------------------------
+  useEffect(() => {
+    const client = new WebSocket('ws://localhost:8080/ws');
+
+    client.onopen = () => {
+      console.log('Connected to notification server');
+    };
+
+    client.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'file_uploaded') {
+          // Display a toast notification when a new file is uploaded.
+          message.info(`New file uploaded: ${data.file_name} (version: ${data.version})`,5);
+          // Optionally, trigger a refresh (e.g. fetchFiles()) if needed.
+        }
+      } catch (err) {
+        console.error('Error parsing WebSocket message:', err);
+      }
+    };
+
+    client.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    client.onclose = () => {
+      console.log('Disconnected from notification server');
+    };
+
+    // Cleanup on unmount.
+    return () => {
+      client.close();
+    };
+  }, []);
+
+  // ---------------------------------------------------
+  // Existing AdminDashboard logic
+  // ---------------------------------------------------
+
   // Retrieve stored admin username from localStorage on mount.
   useEffect(() => {
     const storedName = localStorage.getItem('username');
@@ -103,7 +144,6 @@ const AdminDashboard = () => {
   // Create chart data: number of admin users vs. regular users
   const adminCount = users.filter((u) => u.role === 'admin').length;
   const regularCount = users.filter((u) => u.role === 'user').length;
-
   const userStats = [
     { type: 'Admin Users', count: adminCount },
     { type: 'Regular Users', count: regularCount },
@@ -204,20 +244,12 @@ const AdminDashboard = () => {
             <Row gutter={[16, 16]}>
               <Col xs={24} sm={12}>
                 <Card>
-                  <Statistic
-                    title="Total Users"
-                    value={totalUsers}
-                    loading={loadingUsers}
-                  />
+                  <Statistic title="Total Users" value={totalUsers} loading={loadingUsers} />
                 </Card>
               </Col>
               <Col xs={24} sm={12}>
                 <Card>
-                  <Statistic
-                    title="Total Files"
-                    value={totalFiles}
-                    loading={loadingFiles}
-                  />
+                  <Statistic title="Total Files" value={totalFiles} loading={loadingFiles} />
                 </Card>
               </Col>
             </Row>
@@ -244,7 +276,6 @@ const AdminDashboard = () => {
                 </Card>
               </Col>
 
-              {/* Chart with admin vs. user counts */}
               <Col xs={24} md={12}>
                 <Card title="User Role Distribution" style={{ borderRadius: '8px' }}>
                   <Column {...chartConfig} />
@@ -258,12 +289,6 @@ const AdminDashboard = () => {
           © {new Date().getFullYear()} CDRRMO Official Admin Dashboard
         </Footer>
       </Layout>
-
-      <AddResourceModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        refreshResources={fetchFiles}
-      />
     </Layout>
   );
 };
