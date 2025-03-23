@@ -20,7 +20,6 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AddResourceModal from './AddResourceModal';
-import Settings from './Settings'; // Import your Settings component
 import { Column } from '@ant-design/charts'; // Import the chart
 import './AdminDashboard.css';
 
