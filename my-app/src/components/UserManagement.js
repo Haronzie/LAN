@@ -40,7 +40,7 @@ const UserManagement = () => {
 
   // Modal state for updating user
   const [isUpdateUserModalOpen, setIsUpdateUserModalOpen] = useState(false);
-  const [currentUserToUpdate, setCurrentUserToUpdate] = useState(null);
+
   const [updateForm] = Form.useForm();
 
   const navigate = useNavigate();
@@ -141,7 +141,7 @@ const UserManagement = () => {
 
   // Open the update modal and set form fields
   const openUpdateModal = (record) => {
-    setCurrentUserToUpdate(record);
+  
     updateForm.setFieldsValue({
       old_username: record.username,
       new_username: record.username,
