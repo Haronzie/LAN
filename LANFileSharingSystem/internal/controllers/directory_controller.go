@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -710,4 +711,104 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Directory '%s' moved successfully", req.Name),
 	})
+}
+
+// DownloadFolder handles zipping and downloading a folder.
+func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Request) {
+	// Only allow GET requests.
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	// Retrieve the directory from query parameters.
+	folder := strings.TrimSpace(r.URL.Query().Get("directory"))
+	if folder == "" {
+		models.RespondError(w, http.StatusBadRequest, "Missing directory parameter")
+		return
+	}
+
+	// Build the absolute path of the folder.
+	absFolder := filepath.Join("uploads", folder)
+
+	// Check if the folder exists.
+	info, err := os.Stat(absFolder)
+	if err != nil || !info.IsDir() {
+		models.RespondError(w, http.StatusNotFound, "Folder not found")
+		return
+	}
+
+	// Create a temporary zip file.
+	zipFile, err := os.CreateTemp("", "folder-*.zip")
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Could not create temporary file")
+		return
+	}
+	defer os.Remove(zipFile.Name())
+	defer zipFile.Close()
+
+	// Create a new zip archive.
+	zipWriter := zip.NewWriter(zipFile)
+	err = filepath.Walk(absFolder, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// Create a header based on the file info.
+		relPath, err := filepath.Rel(absFolder, filePath)
+		if err != nil {
+			return err
+		}
+		// Use forward slashes for zip files.
+		relPath = filepath.ToSlash(relPath)
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+		if info.IsDir() {
+			header.Name += "/"
+		} else {
+			header.Method = zip.Deflate
+		}
+
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			file, err := os.Open(filePath)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			_, err = io.Copy(writer, file)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error zipping folder: "+err.Error())
+		return
+	}
+
+	// Close the zip writer to flush contents.
+	zipWriter.Close()
+
+	// Re-open the zip file for reading.
+	zipFileForRead, err := os.Open(zipFile.Name())
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error opening zipped folder")
+		return
+	}
+	defer zipFileForRead.Close()
+
+	// Set headers and stream the file.
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", info.Name()))
+	_, err = io.Copy(w, zipFileForRead)
+	if err != nil {
+		log.Println("Error sending zip file:", err)
+	}
 }

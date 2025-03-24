@@ -29,7 +29,7 @@ const { Title } = Typography;
 const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [files, setFiles] = useState([]);
-  const [auditLogs, setAuditLogs] = useState([]);  // ✅ Use audit logs instead of activities
+  const [auditLogs, setAuditLogs] = useState([]);  // Use audit logs instead of activities
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [adminName, setAdminName] = useState('Admin');
@@ -94,11 +94,14 @@ const AdminDashboard = () => {
     }
   };
 
-  // Fetch files
+  // ---------------------------------------------------
+  // Fetch all files from the database
+  // ---------------------------------------------------
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get('/files', { withCredentials: true });
+      // New endpoint that returns all files stored in the database
+      const res = await axios.get('/files/all', { withCredentials: true });
       setFiles(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       message.error('Error fetching files');
@@ -107,7 +110,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // ✅ Fetch audit logs instead of activities
+  // Fetch audit logs instead of activities
   const fetchAuditLogs = async () => {
     try {
       const res = await axios.get('/auditlogs', { withCredentials: true });
@@ -120,7 +123,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchUsers();
     fetchFiles();
-    fetchAuditLogs();  // ✅ Fetch audit logs
+    fetchAuditLogs();  // Fetch audit logs
   }, []);
 
   // Poll for fresh data every 30 seconds

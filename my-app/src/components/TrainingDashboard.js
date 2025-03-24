@@ -248,10 +248,16 @@ const TrainingDashboard = () => {
   };
 
   // =========================================
-  // Download (File Only)
+  // Download (File Only) and Download Folder (when not owner)
   // =========================================
   const handleDownload = (fileName) => {
     const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+    window.open(downloadUrl, '_blank');
+  };
+
+  const handleDownloadFolder = (folderName) => {
+    const folderPath = path.join(currentPath, folderName);
+    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
     window.open(downloadUrl, '_blank');
   };
 
@@ -469,7 +475,7 @@ const TrainingDashboard = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        // Determine ownership: for directories check "created_by", for files check "uploader"
+        // Determine ownership: for directories, check "created_by"; for files, check "uploader"
         const isOwner =
           record.type === 'directory'
             ? record.created_by === currentUser
@@ -478,14 +484,26 @@ const TrainingDashboard = () => {
           <Space>
             {record.type === 'file' && (
               <Tooltip title="Download">
-                <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
+                <Button
+                  icon={<DownloadOutlined />}
+                  onClick={() => handleDownload(record.name)}
+                />
               </Tooltip>
             )}
-            {/* Copy available to all users */}
+            {/* For directories, if not owned, show Download Folder */}
+            {record.type === 'directory' && !isOwner && (
+              <Tooltip title="Download Folder">
+                <Button
+                  icon={<DownloadOutlined />}
+                  onClick={() => handleDownloadFolder(record.name)}
+                />
+              </Tooltip>
+            )}
+            {/* Copy action available to all users */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
-            {/* Only show rename, delete, and move if user is owner */}
+            {/* Only show rename, delete, and move for owners */}
             {isOwner && (
               <>
                 <Tooltip title="Rename">

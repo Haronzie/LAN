@@ -132,6 +132,7 @@ func main() {
 	router.HandleFunc("/admin-exists", userController.AdminExists).Methods("GET")
 	router.HandleFunc("/user-role", userController.GetUserRole).Methods("GET")
 	router.HandleFunc("/get-user-role", authController.GetUserRole).Methods("GET")
+	router.HandleFunc("/files/all", fileController.ListAllFiles).Methods("GET")
 
 	// Directory routes.
 	router.HandleFunc("/directory/create", directoryController.Create).Methods("POST")
@@ -141,6 +142,7 @@ func main() {
 	router.HandleFunc("/directory/copy", directoryController.Copy).Methods("POST")
 	router.HandleFunc("/directory/tree", directoryController.Tree).Methods("GET")
 	router.HandleFunc("/directory/move", directoryController.Move).Methods("POST")
+	router.HandleFunc("/download-folder", directoryController.DownloadFolder).Methods("GET")
 
 	// Inventory routes.
 	router.HandleFunc("/inventory", inventoryController.List).Methods("GET")

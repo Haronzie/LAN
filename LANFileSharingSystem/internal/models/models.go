@@ -901,3 +901,22 @@ func (app *App) LogAudit(username string, fileID int, action, details string) {
 		log.Println("Audit log inserted successfully!")
 	}
 }
+func (app *App) ListAllFiles() ([]FileRecord, error) {
+	rows, err := app.DB.Query("SELECT file_name, size, content_type, uploader FROM files")
+	if err != nil {
+		log.Println("Error fetching all files:", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []FileRecord
+	for rows.Next() {
+		var file FileRecord
+		if err := rows.Scan(&file.FileName, &file.Size, &file.ContentType, &file.Uploader); err != nil {
+			log.Println("Error scanning file row:", err)
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	return files, nil
+}

@@ -249,10 +249,16 @@ const ResearchDashboard = () => {
   };
 
   // =========================================
-  // Download (File Only)
+  // Download (File Only) and Download Folder (when not owner)
   // =========================================
   const handleDownload = (fileName) => {
     const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+    window.open(downloadUrl, '_blank');
+  };
+
+  const handleDownloadFolder = (folderName) => {
+    const folderPath = path.join(currentPath, folderName);
+    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
     window.open(downloadUrl, '_blank');
   };
 
@@ -260,7 +266,6 @@ const ResearchDashboard = () => {
   // Rename (Owner only)
   // =========================================
   const handleRename = (record) => {
-    // Only owner can rename
     const isOwner =
       record.type === 'directory'
         ? record.created_by === currentUser
@@ -471,7 +476,7 @@ const ResearchDashboard = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        // Determine ownership: for directories, check "created_by"; for files, "uploader"
+        // Determine ownership: for directories check "created_by", for files check "uploader"
         const isOwner =
           record.type === 'directory'
             ? record.created_by === currentUser
@@ -480,28 +485,27 @@ const ResearchDashboard = () => {
           <Space>
             {record.type === 'file' && (
               <Tooltip title="Download">
-                <Button
-                  icon={<DownloadOutlined />}
-                  onClick={() => handleDownload(record.name)}
-                />
+                <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
+              </Tooltip>
+            )}
+            {/* For directories, if not owned, show Download Folder */}
+            {record.type === 'directory' && !isOwner && (
+              <Tooltip title="Download Folder">
+                <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
             {/* Copy action available to all users */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
-            {/* Only show rename, delete, and move for owners */}
+            {/* Only show rename, delete, and move if user is owner */}
             {isOwner && (
               <>
                 <Tooltip title="Rename">
                   <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
                 </Tooltip>
                 <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
-                  <Button
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => handleDelete(record)}
-                  />
+                  <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
                 </Tooltip>
                 <Tooltip title="Move">
                   <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
@@ -553,19 +557,12 @@ const ResearchDashboard = () => {
         {/* Navigation Row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
-            <Button
-              icon={<ArrowUpOutlined />}
-              onClick={handleGoUp}
-              disabled={!currentPath}
-            >
+            <Button icon={<ArrowUpOutlined />} onClick={handleGoUp} disabled={!currentPath}>
               Go Up
             </Button>
           </Col>
           <Col>
-            <Button
-              icon={<FolderAddOutlined />}
-              onClick={() => setCreateFolderModal(true)}
-            >
+            <Button icon={<FolderAddOutlined />} onClick={() => setCreateFolderModal(true)}>
               Create Folder
             </Button>
           </Col>

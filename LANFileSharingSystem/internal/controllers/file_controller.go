@@ -562,6 +562,42 @@ func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
 	models.RespondJSON(w, http.StatusOK, output)
 }
 
+// ListAllFiles handles retrieving all file records from the database.
+func (fc *FileController) ListAllFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	// Check if user is authenticated
+	if _, err := fc.App.GetUserFromSession(r); err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Query all file records from the database.
+	files, err := fc.App.ListAllFiles()
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving files")
+		return
+	}
+
+	// Convert FileRecord objects into JSON-friendly maps.
+	var output []map[string]interface{}
+	for _, f := range files {
+		output = append(output, map[string]interface{}{
+			"name":        f.FileName,
+			"type":        "file",
+			"size":        f.Size,
+			"contentType": f.ContentType,
+			"uploader":    f.Uploader,
+		})
+	}
+
+	// Respond with the JSON array.
+	models.RespondJSON(w, http.StatusOK, output)
+}
+
 // ShareFile generates a shareable URL for a file.
 func (fc *FileController) ShareFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

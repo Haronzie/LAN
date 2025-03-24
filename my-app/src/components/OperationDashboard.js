@@ -100,7 +100,7 @@ const OperationDashboard = () => {
       // Combine them
       setItems([...directories, ...files]);
     } catch (error) {
-      console.error('Error fetching directory contents:', error);
+      console.error('Error fetching items:', error);
       message.error(
         error.response?.data?.error || 'Error fetching directory contents'
       );
@@ -124,7 +124,7 @@ const OperationDashboard = () => {
   // Search + Filter
   // ================================
   const filteredItems = items.filter((item) =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // ================================
@@ -138,11 +138,7 @@ const OperationDashboard = () => {
     try {
       await axios.post(
         '/directory/create',
-        { 
-          name: newFolderName, 
-          parent: currentPath,
-          container: 'operation'
-        },
+        { name: newFolderName, parent: currentPath, container: 'operation' },
         { withCredentials: true }
       );
       message.success('Folder created successfully');
@@ -195,7 +191,7 @@ const OperationDashboard = () => {
   // ================================
   const customUpload = async ({ file, onSuccess, onError }) => {
     if (!selectedFolder) {
-      message.error('No folder selected for upload.');
+      message.error('Please select a folder first.');
       onError(new Error('No folder selected'));
       return;
     }
@@ -223,7 +219,6 @@ const OperationDashboard = () => {
   // Delete (File or Folder)
   // ================================
   const handleDelete = async (record) => {
-    // Check ownership: for directories, "created_by"; for files, "uploader"
     const isOwner =
       record.type === 'directory'
         ? record.created_by === currentUser
@@ -253,12 +248,19 @@ const OperationDashboard = () => {
   };
 
   // ================================
-  // Download (File Only)
+  // Download (File Only) and Download Folder (when not owner)
   // ================================
   const handleDownload = (fileName) => {
     const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
     window.open(downloadUrl, '_blank');
   };
+
+  const handleDownloadFolder = (folderName) => {
+    const folderPath = path.join(currentPath, folderName);
+    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
+    window.open(downloadUrl, '_blank');
+  };
+  
 
   // ================================
   // Rename
@@ -486,11 +488,17 @@ const OperationDashboard = () => {
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
               </Tooltip>
             )}
-            {/* Copy button available to all users */}
+            {/* For directories, if not owned, show Download Folder */}
+            {record.type === 'directory' && !isOwner && (
+              <Tooltip title="Download Folder">
+                <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
+              </Tooltip>
+            )}
+            {/* Copy action available to all users */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
-            {/* Only show the following actions if the user is the owner */}
+            {/* Only show rename, delete, and move if user is owner */}
             {isOwner && (
               <>
                 <Tooltip title="Rename">
