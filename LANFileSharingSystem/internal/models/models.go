@@ -527,9 +527,22 @@ func (app *App) RenameFileRecord(oldFilename, newFilename, newFilePath string) e
 	return err
 }
 
-func (app *App) DeleteFileRecord(fileName string) error {
-	_, err := app.DB.Exec("DELETE FROM files WHERE file_name = $1", fileName)
-	return err
+func (app *App) DeleteFileRecord(fileName string) (int, error) {
+	log.Printf("Attempting to delete file: %s", fileName)
+
+	var fileID int
+	err := app.DB.QueryRow("SELECT id FROM files WHERE file_name = $1", fileName).Scan(&fileID)
+	if err != nil {
+		log.Printf("Error retrieving file ID for '%s': %v", fileName, err)
+		return 0, err
+	}
+
+	_, err = app.DB.Exec("DELETE FROM files WHERE file_name = $1", fileName)
+	if err != nil {
+		log.Printf("Error deleting file '%s' from database: %v", fileName, err)
+	}
+
+	return fileID, err
 }
 
 // UpdateFilePathsForRenamedFolder updates the file paths of all files
@@ -871,14 +884,18 @@ func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 	return logs, nil
 }
 
-func (app *App) LogAudit(username string, fileID int, action string, details string) {
-	// Debugging log
-	log.Printf("Logging Audit: User=%s, FileID=%d, Action=%s, Details=%s", username, fileID, action, details)
+func (app *App) LogAudit(username string, fileID int, action, details string) {
+	var nullableFileID sql.NullInt64
+	if fileID > 0 {
+		nullableFileID = sql.NullInt64{Int64: int64(fileID), Valid: true}
+	} else {
+		nullableFileID = sql.NullInt64{Valid: false}
+	}
 
-	query := `
-		INSERT INTO audit_logs (user_username, file_id, action, details, created_at)
-		VALUES ($1, $2, $3, $4, NOW())`
-	_, err := app.DB.Exec(query, username, fileID, action, details)
+	_, err := app.DB.Exec(`
+		INSERT INTO audit_logs (user_username, file_id, action, details)
+		VALUES ($1, $2, $3, $4)
+	`, username, nullableFileID, action, details)
 
 	if err != nil {
 		log.Printf("SQL Error in LogAudit: %v", err)

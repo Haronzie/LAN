@@ -308,42 +308,30 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1) Retrieve the file record from the DB to get its file_path and (later) file ID.
 	fr, err := fc.App.GetFileRecord(req.Filename)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "File not found in database")
 		return
 	}
 
-	// 2) Remove the file from disk using the stored path.
+	// ✅ Log the audit entry BEFORE deletion
+	fc.App.LogAudit(user.Username, fr.ID, "DELETE", fmt.Sprintf("File '%s' deleted", fr.FileName))
+
 	fullPath := filepath.Join("uploads", fr.FilePath)
-	if removeErr := os.Remove(fullPath); removeErr != nil {
-		if !os.IsNotExist(removeErr) {
-			models.RespondError(w, http.StatusInternalServerError, "Error deleting file from local storage")
-			return
-		}
-		// If the file didn't exist on disk, just log a warning.
-		log.Printf("Warning: Tried to delete %s but it wasn't on disk.\n", fullPath)
+	if removeErr := os.Remove(fullPath); removeErr != nil && !os.IsNotExist(removeErr) {
+		models.RespondError(w, http.StatusInternalServerError, "Error deleting file from local storage")
+		return
 	}
 
-	// 2.5) [ADDED LINES] Delete file versions if any.
-	//     This only works if you have a method like `DeleteFileVersions(fileID int) error`.
-	//     We first get the file's ID from its path (assuming you have GetFileIDByPath).
-	fileID, getIDErr := fc.App.GetFileIDByPath(fr.FilePath)
-	if getIDErr == nil {
-		// If found, attempt to delete versions for this file_id.
-		if delVerErr := fc.App.DeleteFileVersions(fileID); delVerErr != nil {
-			log.Printf("Warning: could not delete file versions for ID %d: %v\n", fileID, delVerErr)
-		}
-	} else {
-		log.Printf("Warning: No file ID found for path %s; ignoring versions.\n", fr.FilePath)
-	}
-	// [END OF ADDED LINES]
-
-	// 3) Delete the file record from the database.
-	if err := fc.App.DeleteFileRecord(req.Filename); err != nil {
+	// Correct usage: Delete the file record after logging the audit
+	fileID, err := fc.App.DeleteFileRecord(req.Filename)
+	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file record from database")
 		return
+	}
+
+	if delVerErr := fc.App.DeleteFileVersions(fileID); delVerErr != nil {
+		log.Printf("Warning: could not delete file versions for ID %d: %v\n", fileID, delVerErr)
 	}
 
 	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file '%s'.", user.Username, req.Filename))

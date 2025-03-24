@@ -52,17 +52,17 @@ CREATE TABLE IF NOT EXISTS inventory (
 );
 CREATE INDEX IF NOT EXISTS idx_inventory_item_name ON inventory (item_name);
 
--- File Versions Table
+-- File Versions Table with ON DELETE CASCADE
 CREATE TABLE IF NOT EXISTS file_versions (
     id SERIAL PRIMARY KEY,
     file_id INT NOT NULL,
     version_number INT NOT NULL,
     file_path TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (file_id) REFERENCES files(id)
+    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 );
 
--- Audit Logs Table with username as foreign key
+-- Audit Logs Table with ON DELETE SET NULL for file_id
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
     user_username TEXT NOT NULL,         -- Referencing username instead of ID
@@ -87,4 +87,3 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_username);
 CREATE INDEX IF NOT EXISTS idx_audit_file ON audit_logs(file_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
-
