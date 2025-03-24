@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -9,11 +10,11 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	_ "github.com/lib/pq"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"LANFileSharingSystem/internal/config"
 	"LANFileSharingSystem/internal/controllers"
@@ -22,6 +23,34 @@ import (
 	"LANFileSharingSystem/internal/ws"
 )
 
+// Global loggers
+var infoLogger *log.Logger
+var errorLogger *log.Logger
+
+func init() {
+	// Set up log rotation using lumberjack
+	logFile := &lumberjack.Logger{
+		Filename:   "error.log", // Log file path
+		MaxSize:    5,           // Max size in MB before rotation
+		MaxBackups: 30,          // Max number of old log files to keep
+		MaxAge:     30,          // Max number of days to retain logs
+		Compress:   true,        // Whether to compress old logs
+	}
+
+	// infoLogger writes only to the log file
+	infoLogger = log.New(logFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+
+	// errorLogger writes to both file and the console (stdout)
+	errorMultiWriter := io.MultiWriter(logFile, os.Stdout)
+	errorLogger = log.New(errorMultiWriter, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+}
+
+func logError(message string, err error) {
+	if err != nil {
+		errorLogger.Printf("%s: %v\n", message, err)
+	}
+}
+
 func main() {
 	// Load application configuration.
 	cfg := config.LoadConfig()
@@ -29,25 +58,29 @@ func main() {
 	// Connect to the database.
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
-		log.Fatal("Error connecting to database:", err)
+		logError("Error connecting to database", err)
+		log.Fatal(err)
 	}
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		log.Fatal("Error pinging database:", err)
+		logError("Error pinging database", err)
+		log.Fatal(err)
 	}
-	log.Println("Successfully connected to database!")
+	infoLogger.Println("Successfully connected to database!")
 
 	// AUTOMATICALLY RUN MIGRATIONS HERE
 	migrationsPath := "file://../../internal/migrations"
 	m, err := migrate.New(migrationsPath, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatal("Migration initialization error:", err)
+		logError("Migration initialization error", err)
+		log.Fatal(err)
 	}
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatal("Migration error:", err)
+		logError("Migration error", err)
+		log.Fatal(err)
 	}
-	log.Println("Migrations applied successfully (or no changes needed).")
+	infoLogger.Println("Migrations applied successfully (or no changes needed).")
 
 	// Initialize session store using a secret key from configuration.
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
@@ -62,7 +95,8 @@ func main() {
 
 	// Ensure the 'uploads' folder exists.
 	if err := os.MkdirAll("uploads", 0755); err != nil {
-		log.Fatal("Error creating 'uploads' folder:", err)
+		logError("Error creating 'uploads' folder", err)
+		log.Fatal(err)
 	}
 
 	// Create a new router.
@@ -116,6 +150,7 @@ func main() {
 	router.HandleFunc("/inventory/{id}", inventoryController.Delete).Methods("DELETE")
 
 	router.HandleFunc("/auditlogs", auditLogController.List).Methods("GET")
+
 	// Add a WebSocket route.
 	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		ws.ServeWs(hub, w, r)
@@ -132,8 +167,9 @@ func main() {
 	)(router)
 
 	// Start the HTTP server.
-	log.Println("Starting server on port", cfg.Port)
+	infoLogger.Println("Starting server on port", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, corsRouter); err != nil {
-		log.Fatal("Server failed:", err)
+		logError("Server failed", err)
+		log.Fatal(err)
 	}
 }

@@ -131,7 +131,11 @@ const OperationDashboard = () => {
     try {
       await axios.post(
         '/directory/create',
-        { name: newFolderName, parent: currentPath },
+        { 
+          name: newFolderName, 
+          parent: currentPath,
+          container: 'operation'  // Make sure your backend expects this
+        },
         { withCredentials: true }
       );
       message.success('Folder created successfully');
@@ -198,6 +202,7 @@ const OperationDashboard = () => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('directory', selectedFolder);
+    formData.append('container', 'operation'); // Send container to backend
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
@@ -226,7 +231,11 @@ const OperationDashboard = () => {
       }
       try {
         await axios.delete('/directory/delete', {
-          data: { name: record.name, parent: currentPath },
+          data: { 
+            name: record.name, 
+            parent: currentPath, 
+            container: 'operation' // match backend
+          },
           withCredentials: true
         });
         message.success(`${record.name} folder deleted successfully`);
@@ -244,9 +253,12 @@ const OperationDashboard = () => {
         return;
       }
       try {
-        // /delete-file
         await axios.delete('/delete-file', {
-          data: { filename: path.join(currentPath, record.name) },
+          data: { 
+            directory: currentPath, 
+            filename: record.name,
+            container: 'operation' // match backend
+          },
           withCredentials: true
         });
         message.success(`${record.name} deleted successfully`);
@@ -294,7 +306,8 @@ const OperationDashboard = () => {
           {
             old_name: oldName,
             new_name: renameNewName,
-            parent: currentPath
+            parent: currentPath,
+            container: 'operation' // match backend
           },
           { withCredentials: true }
         );
@@ -303,8 +316,10 @@ const OperationDashboard = () => {
         await axios.put(
           '/file/rename',
           {
-            old_filename: path.join(currentPath, oldName),
-            new_filename: renameNewName
+            directory: currentPath,
+            old_filename: oldName,
+            new_filename: renameNewName,
+            container: 'operation' // match backend
           },
           { withCredentials: true }
         );
@@ -338,15 +353,17 @@ const OperationDashboard = () => {
       return;
     }
     if (!copySelectedItem) return;
-
+  
     const oldName = copySelectedItem.name;
     try {
-      // /copy-file expects { source_file, new_file_name }
+      // Make sure to match what your backend expects for the source file
       await axios.post(
         '/copy-file',
         {
-          source_file: path.join(currentPath, oldName),
-          new_file_name: copyNewFileName
+          directory: currentPath,
+          source_file: oldName,  // <-- renamed from "source_filename"
+          new_filename: copyNewFileName,
+          container: 'operation'
         },
         { withCredentials: true }
       );
@@ -359,7 +376,7 @@ const OperationDashboard = () => {
       message.error(error.response?.data?.error || 'Error copying file');
     }
   };
-
+  
   // ================================
   // Table Columns
   // ================================

@@ -1,0 +1,9 @@
+ERROR: 2025/03/24 18:48:25 main.go:66: Successfully connected to database!
+ERROR: 2025/03/24 18:48:25 main.go:79: Migrations applied successfully (or no changes needed).
+ERROR: 2025/03/24 18:48:25 main.go:166: Starting server on port 8080
+ERROR: 2025/03/24 18:52:46 main.go:67: Successfully connected to database!
+ERROR: 2025/03/24 18:52:46 main.go:80: Migrations applied successfully (or no changes needed).
+ERROR: 2025/03/24 18:52:46 main.go:167: Starting server on port 8080
+INFO: 2025/03/24 18:55:57 main.go:70: Successfully connected to database!
+INFO: 2025/03/24 18:55:57 main.go:83: Migrations applied successfully (or no changes needed).
+INFO: 2025/03/24 18:55:57 main.go:170: Starting server on port 8080
