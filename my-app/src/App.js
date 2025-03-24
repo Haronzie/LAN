@@ -6,7 +6,7 @@ import RegisterForm from './components/RegisterForm';
 import AdminDashboard from './components/AdminDashboard';
 import UserManagement from './components/UserManagement';
 import FileManager from './components/FileManager';
-import ActivityLog from './components/ActivityLog';
+import AuditLog from './components/Auditlog'; // Ensure this is the correct path
 import UserDashboard from './components/UserDashboard';
 import UserDashboardHome from './components/UserDashboardHome';
 import OperationDashboard from './components/OperationDashboard';
@@ -50,7 +50,7 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/admin/files" element={<FileManager />} />
-        <Route path="/admin/activities" element={<ActivityLog />} />
+        <Route path="/admin/audit-logs" element={<AuditLog />} />
         <Route path="/admin/settings" element={<Settings />} /> {/* <-- Add this route */}
 
         {/* User Routes with Nested Routes */}

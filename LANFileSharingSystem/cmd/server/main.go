@@ -73,7 +73,7 @@ func main() {
 	fileController := controllers.NewFileController(app)
 	userController := controllers.NewUserController(app)
 	directoryController := controllers.NewDirectoryController(app)
-	activityController := controllers.NewActivityController(app)
+	auditLogController := controllers.NewAuditLogController(app)
 	inventoryController := controllers.NewInventoryController(app)
 
 	// Define your existing routes.
@@ -115,9 +115,7 @@ func main() {
 	router.HandleFunc("/inventory/{id}", inventoryController.Update).Methods("PUT")
 	router.HandleFunc("/inventory/{id}", inventoryController.Delete).Methods("DELETE")
 
-	// Activity routes.
-	router.HandleFunc("/activities", activityController.List).Methods("GET")
-
+	router.HandleFunc("/auditlogs", auditLogController.List).Methods("GET")
 	// Add a WebSocket route.
 	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		ws.ServeWs(hub, w, r)

@@ -47,6 +47,14 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+type AuditLog struct {
+	ID           int       `json:"id"`
+	UserUsername string    `json:"user_username"` // ✅ Use user_username, not user_id
+	FileID       *int      `json:"file_id"`
+	Action       string    `json:"action"`
+	Details      string    `json:"details"`
+	CreatedAt    time.Time `json:"created_at"`
+}
 
 // FileRecord represents a file stored in the system.
 type FileRecord struct {
@@ -82,6 +90,13 @@ type DeleteUserRequest struct {
 
 type AssignAdminRequest struct {
 	Username string `json:"username"`
+}
+
+// Activity represents an audit log entry.
+type Activity struct {
+	ID        int       `json:"id"`
+	Message   string    `json:"message"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // -------------------------------------
@@ -134,11 +149,18 @@ func (app *App) GetUserFromSession(r *http.Request) (User, error) {
 		log.Println("Error retrieving session:", err)
 		return User{}, errors.New("session retrieval error")
 	}
+
 	username, ok := session.Values["username"].(string)
 	if !ok || username == "" {
-		return User{}, errors.New("user not logged in")
+		return User{}, errors.New("user not logged in or session expired")
 	}
-	return app.GetUserByUsername(username)
+
+	user, err := app.GetUserByUsername(username)
+	if err != nil {
+		return User{}, errors.New("user not found")
+	}
+
+	return user, nil
 }
 
 // -------------------------------------
@@ -806,4 +828,61 @@ func (app *App) DeleteFileVersionsInFolder(folderPath string) error {
 		}
 	}
 	return nil
+}
+func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
+	rows, err := app.DB.Query(`
+		SELECT id, user_username, file_id, action, details, created_at  -- ✅ Use user_username
+		FROM audit_logs
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		log.Println("Error querying audit logs:", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []AuditLog
+	for rows.Next() {
+		var auditLog AuditLog
+		var fileID sql.NullInt64
+
+		// ✅ Use the correct struct field name
+		if err := rows.Scan(
+			&auditLog.ID,
+			&auditLog.UserUsername, // ✅ Use UserUsername instead of UserID
+			&fileID,
+			&auditLog.Action,
+			&auditLog.Details,
+			&auditLog.CreatedAt); err != nil {
+
+			log.Println("Error scanning audit log row:", err)
+			return nil, err
+		}
+
+		if fileID.Valid {
+			fileIDValue := int(fileID.Int64)
+			auditLog.FileID = &fileIDValue
+		} else {
+			auditLog.FileID = nil
+		}
+
+		logs = append(logs, auditLog)
+	}
+	return logs, nil
+}
+
+func (app *App) LogAudit(username string, fileID int, action string, details string) {
+	// Debugging log
+	log.Printf("Logging Audit: User=%s, FileID=%d, Action=%s, Details=%s", username, fileID, action, details)
+
+	query := `
+		INSERT INTO audit_logs (user_username, file_id, action, details, created_at)
+		VALUES ($1, $2, $3, $4, NOW())`
+	_, err := app.DB.Exec(query, username, fileID, action, details)
+
+	if err != nil {
+		log.Printf("SQL Error in LogAudit: %v", err)
+	} else {
+		log.Println("Audit log inserted successfully!")
+	}
 }

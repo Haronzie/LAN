@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -113,33 +114,38 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	confidentialStr := r.FormValue("confidential")
 	isConfidential := (confidentialStr == "true")
 
-	// We'll try to see if there's already a record in DB with the same path
+	// Check for existing record
 	existingFR, getErr := fc.App.GetFileRecordByPath(relativePath)
 	if getErr == nil {
-		// Means we found an existing file => treat as RE-UPLOAD
+		// 🎯 **Re-upload flow**
+		fileID := existingFR.ID
+
 		// 7a) Update the existing file's metadata
-		updateErr := fc.App.UpdateFileMetadata(existingFR.ID, handler.Size, handler.Header.Get("Content-Type"), isConfidential)
+		updateErr := fc.App.UpdateFileMetadata(fileID, handler.Size, handler.Header.Get("Content-Type"), isConfidential)
 		if updateErr != nil {
 			models.RespondError(w, http.StatusInternalServerError, "Error updating file record")
 			return
 		}
 
 		// 7b) Insert a new version record
-		latestVer, _ := fc.App.GetLatestVersionNumber(existingFR.ID)
+		latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
 		newVer := latestVer + 1
-		if verr := fc.App.CreateFileVersion(existingFR.ID, newVer, relativePath); verr != nil {
+		if verr := fc.App.CreateFileVersion(fileID, newVer, relativePath); verr != nil {
 			log.Println("Warning: failed to create file version record:", verr)
 		}
 
 		// 7c) Log activity
 		fc.App.LogActivity(fmt.Sprintf("User '%s' re-uploaded file '%s' (version %d).", user.Username, rawFileName, newVer))
 
+		// ✅ **Audit log for re-upload**
+		action := "REUPLOAD"
+		details := fmt.Sprintf("File '%s' re-uploaded as version %d", rawFileName, newVer)
+		fc.App.LogAudit(user.Username, fileID, action, details)
+
 		// 7d) Broadcast the re-upload notification
 		notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, newVer))
 		if fc.App.NotificationHub != nil {
-			if fc.App.NotificationHub != nil {
-				fc.App.NotificationHub.Broadcast(notification)
-			}
+			fc.App.NotificationHub.Broadcast(notification)
 		}
 
 		models.RespondJSON(w, http.StatusOK, map[string]string{
@@ -148,8 +154,8 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If we get here, it means no existing record => brand-new file
-	// 8) Create a brand-new record
+	// 🎯 **Brand-new file flow**
+	// 8) Create a new file record
 	fr := models.FileRecord{
 		FileName:     rawFileName,
 		Directory:    targetDir,
@@ -159,12 +165,13 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		Uploader:     user.Username,
 		Confidential: isConfidential,
 	}
+
 	if err := fc.App.CreateFileRecord(fr); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving file record")
 		return
 	}
 
-	// 8a) Insert version=1 for brand-new file
+	// 8a) Insert version=1 for the new file
 	fileID, _ := fc.App.GetFileIDByPath(fr.FilePath)
 	if fileID > 0 {
 		if verr := fc.App.CreateFileVersion(fileID, 1, fr.FilePath); verr != nil {
@@ -172,15 +179,18 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// ✅ **Audit log for new upload**
+	action := "UPLOAD"
+	details := fmt.Sprintf("File '%s' uploaded (version 1)", rawFileName)
+	fc.App.LogAudit(user.Username, fileID, action, details)
+
 	// 8b) Log activity
 	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded new file '%s' (version 1).", user.Username, rawFileName))
 
 	// 8c) Broadcast the new file upload notification
 	notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, 1))
 	if fc.App.NotificationHub != nil {
-		if fc.App.NotificationHub != nil {
-			fc.App.NotificationHub.Broadcast(notification)
-		}
+		fc.App.NotificationHub.Broadcast(notification)
 	}
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
@@ -240,22 +250,30 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// -----------------------------
-	// ADD VERSIONING HERE
-	// -----------------------------
-	// Attempt to retrieve the file ID by its new path
 	fileID, err := fc.App.GetFileIDByPath(newRelativePath)
-	if err == nil {
+	if err == nil && fileID > 0 {
 		// If we found the file ID, figure out the next version
 		latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
 		newVer := latestVer + 1
 
 		// Insert a version record for the new name/path
 		if verr := fc.App.CreateFileVersion(fileID, newVer, newRelativePath); verr != nil {
-			// Not critical if version insertion fails; just log
 			log.Println("Warning: failed to create file version record:", verr)
 		}
+
+		// ✅ Get the correct filename
+		fileName := path.Base(newRelativePath) // Extract filename from path
+
+		// ✅ Log the audit event after upload
+		action := "UPLOAD"
+		details := fmt.Sprintf("File '%s' uploaded to '%s' (version %d)", fileName, newRelativePath, newVer)
+		fc.App.LogAudit(user.Username, fileID, action, details)
+
+		log.Println("Audit log added:", details)
+	} else {
+		log.Println("Error: File ID not found for path", newRelativePath)
 	}
+
 	// -----------------------------
 
 	fc.App.LogActivity(fmt.Sprintf("User '%s' renamed file from '%s' to '%s'.", user.Username, req.OldFilename, req.NewFilename))

@@ -1,32 +1,32 @@
 package controllers
 
 import (
-	"net/http"
-
 	"LANFileSharingSystem/internal/models"
+	"net/http"
 )
 
-// ActivityController handles activity log endpoints.
-type ActivityController struct {
+// AuditLogController handles file audit log endpoints.
+type AuditLogController struct {
 	App *models.App
 }
 
-// NewActivityController creates a new ActivityController.
-func NewActivityController(app *models.App) *ActivityController {
-	return &ActivityController{App: app}
+// NewAuditLogController creates a new AuditLogController.
+func NewAuditLogController(app *models.App) *AuditLogController {
+	return &AuditLogController{App: app}
 }
 
-// List returns the most recent activity logs.
-func (ac *ActivityController) List(w http.ResponseWriter, r *http.Request) {
+// List returns the file audit logs.
+func (alc *AuditLogController) List(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
 
-	activities, err := ac.App.ListActivities() // Assumes ListActivities() is implemented.
+	// Fetch only file-related audit logs
+	auditLogs, err := alc.App.ListFileAuditLogs()
 	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error retrieving activities")
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving audit logs")
 		return
 	}
-	models.RespondJSON(w, http.StatusOK, activities)
+	models.RespondJSON(w, http.StatusOK, auditLogs)
 }

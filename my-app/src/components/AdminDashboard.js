@@ -29,7 +29,7 @@ const { Title } = Typography;
 const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [files, setFiles] = useState([]);
-  const [activities, setActivities] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);  // ✅ Use audit logs instead of activities
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [adminName, setAdminName] = useState('Admin');
@@ -37,7 +37,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
 
   // ---------------------------------------------------
-  // WebSocket notification integration using native API
+  // WebSocket notification integration
   // ---------------------------------------------------
   useEffect(() => {
     const client = new WebSocket('ws://localhost:8080/ws');
@@ -50,9 +50,7 @@ const AdminDashboard = () => {
       try {
         const data = JSON.parse(event.data);
         if (data.event === 'file_uploaded') {
-          // Display a toast notification when a new file is uploaded.
-          message.info(`New file uploaded: ${data.file_name} (version: ${data.version})`,5);
-          // Optionally, trigger a refresh (e.g. fetchFiles()) if needed.
+          message.info(`New file uploaded: ${data.file_name} (version: ${data.version})`, 5);
         }
       } catch (err) {
         console.error('Error parsing WebSocket message:', err);
@@ -67,7 +65,6 @@ const AdminDashboard = () => {
       console.log('Disconnected from notification server');
     };
 
-    // Cleanup on unmount.
     return () => {
       client.close();
     };
@@ -77,7 +74,6 @@ const AdminDashboard = () => {
   // Existing AdminDashboard logic
   // ---------------------------------------------------
 
-  // Retrieve stored admin username from localStorage on mount.
   useEffect(() => {
     const storedName = localStorage.getItem('username');
     if (storedName) {
@@ -111,20 +107,20 @@ const AdminDashboard = () => {
     }
   };
 
-  // Fetch activities
-  const fetchActivities = async () => {
+  // ✅ Fetch audit logs instead of activities
+  const fetchAuditLogs = async () => {
     try {
-      const res = await axios.get('/activities', { withCredentials: true });
-      setActivities(Array.isArray(res.data) ? res.data : []);
+      const res = await axios.get('/auditlogs', { withCredentials: true });
+      setAuditLogs(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
-      message.error('Error fetching activities');
+      message.error('Error fetching audit logs');
     }
   };
 
   useEffect(() => {
     fetchUsers();
     fetchFiles();
-    fetchActivities();
+    fetchAuditLogs();  // ✅ Fetch audit logs
   }, []);
 
   // Poll for fresh data every 30 seconds
@@ -132,7 +128,7 @@ const AdminDashboard = () => {
     const interval = setInterval(() => {
       fetchUsers();
       fetchFiles();
-      fetchActivities();
+      fetchAuditLogs();
     }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -141,15 +137,14 @@ const AdminDashboard = () => {
   const totalUsers = users.length;
   const totalFiles = files.length;
 
-  // Create chart data: number of admin users vs. regular users
   const adminCount = users.filter((u) => u.role === 'admin').length;
   const regularCount = users.filter((u) => u.role === 'user').length;
+
   const userStats = [
     { type: 'Admin Users', count: adminCount },
     { type: 'Regular Users', count: regularCount },
   ];
 
-  // Chart config
   const chartConfig = {
     data: userStats,
     xField: 'type',
@@ -218,13 +213,6 @@ const AdminDashboard = () => {
             Welcome, {adminName}!
           </Title>
           <div>
-            <Button
-              type="primary"
-              style={{ marginRight: 8 }}
-              onClick={() => navigate('/admin/settings')}
-            >
-              Settings
-            </Button>
             <Button type="primary" onClick={handleLogout}>
               Logout
             </Button>
@@ -256,28 +244,24 @@ const AdminDashboard = () => {
 
             <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
               <Col xs={24} md={12}>
-                <Card title="Recent Activity Log" style={{ borderRadius: '8px' }}>
+                <Card title="Audit Logs" style={{ borderRadius: '8px' }}>
                   <List
-                    dataSource={activities.slice(0, 5)}
+                    dataSource={auditLogs.slice(0, 5)}
                     renderItem={(item) => (
                       <List.Item>
-                        <strong>
-                          {item.timestamp
-                            ? new Date(item.timestamp).toLocaleString()
-                            : item.time}
-                        </strong>
-                        : {item.event || item.activity}
+                        <strong>{new Date(item.created_at).toLocaleString()}</strong>
+                        : {item.action} - {item.details}
                       </List.Item>
                     )}
                   />
-                  <Button type="link" onClick={() => navigate('/admin/activities')}>
-                    View All Activities
+                  <Button type="link" onClick={() => navigate('/admin/audit-logs')}>
+                    View All Audit Logs
                   </Button>
                 </Card>
               </Col>
 
               <Col xs={24} md={12}>
-                <Card title="User Role Distribution" style={{ borderRadius: '8px' }}>
+                <Card title="User Role Distribution">
                   <Column {...chartConfig} />
                 </Card>
               </Col>

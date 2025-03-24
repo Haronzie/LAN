@@ -1,3 +1,4 @@
+-- Users Table
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,
     password TEXT NOT NULL,
@@ -7,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 
+-- Files Table
 CREATE TABLE IF NOT EXISTS files (
     id SERIAL PRIMARY KEY,
     file_name TEXT NOT NULL,
@@ -20,7 +22,8 @@ CREATE TABLE IF NOT EXISTS files (
 );
 CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);
 
-CREATE TABLE directories (
+-- Directories Table
+CREATE TABLE IF NOT EXISTS directories (
     id SERIAL PRIMARY KEY,
     directory_name TEXT NOT NULL,
     parent_directory TEXT NOT NULL,
@@ -31,6 +34,7 @@ CREATE TABLE directories (
 );
 CREATE INDEX IF NOT EXISTS idx_directories_parent ON directories (parent_directory);
 
+-- Activity Log Table (Legacy)
 CREATE TABLE IF NOT EXISTS activity_log (
     id SERIAL PRIMARY KEY,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -38,6 +42,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
 );
 CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_log (timestamp);
 
+-- Inventory Table
 CREATE TABLE IF NOT EXISTS inventory (
     id SERIAL PRIMARY KEY,
     item_name TEXT NOT NULL,
@@ -47,6 +52,7 @@ CREATE TABLE IF NOT EXISTS inventory (
 );
 CREATE INDEX IF NOT EXISTS idx_inventory_item_name ON inventory (item_name);
 
+-- File Versions Table
 CREATE TABLE IF NOT EXISTS file_versions (
     id SERIAL PRIMARY KEY,
     file_id INT NOT NULL,
@@ -55,3 +61,30 @@ CREATE TABLE IF NOT EXISTS file_versions (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (file_id) REFERENCES files(id)
 );
+
+-- Audit Logs Table with username as foreign key
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id SERIAL PRIMARY KEY,
+    user_username TEXT NOT NULL,         -- Referencing username instead of ID
+    file_id INT,                          -- Nullable for non-file-specific logs
+    action VARCHAR(255) NOT NULL,         -- e.g., "UPLOAD", "DOWNLOAD", "DELETE"
+    details TEXT,                         -- Additional info like file path or metadata
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,  -- Timezone-aware timestamp
+
+    -- Foreign keys
+    CONSTRAINT fk_user
+        FOREIGN KEY (user_username)
+        REFERENCES users (username)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_file
+        FOREIGN KEY (file_id)
+        REFERENCES files (id)
+        ON DELETE SET NULL
+);
+
+-- Indexes for performance optimization
+CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_username);
+CREATE INDEX IF NOT EXISTS idx_audit_file ON audit_logs(file_id);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
+

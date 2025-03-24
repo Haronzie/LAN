@@ -6,41 +6,54 @@ import axios from 'axios';
 const { Content } = Layout;
 const { Title } = Typography;
 
-const ActivityLog = () => {
-  const [activities, setActivities] = useState([]);
+const AuditLog = () => {
+  const [auditLogs, setAuditLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const fetchActivities = async () => {
+  // ✅ Fetch audit logs instead of activities
+  const fetchAuditLogs = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/activities', { withCredentials: true });
-      setActivities(Array.isArray(res.data) ? res.data : []);
+      const res = await axios.get('/auditlogs', { withCredentials: true });  // Correct endpoint
+      setAuditLogs(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
-      message.error('Error fetching activity logs');
+      message.error('Error fetching audit logs');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchActivities();
+    fetchAuditLogs();
   }, []);
 
   const columns = [
     {
       title: 'Timestamp',
-      dataIndex: 'timestamp',
-      key: 'timestamp',
+      dataIndex: 'created_at',   // ✅ Use `created_at` for audit logs
+      key: 'created_at',
       render: (timestamp) => new Date(timestamp).toLocaleString(),
       width: 250,
-      sorter: (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
+      sorter: (a, b) => new Date(a.created_at) - new Date(b.created_at),
     },
     {
-      title: 'Event',
-      dataIndex: 'event',
-      key: 'event',
-      render: (event) => <span style={{ fontSize: '16px' }}>{event}</span>,
+      title: 'User',
+      dataIndex: 'user_username',   // ✅ Display the username from audit log
+      key: 'user_username',
+      render: (username) => <span style={{ fontSize: '16px' }}>{username}</span>,
+    },
+    {
+      title: 'Action',
+      dataIndex: 'action',         // ✅ Display the action
+      key: 'action',
+      render: (action) => <span style={{ fontSize: '16px' }}>{action}</span>,
+    },
+    {
+      title: 'Details',
+      dataIndex: 'details',        // ✅ Display the details of the action
+      key: 'details',
+      render: (details) => <span style={{ fontSize: '16px' }}>{details}</span>,
     },
   ];
 
@@ -56,12 +69,12 @@ const ActivityLog = () => {
         }}
       >
         <Title level={2} style={{ marginBottom: '24px' }}>
-          Activity Log
+          Audit Logs
         </Title>
         <Table
           loading={loading}
           columns={columns}
-          dataSource={activities}
+          dataSource={auditLogs}
           rowKey="id"
           pagination={{
             pageSize: 10,
@@ -80,4 +93,4 @@ const ActivityLog = () => {
   );
 };
 
-export default ActivityLog;
+export default AuditLog;
