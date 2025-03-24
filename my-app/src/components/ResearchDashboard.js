@@ -24,7 +24,8 @@ import {
   FolderAddOutlined,
   ArrowUpOutlined,
   EditOutlined,
-  CopyOutlined
+  CopyOutlined,
+  SwapOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -40,7 +41,6 @@ const ResearchDashboard = () => {
   // Current user from localStorage
   // =========================================
   const [currentUser, setCurrentUser] = useState('');
-
   useEffect(() => {
     const storedUsername = localStorage.getItem('username');
     if (storedUsername) {
@@ -48,7 +48,9 @@ const ResearchDashboard = () => {
     }
   }, []);
 
-  // The path within "uploads". Empty string means "root".
+  // =========================================
+  // Dashboard state (path, items, search, etc.)
+  // =========================================
   const [currentPath, setCurrentPath] = useState('');
   const [items, setItems] = useState([]); // Combined list of directories + files
   const [loading, setLoading] = useState(false);
@@ -62,15 +64,21 @@ const ResearchDashboard = () => {
   const [selectedFolder, setSelectedFolder] = useState('');
   const [fileToUpload, setFileToUpload] = useState(null);
 
-  // Rename
+  // Rename state
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
 
-  // Copy
+  // Copy state (for both files and directories)
   const [copyModalVisible, setCopyModalVisible] = useState(false);
-  const [copyNewFileName, setCopyNewFileName] = useState('');
-  const [copySelectedItem, setCopySelectedItem] = useState(null);
+  const [copyItem, setCopyItem] = useState(null);
+  const [copyNewName, setCopyNewName] = useState('');
+  const [selectedDestination, setSelectedDestination] = useState('');
+
+  // Move state (only available to owners)
+  const [moveModalVisible, setMoveModalVisible] = useState(false);
+  const [moveItem, setMoveItem] = useState(null);
+  const [moveDestination, setMoveDestination] = useState('');
 
   // =========================================
   // Fetch Directories + Files
@@ -79,20 +87,17 @@ const ResearchDashboard = () => {
     setLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
-
       // 1) Directories
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
         withCredentials: true
       });
       const directories = Array.isArray(dirRes.data) ? dirRes.data : [];
-
       // 2) Files
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true
       });
       const files = Array.isArray(fileRes.data) ? fileRes.data : [];
-
-      // Combine them
+      // Combine items
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
@@ -110,7 +115,7 @@ const ResearchDashboard = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // Whenever currentPath changes, set selected folder for upload
+  // Set upload folder when currentPath changes
   useEffect(() => {
     setSelectedFolder(currentPath || '');
   }, [currentPath]);
@@ -133,7 +138,7 @@ const ResearchDashboard = () => {
     try {
       await axios.post(
         '/directory/create',
-        { name: newFolderName, parent: currentPath },
+        { name: newFolderName, parent: currentPath, container: 'research' },
         { withCredentials: true }
       );
       message.success('Folder created successfully');
@@ -155,7 +160,7 @@ const ResearchDashboard = () => {
   };
 
   const handleGoUp = () => {
-    if (!currentPath) return; // at root
+    if (!currentPath) return;
     if (currentPath === 'Research') {
       setCurrentPath('');
       return;
@@ -166,24 +171,17 @@ const ResearchDashboard = () => {
 
   const getPathSegments = (p) => (p ? p.split('/').filter(Boolean) : []);
   const segments = getPathSegments(currentPath);
-
   const breadcrumbItems = [
     <Breadcrumb.Item key="root">
       {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
     </Breadcrumb.Item>
   ];
   segments.forEach((seg, index) => {
-    const isLast = index === segments.length - 1;
     const partialPath = segments.slice(0, index + 1).join('/');
+    const isLast = index === segments.length - 1;
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {isLast ? (
-          seg
-        ) : (
-          <a onClick={() => setCurrentPath(partialPath)}>
-            {seg}
-          </a>
-        )}
+        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
       </Breadcrumb.Item>
     );
   });
@@ -200,6 +198,7 @@ const ResearchDashboard = () => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('directory', selectedFolder);
+    formData.append('container', 'research');
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
@@ -220,44 +219,32 @@ const ResearchDashboard = () => {
   // Delete (File or Folder)
   // =========================================
   const handleDelete = async (record) => {
-    if (record.type === 'directory') {
-      // Only the folder owner can delete
-      if (record.created_by && record.created_by !== currentUser) {
-        message.error('Only the folder owner can delete this folder.');
-        return;
-      }
-      try {
+    // For directories, check "created_by"; for files, check "uploader"
+    const isOwner =
+      record.type === 'directory'
+        ? record.created_by === currentUser
+        : record.uploader === currentUser;
+    if (!isOwner) {
+      message.error('Only the owner can delete this item.');
+      return;
+    }
+    try {
+      if (record.type === 'directory') {
         await axios.delete('/directory/delete', {
-          data: { name: record.name, parent: currentPath },
+          data: { name: record.name, parent: currentPath, container: 'research' },
           withCredentials: true
         });
-        message.success(`${record.name} folder deleted successfully`);
-        fetchItems();
-      } catch (error) {
-        console.error('Delete folder error:', error);
-        message.error(
-          error.response?.data?.error || `Error deleting folder '${record.name}'`
-        );
-      }
-    } else if (record.type === 'file') {
-      // Only the file uploader can delete
-      if (record.uploader && record.uploader !== currentUser) {
-        message.error('Only the uploader can delete this file.');
-        return;
-      }
-      try {
+      } else {
         await axios.delete('/delete-file', {
-          data: { filename: path.join(currentPath, record.name) },
+          data: { directory: currentPath, filename: record.name, container: 'research' },
           withCredentials: true
         });
-        message.success(`${record.name} deleted successfully`);
-        fetchItems();
-      } catch (error) {
-        console.error('Delete file error:', error);
-        message.error(
-          error.response?.data?.error || `Error deleting file '${record.name}'`
-        );
       }
+      message.success(`${record.name} deleted successfully`);
+      fetchItems();
+    } catch (error) {
+      console.error('Delete error:', error);
+      message.error(error.response?.data?.error || 'Error deleting item');
     }
   };
 
@@ -265,15 +252,23 @@ const ResearchDashboard = () => {
   // Download (File Only)
   // =========================================
   const handleDownload = (fileName) => {
-    // If your backend is on port 8080:
     const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
     window.open(downloadUrl, '_blank');
   };
 
   // =========================================
-  // Rename
+  // Rename (Owner only)
   // =========================================
   const handleRename = (record) => {
+    // Only owner can rename
+    const isOwner =
+      record.type === 'directory'
+        ? record.created_by === currentUser
+        : record.uploader === currentUser;
+    if (!isOwner) {
+      message.error('Only the owner can rename this item.');
+      return;
+    }
     setSelectedItem(record);
     setRenameNewName(record.name);
     setRenameModalVisible(true);
@@ -284,33 +279,31 @@ const ResearchDashboard = () => {
       message.error('New name cannot be empty');
       return;
     }
-    if (!selectedItem) return;
-
-    const oldName = selectedItem.name;
     try {
       if (selectedItem.type === 'directory') {
-        // /directory/rename
         await axios.put(
           '/directory/rename',
           {
-            old_name: oldName,
+            old_name: selectedItem.name,
             new_name: renameNewName,
-            parent: currentPath
+            parent: currentPath,
+            container: 'research'
           },
           { withCredentials: true }
         );
       } else {
-        // /file/rename
         await axios.put(
           '/file/rename',
           {
-            old_filename: path.join(currentPath, oldName),
-            new_filename: renameNewName
+            directory: currentPath,
+            old_filename: selectedItem.name,
+            new_filename: renameNewName,
+            container: 'research'
           },
           { withCredentials: true }
         );
       }
-      message.success(`Renamed '${oldName}' to '${renameNewName}'`);
+      message.success('Item renamed successfully');
       setRenameModalVisible(false);
       setSelectedItem(null);
       fetchItems();
@@ -321,43 +314,119 @@ const ResearchDashboard = () => {
   };
 
   // =========================================
-  // Copy (File Only)
+  // Copy (Available to all users)
   // =========================================
   const handleCopy = (record) => {
-    if (record.type !== 'file') {
-      message.error('Copying directories is not supported by the current backend.');
-      return;
-    }
-    setCopySelectedItem(record);
-    setCopyNewFileName(`Copy_of_${record.name}`);
+    const suggestedName = record.name + '_copy';
+    setCopyItem(record);
+    setCopyNewName(suggestedName);
     setCopyModalVisible(true);
   };
 
   const handleCopyConfirm = async () => {
-    if (!copyNewFileName.trim()) {
-      message.error('New file name cannot be empty');
+    if (!copyNewName.trim()) {
+      message.error('New name cannot be empty');
       return;
     }
-    if (!copySelectedItem) return;
-
-    const oldName = copySelectedItem.name;
+    if (!copyItem) {
+      message.error('No item selected to copy');
+      return;
+    }
     try {
-      // /copy-file expects { source_file, new_file_name }
-      await axios.post(
-        '/copy-file',
-        {
-          source_file: path.join(currentPath, oldName),
-          new_file_name: copyNewFileName
-        },
-        { withCredentials: true }
-      );
-      message.success(`Copied '${oldName}' to '${copyNewFileName}'`);
+      if (copyItem.type === 'directory') {
+        await axios.post(
+          '/directory/copy',
+          {
+            source_name: copyItem.name,
+            source_parent: currentPath,
+            new_name: copyNewName,
+            destination_parent: selectedDestination || currentPath,
+            container: 'research'
+          },
+          { withCredentials: true }
+        );
+      } else {
+        await axios.post(
+          '/copy-file',
+          {
+            source_file: copyItem.name,
+            new_file_name: copyNewName,
+            destination_folder: selectedDestination || currentPath,
+            container: 'research'
+          },
+          { withCredentials: true }
+        );
+      }
+      message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
       setCopyModalVisible(false);
-      setCopySelectedItem(null);
+      setCopyNewName('');
+      setCopyItem(null);
+      setSelectedDestination('');
       fetchItems();
     } catch (error) {
       console.error('Copy error:', error);
-      message.error(error.response?.data?.error || 'Error copying file');
+      message.error(error.response?.data?.error || 'Error copying item');
+    }
+  };
+
+  // =========================================
+  // Move (Only available to owners)
+  // =========================================
+  const handleMove = (record) => {
+    const isOwner =
+      record.type === 'directory'
+        ? record.created_by === currentUser
+        : record.uploader === currentUser;
+    if (!isOwner) {
+      message.error('Only the owner can move this item.');
+      return;
+    }
+    setMoveItem(record);
+    setMoveDestination(currentPath);
+    setMoveModalVisible(true);
+  };
+
+  const handleMoveConfirm = async () => {
+    if (!moveDestination.trim()) {
+      message.error('Please select a destination folder');
+      return;
+    }
+    if (!moveItem) {
+      message.error('No item selected to move');
+      return;
+    }
+    try {
+      if (moveItem.type === 'directory') {
+        await axios.post(
+          '/directory/move',
+          {
+            name: moveItem.name,
+            old_parent: currentPath,
+            new_parent: moveDestination,
+            container: 'research'
+          },
+          { withCredentials: true }
+        );
+      } else {
+        await axios.post(
+          '/file/move',
+          {
+            filename: moveItem.name,
+            old_parent: currentPath,
+            new_parent: moveDestination,
+            container: 'research'
+          },
+          { withCredentials: true }
+        );
+      }
+      message.success(`Moved '${moveItem.name}' successfully`);
+      setMoveModalVisible(false);
+      setMoveDestination('');
+      setMoveItem(null);
+      fetchItems();
+    } catch (error) {
+      console.error('Move error:', error);
+      message.error(error.response?.data?.error || 'Error moving item');
     }
   };
 
@@ -402,15 +471,13 @@ const ResearchDashboard = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        // Check ownership
-        const isFolderOwner =
-          record.type === 'directory' && record.created_by === currentUser;
-        const isFileOwner =
-          record.type === 'file' && record.uploader === currentUser;
-
+        // Determine ownership: for directories, check "created_by"; for files, "uploader"
+        const isOwner =
+          record.type === 'directory'
+            ? record.created_by === currentUser
+            : record.uploader === currentUser;
         return (
           <Space>
-            {/* Download (file only) */}
             {record.type === 'file' && (
               <Tooltip title="Download">
                 <Button
@@ -419,50 +486,27 @@ const ResearchDashboard = () => {
                 />
               </Tooltip>
             )}
-
-            {/* Copy (file only) */}
-            {record.type === 'file' && (
-              <Tooltip title="Copy">
-                <Button
-                  icon={<CopyOutlined />}
-                  onClick={() => handleCopy(record)}
-                />
-              </Tooltip>
-            )}
-
-            {/* Rename (owner only) */}
-            {(isFolderOwner || isFileOwner) && (
-              <Tooltip title="Rename">
-                <Button
-                  icon={<EditOutlined />}
-                  onClick={() => handleRename(record)}
-                />
-              </Tooltip>
-            )}
-
-            {/* Delete (owner only) */}
-            {(isFolderOwner || isFileOwner) && (
-              <Tooltip
-                title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}
-              >
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleDelete(record)}
-                />
-              </Tooltip>
-            )}
-
-            {/* If not owner, disable the delete button */}
-            {record.type === 'directory' && !isFolderOwner && (
-              <Tooltip title="Only the folder owner can delete this folder">
-                <Button disabled danger icon={<DeleteOutlined />} />
-              </Tooltip>
-            )}
-            {record.type === 'file' && !isFileOwner && (
-              <Tooltip title="Only the uploader can delete this file">
-                <Button disabled danger icon={<DeleteOutlined />} />
-              </Tooltip>
+            {/* Copy action available to all users */}
+            <Tooltip title="Copy">
+              <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
+            </Tooltip>
+            {/* Only show rename, delete, and move for owners */}
+            {isOwner && (
+              <>
+                <Tooltip title="Rename">
+                  <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
+                </Tooltip>
+                <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => handleDelete(record)}
+                  />
+                </Tooltip>
+                <Tooltip title="Move">
+                  <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
+                </Tooltip>
+              </>
             )}
           </Space>
         );
@@ -473,7 +517,7 @@ const ResearchDashboard = () => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
-        {/* Top bar */}
+        {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
             <Button onClick={() => navigate('/user')}>Back to Dashboard</Button>
@@ -494,6 +538,7 @@ const ResearchDashboard = () => {
           </Col>
         </Row>
 
+        {/* Selected File Card */}
         {fileToUpload && (
           <Card title="Selected File" bordered={false} style={{ marginBottom: 16 }}>
             <p>
@@ -536,9 +581,9 @@ const ResearchDashboard = () => {
                 .map((folder, index) => {
                   const folderPath = path.join(currentPath, folder.name);
                   return (
-                    <Select.Option key={index} value={folderPath}>
+                    <Option key={index} value={folderPath}>
                       {folder.name}
-                    </Select.Option>
+                    </Option>
                   );
                 })}
             </Select>
@@ -555,20 +600,7 @@ const ResearchDashboard = () => {
 
         {/* Breadcrumb */}
         <Breadcrumb style={{ marginBottom: 16 }}>
-          <Breadcrumb.Item key="root">
-            {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
-          </Breadcrumb.Item>
-          {segments.map((seg, index) => (
-            <Breadcrumb.Item key={index}>
-              {index === segments.length - 1 ? (
-                seg
-              ) : (
-                <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
-                  {seg}
-                </a>
-              )}
-            </Breadcrumb.Item>
-          ))}
+          {breadcrumbItems}
         </Breadcrumb>
 
         {/* Table of Items */}
@@ -618,20 +650,46 @@ const ResearchDashboard = () => {
           </Form>
         </Modal>
 
-        {/* Copy Modal (files only) */}
+        {/* Copy Modal */}
         <Modal
-          title="Copy File"
+          title="Copy Item"
           visible={copyModalVisible}
           onOk={handleCopyConfirm}
           onCancel={() => setCopyModalVisible(false)}
           okText="Copy"
         >
           <Form layout="vertical">
-            <Form.Item label="New File Name" required>
+            <Form.Item label="New Name" required>
               <Input
-                value={copyNewFileName}
-                onChange={(e) => setCopyNewFileName(e.target.value)}
-                placeholder="Copy_of_myfile.pdf"
+                value={copyNewName}
+                onChange={(e) => setCopyNewName(e.target.value)}
+                placeholder="Enter new name"
+              />
+            </Form.Item>
+            <Form.Item label="Destination Folder (Optional)">
+              <Input
+                value={selectedDestination}
+                onChange={(e) => setSelectedDestination(e.target.value)}
+                placeholder="Enter destination folder or leave blank"
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* Move Modal */}
+        <Modal
+          title="Move Item"
+          visible={moveModalVisible}
+          onOk={handleMoveConfirm}
+          onCancel={() => setMoveModalVisible(false)}
+          okText="Move"
+        >
+          <Form layout="vertical">
+            <Form.Item label="Destination Folder" required>
+              <Input
+                value={moveDestination}
+                onChange={(e) => setMoveDestination(e.target.value)}
+                placeholder="Enter destination folder"
               />
             </Form.Item>
           </Form>
