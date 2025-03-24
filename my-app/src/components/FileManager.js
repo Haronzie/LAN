@@ -39,6 +39,14 @@ function getPathSegments(p) {
   if (!p) return [];
   return p.split('/').filter(Boolean);
 }
+// Convert file size to human-readable format
+function formatFileSize(size) {
+  if (size === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(size) / Math.log(1024));
+  return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+}
+
 
 const FileManager = () => {
   const [items, setItems] = useState([]); // files + directories
@@ -95,10 +103,12 @@ const FileManager = () => {
         name: f.name,
         type: 'file',
         size: f.size,
+        formattedSize: formatFileSize(f.size), // Add formatted size
         contentType: f.contentType,
         uploader: f.uploader,
         confidential: f.confidential,
       }));
+      
 
       // Directories are already in { name, type: 'directory' }
       const directories = dirsRes.data || [];
@@ -479,12 +489,12 @@ const FileManager = () => {
       render: (type) => (type === 'directory' ? 'Folder' : 'File'),
     },
     {
-      title: 'Size (KB)',
-      dataIndex: 'size',
+      title: 'Size',
+      dataIndex: 'formattedSize', // Use formatted size
       key: 'size',
-      render: (size, record) =>
-        record.type === 'directory' ? '--' : (size / 1024).toFixed(2),
-    },
+      render: (size, record) => (record.type === 'directory' ? '--' : size),
+    }
+    ,
     {
       title: 'Actions',
       key: 'actions',
