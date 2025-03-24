@@ -507,13 +507,11 @@ func (app *App) DirectoryExists(name, parent string) (bool, error) {
 	query := `
         SELECT COUNT(*)
         FROM directories
-        WHERE directory_name = $1 AND parent_directory = $2
+        WHERE directory_name = $1
+          AND parent_directory = $2
     `
 	err := app.DB.QueryRow(query, name, parent).Scan(&count)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
+	return count > 0, err
 }
 
 // Enhance this method to update both file_name AND file_path

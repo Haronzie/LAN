@@ -34,7 +34,6 @@ func getResourcePath(name, parent string) string {
 }
 
 // Create handles directory creation in both the filesystem and the database.
-// It expects a JSON payload with "name" and an optional "parent".
 func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -49,7 +48,7 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Name   string `json:"name"`
-		Parent string `json:"parent"` // Optional parent directory.
+		Parent string `json:"parent"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
@@ -63,26 +62,17 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check in the database if a directory with the same name under the same parent already exists.
-	exists, err := dc.App.DirectoryExists(req.Name, req.Parent)
-	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error checking directory existence in database")
-		return
-	}
-	if exists {
-		models.RespondError(w, http.StatusConflict,
-			fmt.Sprintf("Directory '%s' already exists under parent '%s'", req.Name, req.Parent))
+	resourcePath := getResourcePath(req.Name, req.Parent)
+	if _, err := os.Lstat(resourcePath); err == nil {
+		models.RespondError(w, http.StatusConflict, "Directory already exists")
 		return
 	}
 
-	// Build the path and create the directory on the filesystem.
-	resourcePath := getResourcePath(req.Name, req.Parent)
 	if err := os.MkdirAll(resourcePath, 0755); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error creating directory on disk")
 		return
 	}
 
-	// Insert a record into your 'directories' table.
 	if err := dc.App.CreateDirectoryRecord(req.Name, req.Parent, user.Username); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving directory record to database")
 		return
