@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -250,6 +249,7 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Retrieve fileID for the new file path
 	fileID, err := fc.App.GetFileIDByPath(newRelativePath)
 	if err == nil && fileID > 0 {
 		// If we found the file ID, figure out the next version
@@ -261,21 +261,16 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 			log.Println("Warning: failed to create file version record:", verr)
 		}
 
-		// ✅ Get the correct filename
-		fileName := path.Base(newRelativePath) // Extract filename from path
-
-		// ✅ Log the audit event after upload
-		action := "UPLOAD"
-		details := fmt.Sprintf("File '%s' uploaded to '%s' (version %d)", fileName, newRelativePath, newVer)
+		// ✅ Log the audit event as a RENAME action (not UPLOAD)
+		action := "RENAME"
+		details := fmt.Sprintf("File renamed from '%s' to '%s'", req.OldFilename, req.NewFilename)
 		fc.App.LogAudit(user.Username, fileID, action, details)
-
 		log.Println("Audit log added:", details)
 	} else {
 		log.Println("Error: File ID not found for path", newRelativePath)
 	}
 
-	// -----------------------------
-
+	// Log activity and respond
 	fc.App.LogActivity(fmt.Sprintf("User '%s' renamed file from '%s' to '%s'.", user.Username, req.OldFilename, req.NewFilename))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("File renamed from '%s' to '%s' successfully", req.OldFilename, req.NewFilename),
@@ -404,8 +399,6 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 }
 
 // CopyFile creates a copy of an existing file in the storage and inserts a new record in the database.
-// CopyFile creates a copy of an existing file in the storage and inserts a new record in the DB.
-// Now it accepts "destination_folder" so you can paste it into another folder.
 func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -428,19 +421,18 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Trim
+	// Trim input values
 	req.SourceFile = strings.TrimSpace(req.SourceFile)
 	req.NewFileName = strings.TrimSpace(req.NewFileName)
 	req.DestinationFolder = strings.TrimSpace(req.DestinationFolder)
 
-	// Validate
+	// Validate input
 	if req.SourceFile == "" {
 		models.RespondError(w, http.StatusBadRequest, "Source file is required")
 		return
 	}
 	if req.NewFileName == "" {
-		// fallback to same name
-		// e.g. user is doing a "paste" with the same file name
+		// fallback to same name if not provided
 		parts := strings.Split(req.SourceFile, "/")
 		originalName := parts[len(parts)-1]
 		req.NewFileName = originalName
@@ -475,9 +467,8 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer in.Close()
 
-	// If the destination file already exists, decide if you want to fail or overwrite
+	// If the destination file already exists, fail for safety
 	if _, errStat := os.Stat(dstPath); errStat == nil {
-		// For safety, we’ll fail if the file exists
 		models.RespondError(w, http.StatusConflict, "Destination file already exists")
 		return
 	}
@@ -494,7 +485,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Insert new DB record
+	// 4. Insert new DB record for the copied file
 	newRecord := models.FileRecord{
 		FileName:    req.NewFileName,
 		FilePath:    newRelativePath,
@@ -509,9 +500,25 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' copied file from '%s' to '%s'.",
-		user.Username, req.SourceFile, newRelativePath))
+	// Retrieve the new file ID
+	newFileID, err := fc.App.GetFileIDByPath(newRelativePath)
+	if err == nil && newFileID > 0 {
+		// Optionally create a version record for the new file
+		if verr := fc.App.CreateFileVersion(newFileID, 1, newRelativePath); verr != nil {
+			log.Println("Warning: failed to create version record:", verr)
+		}
 
+		// ✅ Log the audit event for copying with action "COPY"
+		action := "COPY"
+		details := fmt.Sprintf("File copied from '%s' to '%s'", req.SourceFile, newRelativePath)
+		fc.App.LogAudit(user.Username, newFileID, action, details)
+		log.Println("Audit log added:", details)
+	} else {
+		log.Println("Error: File ID not found for path", newRelativePath)
+	}
+
+	// Log activity and respond
+	fc.App.LogActivity(fmt.Sprintf("User '%s' copied file from '%s' to '%s'.", user.Username, req.SourceFile, newRelativePath))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("File copied to '%s' successfully", newRelativePath),
 	})
