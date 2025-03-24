@@ -15,7 +15,7 @@ import ResearchDashboard from './components/ResearchDashboard';
 import InventoryDashboard from './components/InventoryDashboard';
 import UserSettings from './components/UserSettings';  // Import your UserSettings component
 import Settings from './components/Settings'; // Import your Settings component
-
+import './App.css'; 
 import axios from 'axios';
 
 function App() {

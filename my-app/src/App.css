@@ -1,53 +1,118 @@
+/* 1) Global Reset & Box-Sizing */
+html {
+  box-sizing: border-box;
+}
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif; /* Use any professional font you like */
+  background-color: #f9f9f9;       /* Subtle background color */
+  color: #333;                     /* Default text color */
+}
+
+/* 2) Root Variables for Colors, Sizes, Transitions */
+:root {
+  --primary-color: #282c34;
+  --secondary-color: #61dafb;
+  --background-color: #f9f9f9;
+  --text-color: #333;
+  --min-app-width: 320px;
+  --max-app-width: 1200px;
+  --header-padding-small: 10px;
+  --header-padding-large: 20px;
+  --transition-duration: 0.3s;
+}
+
+/* 3) Base Container for the App */
 .App {
+  min-width: var(--min-app-width);
+  max-width: var(--max-app-width);
+  margin: 0 auto;
   text-align: center;
 }
 
+/* Optional: A main content wrapper if needed */
+.App-main {
+  padding: 1rem;
+}
+
+/* 4) Logo Styling */
 .App-logo {
   height: 40vmin;
   pointer-events: none;
+  transition: transform var(--transition-duration) ease;
 }
 
+/* Animate the logo only if user doesn’t prefer reduced motion */
 @media (prefers-reduced-motion: no-preference) {
   .App-logo {
     animation: App-logo-spin infinite 20s linear;
   }
 }
 
+/* 5) Header: Professional Background & Responsive Typography */
 .App-header {
-  background-color: #282c34;
+  background-color: var(--primary-color);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: var(--header-padding-large);
   font-size: calc(10px + 2vmin);
-  color: white;
-  padding: 20px;
+  color: #fff; /* White text for contrast */
 }
 
+/* 6) Link Styling */
 .App-link {
-  color: #61dafb;
+  color: var(--secondary-color);
+  text-decoration: none;
+  transition: color var(--transition-duration) ease;
+}
+.App-link:hover,
+.App-link:focus {
+  color: #9ee5ff;
 }
 
-/* Responsive adjustments for small screens */
-@media (max-width: 600px) {
-  .App-logo {
-    height: 30vmin;
-  }
+/* 7) Utility Class to Hide Content on Small Screens */
+.hide-on-small {
+  display: block;
+}
+
+/* 8) Responsive Breakpoints */
+
+/* Mobile - up to 480px */
+@media (max-width: 480px) {
   .App-header {
     font-size: calc(8px + 2vmin);
-    min-height: auto;
-    padding: 10px;
+    padding: var(--header-padding-small);
+  }
+  /* Hide extra text when screen width is very small */
+  .hide-on-small {
+    display: none;
   }
 }
 
-/* Additional responsive adjustments for medium screens */
-@media (min-width: 601px) and (max-width: 1024px) {
+/* Medium screens - 481px to 1024px */
+@media (min-width: 481px) and (max-width: 1024px) {
   .App-header {
     font-size: calc(9px + 2vmin);
   }
 }
 
+/* Large screens - above 1024px */
+@media (min-width: 1025px) {
+  .App-header {
+    /* Example: Add extra space on large displays */
+    padding-top: 50px;
+    padding-bottom: 50px;
+  }
+}
+
+/* 9) Keyframes for Logo Spin */
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);
