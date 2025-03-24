@@ -56,6 +56,13 @@ const TrainingDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  function formatFileSize(size) {
+    if (size === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(size) / Math.log(1024));
+    return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+  }
+
   // =========================================
   // Modal states for Create Folder, Rename, Copy, Move
   // =========================================
@@ -96,7 +103,14 @@ const TrainingDashboard = () => {
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true
       });
-      const files = Array.isArray(fileRes.data) ? fileRes.data : [];
+      const files = (fileRes.data || []).map((f) => ({
+  name: f.name,
+  type: 'file',
+  size: f.size,
+  formattedSize: formatFileSize(f.size), // Store formatted size
+  uploader: f.uploader,
+}));
+
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
@@ -461,16 +475,12 @@ const TrainingDashboard = () => {
       render: (type) => (type === 'directory' ? 'Folder' : 'File')
     },
     {
-      title: 'Size (KB)',
-      dataIndex: 'size',
+      title: 'Size',
+      dataIndex: 'formattedSize', // Use formatted size
       key: 'size',
-      render: (size, record) =>
-        record.type === 'directory'
-          ? '--'
-          : size
-          ? (size / 1024).toFixed(2)
-          : '0.00'
-    },
+      render: (size, record) => (record.type === 'directory' ? '--' : size),
+    }
+    ,
     {
       title: 'Actions',
       key: 'actions',

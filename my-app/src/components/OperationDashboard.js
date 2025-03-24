@@ -36,6 +36,14 @@ const { Option } = Select;
 
 const OperationDashboard = () => {
   const navigate = useNavigate();
+  // Convert file size to a human-readable format
+function formatFileSize(size) {
+  if (size === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(size) / Math.log(1024));
+  return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+}
+
 
   // State for current path, items, loading and search term
   const [currentPath, setCurrentPath] = useState('');
@@ -85,30 +93,36 @@ const OperationDashboard = () => {
     setLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
-      // 1) Directories
+  
+      // 1) Fetch Directories
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
         withCredentials: true
       });
       const directories = Array.isArray(dirRes.data) ? dirRes.data : [];
-
-      // 2) Files
+  
+      // 2) Fetch Files and Format Sizes
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true
       });
-      const files = Array.isArray(fileRes.data) ? fileRes.data : [];
-
-      // Combine them
+      const files = (fileRes.data || []).map((f) => ({
+        name: f.name,
+        type: 'file',
+        size: f.size,
+        formattedSize: formatFileSize(f.size), // Format size for display
+        uploader: f.uploader,
+      }));
+  
+      // Combine Directories and Files
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching items:', error);
-      message.error(
-        error.response?.data?.error || 'Error fetching directory contents'
-      );
+      message.error(error.response?.data?.error || 'Error fetching directory contents');
       setItems([]);
     } finally {
       setLoading(false);
     }
   };
+  
 
   useEffect(() => {
     fetchItems();
@@ -462,15 +476,10 @@ const OperationDashboard = () => {
       render: (type) => (type === 'directory' ? 'Folder' : 'File')
     },
     {
-      title: 'Size (KB)',
-      dataIndex: 'size',
+      title: 'Size',
+      dataIndex: 'formattedSize', // Use formatted size
       key: 'size',
-      render: (size, record) =>
-        record.type === 'directory'
-          ? '--'
-          : size
-          ? (size / 1024).toFixed(2)
-          : '0.00'
+      render: (size, record) => (record.type === 'directory' ? '--' : size),
     },
     {
       title: 'Actions',
