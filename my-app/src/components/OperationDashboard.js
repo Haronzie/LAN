@@ -77,6 +77,20 @@ function formatFileSize(size) {
 
   // Track current user (from localStorage or fetched from server)
   const [currentUser, setCurrentUser] = useState('');
+  const [directories, setDirectories] = useState([]);
+
+// Fetch the entire folder tree when the component mounts
+useEffect(() => {
+  const fetchDirectories = async () => {
+    try {
+      const res = await axios.get('/directory/tree', { withCredentials: true });
+      setDirectories(res.data || []);
+    } catch (error) {
+      console.error('Error fetching directories:', error);
+    }
+  };
+  fetchDirectories();
+}, []);
 
   // On mount, retrieve currentUser from localStorage
   useEffect(() => {
@@ -658,29 +672,42 @@ function formatFileSize(size) {
 
         {/* Copy Modal */}
         <Modal
-          title="Copy Item"
-          visible={copyModalVisible}
-          onOk={handleCopyConfirm}
-          onCancel={() => setCopyModalVisible(false)}
-          okText="Copy"
-        >
-          <Form layout="vertical">
-            <Form.Item label="New Name" required>
-              <Input
-                value={copyNewName}
-                onChange={(e) => setCopyNewName(e.target.value)}
-                placeholder="Enter new name"
-              />
-            </Form.Item>
-            <Form.Item label="Destination Folder (Optional)">
-              <Input
-                value={selectedDestination}
-                onChange={(e) => setSelectedDestination(e.target.value)}
-                placeholder="Enter destination folder or leave blank"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+  title="Copy Item"
+  visible={copyModalVisible}
+  onOk={handleCopyConfirm}
+  onCancel={() => setCopyModalVisible(false)}
+  okText="Copy"
+>
+  <Form layout="vertical">
+    <Form.Item label="New Name" required>
+      <Input
+        value={copyNewName}
+        onChange={(e) => setCopyNewName(e.target.value)}
+        placeholder="Enter new name"
+      />
+    </Form.Item>
+    <Form.Item label="Destination Folder (Optional)">
+  <Select
+    style={{ width: '100%' }}
+    placeholder="Select a folder or leave blank"
+    value={selectedDestination}
+    onChange={(val) => setSelectedDestination(val)}
+  >
+    {filteredItems
+      .filter((item) => item.type === 'directory')
+      .map((folder) => {
+        // Build the folder path
+        const folderPath = path.join(currentPath, folder.name);
+        return (
+          <Select.Option key={folderPath} value={folderPath}>
+            {folder.name}
+          </Select.Option>
+        );
+      })}
+  </Select>
+</Form.Item>
+  </Form>
+</Modal>
 
         {/* Move Modal */}
         <Modal
@@ -691,13 +718,27 @@ function formatFileSize(size) {
           okText="Move"
         >
           <Form layout="vertical">
-            <Form.Item label="Destination Folder" required>
-              <Input
-                value={moveDestination}
-                onChange={(e) => setMoveDestination(e.target.value)}
-                placeholder="Enter destination folder"
-              />
-            </Form.Item>
+          <Form.Item label="Destination Folder" required>
+  <Select
+    style={{ width: '100%' }}
+    placeholder="Select a destination folder"
+    value={moveDestination}
+    onChange={(val) => setMoveDestination(val)}
+    allowClear
+  >
+    {items
+      .filter((item) => item.type === 'directory')
+      .map((folder) => {
+        const folderPath = path.join(currentPath, folder.name);
+        return (
+          <Option key={folderPath} value={folderPath}>
+            {folder.name}
+          </Option>
+        );
+      })}
+  </Select>
+</Form.Item>
+
           </Form>
         </Modal>
       </Content>

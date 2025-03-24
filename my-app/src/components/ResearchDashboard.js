@@ -676,12 +676,26 @@ function formatFileSize(size) {
               />
             </Form.Item>
             <Form.Item label="Destination Folder (Optional)">
-              <Input
-                value={selectedDestination}
-                onChange={(e) => setSelectedDestination(e.target.value)}
-                placeholder="Enter destination folder or leave blank"
-              />
-            </Form.Item>
+  <Select
+    style={{ width: '100%' }}
+    placeholder="Select folder or leave blank"
+    value={selectedDestination}
+    onChange={(val) => setSelectedDestination(val)}
+    allowClear
+  >
+    {items
+      .filter((item) => item.type === 'directory')
+      .map((folder) => {
+        const folderPath = path.join(currentPath, folder.name);
+        return (
+          <Option key={folderPath} value={folderPath}>
+            {folder.name}
+          </Option>
+        );
+      })}
+  </Select>
+</Form.Item>
+
           </Form>
         </Modal>
 
@@ -694,13 +708,27 @@ function formatFileSize(size) {
           okText="Move"
         >
           <Form layout="vertical">
-            <Form.Item label="Destination Folder" required>
-              <Input
-                value={moveDestination}
-                onChange={(e) => setMoveDestination(e.target.value)}
-                placeholder="Enter destination folder"
-              />
-            </Form.Item>
+          <Form.Item label="Destination Folder" required>
+  <Select
+    style={{ width: '100%' }}
+    placeholder="Select a destination folder"
+    value={moveDestination}
+    onChange={(val) => setMoveDestination(val)}
+    allowClear
+  >
+    {items
+      .filter((item) => item.type === 'directory')
+      .map((folder) => {
+        const folderPath = path.join(currentPath, folder.name);
+        return (
+          <Option key={folderPath} value={folderPath}>
+            {folder.name}
+          </Option>
+        );
+      })}
+  </Select>
+</Form.Item>
+
           </Form>
         </Modal>
       </Content>
