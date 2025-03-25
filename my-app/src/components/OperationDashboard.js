@@ -25,7 +25,8 @@ import {
   ArrowUpOutlined,
   EditOutlined,
   CopyOutlined,
-  SwapOutlined
+  SwapOutlined,
+  ArrowLeftOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -546,9 +547,16 @@ useEffect(() => {
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-          <Col>
-            <Button onClick={() => navigate('/user')}>Back to Dashboard</Button>
-          </Col>
+        <Col>
+  <Button
+    type="primary"
+    icon={<ArrowLeftOutlined />}
+    onClick={() => navigate('/user')}
+  >
+    Back to Dashboard
+  </Button>
+</Col>
+
           <Col>
             <h2 style={{ margin: 0 }}>Operation Dashboard</h2>
           </Col>

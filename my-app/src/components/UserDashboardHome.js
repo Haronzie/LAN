@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Row, Col, Card, Typography, Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { BarChartOutlined, ReadOutlined, BookOutlined, DatabaseOutlined, SettingOutlined } from '@ant-design/icons';
-
+import {
+  FireOutlined,
+  RadarChartOutlined,
+  TeamOutlined,
+  DatabaseOutlined,
+  SettingOutlined
+} from '@ant-design/icons';
 const { Title } = Typography;
 const { Content } = Layout;
 
@@ -22,29 +27,29 @@ const UserDashboardHome = () => {
     {
       key: 'operation',
       title: 'Operation Dashboard',
-      icon: <BarChartOutlined style={{ fontSize: '48px', color: '#1890ff' }} />,
+      icon: <FireOutlined style={{ fontSize: '48px', color: '#d4380d' }} />,
       route: '/user/operation',
     },
     {
       key: 'research',
       title: 'Research Dashboard',
-      icon: <ReadOutlined style={{ fontSize: '48px', color: '#52c41a' }} />,
+      icon: <RadarChartOutlined style={{ fontSize: '48px', color: '#1890ff' }} />,
       route: '/user/research',
     },
     {
       key: 'training',
       title: 'Training Dashboard',
-      icon: <BookOutlined style={{ fontSize: '48px', color: '#faad14' }} />,
+      icon: <TeamOutlined style={{ fontSize: '48px', color: '#52c41a' }} />,
       route: '/user/training',
     },
     {
       key: 'inventory',
       title: 'Inventory Dashboard',
-      icon: <DatabaseOutlined style={{ fontSize: '48px', color: '#eb2f96' }} />,
+      icon: <DatabaseOutlined style={{ fontSize: '48px', color: '#faad14' }} />,
       route: '/user/inventory',
     },
   ];
-
+  
   return (
     <Layout style={{ padding: '24px', background: '#f0f2f5', minHeight: '100vh' }}>
       <Content style={{ maxWidth: 1200, margin: '0 auto' }}>

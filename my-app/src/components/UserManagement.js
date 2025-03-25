@@ -245,9 +245,14 @@ const UserManagement = () => {
   return (
     <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin')}>
-          Back to Dashboard
-        </Button>
+      <Button 
+  type="primary" 
+  icon={<ArrowLeftOutlined />} 
+  onClick={() => navigate('/admin')}
+>
+  Back to Dashboard
+</Button>
+
         <h2>User Management</h2>
         <Button
           type="primary"

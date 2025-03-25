@@ -78,11 +78,16 @@ const InventoryDashboard = () => {
 
         {/* Back Button */}
         <Row style={{ marginBottom: 16 }}>
-          <Col>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/user/home')}>
-              Back to Dashboard
-            </Button>
-          </Col>
+        <Col>
+  <Button
+    type="primary"
+    icon={<ArrowLeftOutlined />}
+    onClick={() => navigate('/user')}
+  >
+    Back to Dashboard
+  </Button>
+</Col>
+
         </Row>
 
         {/* Statistics & Add Item Button */}

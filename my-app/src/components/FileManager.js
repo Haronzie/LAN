@@ -26,7 +26,8 @@ import {
   FolderAddOutlined,
   EditOutlined,
   CopyOutlined,
-  SwapOutlined
+  SwapOutlined,
+  ArrowLeftOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -549,9 +550,16 @@ const FileManager = () => {
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         {/* Top row: Title, Back to Dashboard, and Upload */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-  <Col xs={8} style={{ textAlign: 'left' }}>
-    <Button onClick={() => navigate('/admin')}>Back to Dashboard</Button>
-  </Col>
+        <Col xs={8} style={{ textAlign: 'left' }}>
+  <Button 
+    type="primary" 
+    icon={<ArrowLeftOutlined />} 
+    onClick={() => navigate('/admin')}
+  >
+    Back to Dashboard
+  </Button>
+</Col>
+
   <Col xs={8} style={{ textAlign: 'center' }}>
     <h2 style={{ margin: 0 }}>File Manager</h2>
   </Col>
