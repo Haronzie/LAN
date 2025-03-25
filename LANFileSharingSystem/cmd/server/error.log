@@ -22,3 +22,12 @@ INFO: 2025/03/24 23:52:04 main.go:172: Starting server on port 8080
 INFO: 2025/03/24 23:53:43 main.go:70: Successfully connected to database!
 INFO: 2025/03/24 23:53:43 main.go:83: Migrations applied successfully (or no changes needed).
 INFO: 2025/03/24 23:53:43 main.go:172: Starting server on port 8080
+INFO: 2025/03/25 08:17:53 main.go:70: Successfully connected to database!
+INFO: 2025/03/25 08:17:53 main.go:83: Migrations applied successfully (or no changes needed).
+INFO: 2025/03/25 08:17:53 main.go:172: Starting server on port 8080
+INFO: 2025/03/25 08:24:22 main.go:70: Successfully connected to database!
+INFO: 2025/03/25 08:24:23 main.go:83: Migrations applied successfully (or no changes needed).
+INFO: 2025/03/25 08:24:23 main.go:172: Starting server on port 8080
+INFO: 2025/03/25 08:30:46 main.go:70: Successfully connected to database!
+INFO: 2025/03/25 08:30:47 main.go:83: Migrations applied successfully (or no changes needed).
+INFO: 2025/03/25 08:30:47 main.go:172: Starting server on port 8080

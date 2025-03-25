@@ -59,8 +59,26 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 
 	uploadBase := "uploads"
 	rawFileName := handler.Filename
-	relativePath := filepath.Join(targetDir, rawFileName)
+
+	// --- Auto-renaming logic to ensure a unique file name ---
+	uniqueFileName := rawFileName
+	relativePath := filepath.Join(targetDir, uniqueFileName)
 	finalDiskPath := filepath.Join(uploadBase, relativePath)
+	counter := 1
+	for {
+		// If no file record exists for this path, then break out of the loop.
+		if _, err := fc.App.GetFileRecordByPath(relativePath); err != nil {
+			break
+		}
+		// Otherwise, generate a new file name by appending a counter.
+		baseName := strings.TrimSuffix(rawFileName, filepath.Ext(rawFileName))
+		ext := filepath.Ext(rawFileName)
+		uniqueFileName = fmt.Sprintf("%s_%d%s", baseName, counter, ext)
+		relativePath = filepath.Join(targetDir, uniqueFileName)
+		finalDiskPath = filepath.Join(uploadBase, relativePath)
+		counter++
+	}
+	// --- End of auto-renaming logic ---
 
 	// 2) Ensure the target directory exists on disk
 	if err := os.MkdirAll(filepath.Dir(finalDiskPath), 0755); err != nil {
@@ -154,9 +172,9 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 🎯 **Brand-new file flow**
-	// 8) Create a new file record
+	// Create a new file record using the unique file name and relative path.
 	fr := models.FileRecord{
-		FileName:     rawFileName,
+		FileName:     uniqueFileName,
 		Directory:    targetDir,
 		FilePath:     relativePath,
 		Size:         handler.Size,
@@ -399,6 +417,7 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 }
 
 // CopyFile creates a copy of an existing file in the storage and inserts a new record in the database.
+// CopyFile creates a copy of an existing file in the storage and inserts a new record in the database.
 func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -432,7 +451,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.NewFileName == "" {
-		// fallback to same name if not provided
+		// Fallback to the same name if not provided
 		parts := strings.Split(req.SourceFile, "/")
 		originalName := parts[len(parts)-1]
 		req.NewFileName = originalName
@@ -451,13 +470,40 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	// Decide where the new file goes
 	var newRelativePath string
 	if req.DestinationFolder == "" {
-		// If no destination_folder given, copy into the same folder
+		// If no destination_folder is given, copy into the same folder
 		newRelativePath = filepath.Join(filepath.Dir(oldFR.FilePath), req.NewFileName)
 	} else {
 		// Paste into the user-specified folder
 		newRelativePath = filepath.Join(req.DestinationFolder, req.NewFileName)
 	}
+
+	// ---------------------
+	// AUTO-RENAME LOGIC
+	// ---------------------
+	uniqueFileName := req.NewFileName
+	// We'll keep adjusting newRelativePath until it doesn't conflict.
+	counter := 1
+	for {
+		// Check if a file record already exists with that path
+		_, err := fc.App.GetFileRecordByPath(newRelativePath)
+		if err != nil {
+			// Not found => we can use this name
+			break
+		}
+		// File with this name already exists => append a counter
+		base := strings.TrimSuffix(uniqueFileName, filepath.Ext(uniqueFileName))
+		ext := filepath.Ext(uniqueFileName)
+		uniqueFileName = fmt.Sprintf("%s_%d%s", base, counter, ext)
+
+		if req.DestinationFolder == "" {
+			newRelativePath = filepath.Join(filepath.Dir(oldFR.FilePath), uniqueFileName)
+		} else {
+			newRelativePath = filepath.Join(req.DestinationFolder, uniqueFileName)
+		}
+		counter++
+	}
 	dstPath := filepath.Join("uploads", newRelativePath)
+	// ---------------------
 
 	// 3. Copy the file on disk
 	in, err := os.Open(srcPath)
@@ -467,9 +513,10 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer in.Close()
 
-	// If the destination file already exists, fail for safety
+	// If the destination file already exists on disk, fail for safety
+	// (We’ve handled the DB side, but just in case something is out of sync)
 	if _, errStat := os.Stat(dstPath); errStat == nil {
-		models.RespondError(w, http.StatusConflict, "Destination file already exists")
+		models.RespondError(w, http.StatusConflict, "Destination file already exists on disk")
 		return
 	}
 
@@ -487,8 +534,8 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 
 	// 4. Insert new DB record for the copied file
 	newRecord := models.FileRecord{
-		FileName:    req.NewFileName,
-		FilePath:    newRelativePath,
+		FileName:    uniqueFileName,  // use the final, possibly renamed, file name
+		FilePath:    newRelativePath, // likewise
 		Size:        oldFR.Size,
 		ContentType: oldFR.ContentType,
 		Uploader:    user.Username, // or oldFR.Uploader, depending on your policy
