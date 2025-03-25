@@ -1,33 +1,14 @@
-ERROR: 2025/03/24 18:48:25 main.go:66: Successfully connected to database!
-ERROR: 2025/03/24 18:48:25 main.go:79: Migrations applied successfully (or no changes needed).
-ERROR: 2025/03/24 18:48:25 main.go:166: Starting server on port 8080
-ERROR: 2025/03/24 18:52:46 main.go:67: Successfully connected to database!
-ERROR: 2025/03/24 18:52:46 main.go:80: Migrations applied successfully (or no changes needed).
-ERROR: 2025/03/24 18:52:46 main.go:167: Starting server on port 8080
-INFO: 2025/03/24 18:55:57 main.go:70: Successfully connected to database!
-INFO: 2025/03/24 18:55:57 main.go:83: Migrations applied successfully (or no changes needed).
-INFO: 2025/03/24 18:55:57 main.go:170: Starting server on port 8080
-INFO: 2025/03/24 20:12:24 main.go:70: Successfully connected to database!
-INFO: 2025/03/24 20:12:24 main.go:83: Migrations applied successfully (or no changes needed).
-INFO: 2025/03/24 20:12:24 main.go:170: Starting server on port 8080
-INFO: 2025/03/24 20:31:26 main.go:70: Successfully connected to database!
-INFO: 2025/03/24 20:31:26 main.go:83: Migrations applied successfully (or no changes needed).
-INFO: 2025/03/24 20:31:26 main.go:171: Starting server on port 8080
-INFO: 2025/03/24 20:53:34 main.go:70: Successfully connected to database!
-INFO: 2025/03/24 20:53:34 main.go:83: Migrations applied successfully (or no changes needed).
-INFO: 2025/03/24 20:53:34 main.go:172: Starting server on port 8080
-INFO: 2025/03/24 23:52:03 main.go:70: Successfully connected to database!
-INFO: 2025/03/24 23:52:04 main.go:83: Migrations applied successfully (or no changes needed).
-INFO: 2025/03/24 23:52:04 main.go:172: Starting server on port 8080
-INFO: 2025/03/24 23:53:43 main.go:70: Successfully connected to database!
-INFO: 2025/03/24 23:53:43 main.go:83: Migrations applied successfully (or no changes needed).
-INFO: 2025/03/24 23:53:43 main.go:172: Starting server on port 8080
-INFO: 2025/03/25 08:17:53 main.go:70: Successfully connected to database!
-INFO: 2025/03/25 08:17:53 main.go:83: Migrations applied successfully (or no changes needed).
-INFO: 2025/03/25 08:17:53 main.go:172: Starting server on port 8080
-INFO: 2025/03/25 08:24:22 main.go:70: Successfully connected to database!
-INFO: 2025/03/25 08:24:23 main.go:83: Migrations applied successfully (or no changes needed).
-INFO: 2025/03/25 08:24:23 main.go:172: Starting server on port 8080
-INFO: 2025/03/25 08:30:46 main.go:70: Successfully connected to database!
-INFO: 2025/03/25 08:30:47 main.go:83: Migrations applied successfully (or no changes needed).
-INFO: 2025/03/25 08:30:47 main.go:172: Starting server on port 8080
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:132 main.main() Loaded configuration from environment or default file 
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:144 main.main() Attempting to ping the database...           
+[36mINFO[0m[2025-03-25 14:05:24]main.go:150 main.main() Successfully connected to database            [36mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable"
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:154 main.main() Initializing migrations...                   
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:161 main.main() Running migrations...                        
+[36mINFO[0m[2025-03-25 14:05:24]main.go:167 main.main() Migrations applied successfully (or no changes needed)  [36mmigrationsPath[0m="file://../../internal/migrations"
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:170 main.main() Initializing session store...                
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:174 main.main() Creating new application context (App)...    
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:178 main.main() Initializing WebSocket hub...                
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:184 main.main() Ensuring 'uploads' folder exists...          
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:192 main.main() Creating new Gorilla mux router...           
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:196 main.main() Initializing controllers...                  
+[37mDEBU[0m[2025-03-25 14:05:24]main.go:205 main.main() Defining application routes...               
+[36mINFO[0m[2025-03-25 14:05:24]main.go:271 main.main() Starting server                               [36mport[0m=8080
