@@ -67,14 +67,15 @@ CREATE TABLE IF NOT EXISTS file_versions (
 -- Audit Logs Table with ON DELETE SET NULL for file_id
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
-    user_username VARCHAR(50) NOT NULL,
+    user_username VARCHAR(50),        -- Now nullable
     file_id INT,
     action VARCHAR(20) NOT NULL,
     details VARCHAR(500),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_user FOREIGN KEY (user_username) REFERENCES users (username) ON DELETE CASCADE,
+    CONSTRAINT fk_user FOREIGN KEY (user_username) REFERENCES users (username) ON DELETE SET NULL,
     CONSTRAINT fk_file FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE SET NULL
 );
+
 
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_username);
 CREATE INDEX IF NOT EXISTS idx_audit_file ON audit_logs(file_id);

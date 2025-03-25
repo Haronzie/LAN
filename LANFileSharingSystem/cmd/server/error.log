@@ -12,3 +12,6 @@
 [37mDEBU[0m[2025-03-25 14:05:24]main.go:196 main.main() Initializing controllers...                  
 [37mDEBU[0m[2025-03-25 14:05:24]main.go:205 main.main() Defining application routes...               
 [36mINFO[0m[2025-03-25 14:05:24]main.go:271 main.main() Starting server                               [36mport[0m=8080
+[36mINFO[0m[2025-03-25 15:30:34]main.go:150 main.main() Successfully connected to database            [36mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable"
+[36mINFO[0m[2025-03-25 15:30:34]main.go:167 main.main() Migrations applied successfully (or no changes needed)  [36mmigrationsPath[0m="file://../../internal/migrations"
+[36mINFO[0m[2025-03-25 15:30:34]main.go:271 main.main() Starting server                               [36mport[0m=8080
