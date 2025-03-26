@@ -49,6 +49,7 @@ function formatFileSize(size) {
 }
 
 
+
 const FileManager = () => {
   const [items, setItems] = useState([]); // files + directories
   const [loading, setLoading] = useState(false);
@@ -86,6 +87,12 @@ const FileManager = () => {
 
   const navigate = useNavigate();
   const isRoot = currentPath === '';
+
+  const handleDownloadFolder = (folderName) => {
+    const folderPath = path.join(currentPath, folderName);
+    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
+    window.open(downloadUrl, '_blank');
+  };
 
   // ---------------------------------------------
   // Fetch items for the current folder
@@ -494,18 +501,30 @@ const FileManager = () => {
       dataIndex: 'formattedSize', // Use formatted size
       key: 'size',
       render: (size, record) => (record.type === 'directory' ? '--' : size),
-    }
-    ,
+    },
     {
       title: 'Actions',
       key: 'actions',
       render: (record) => (
         <Space>
+          {/* Download button for files */}
           {record.type === 'file' && (
             <Tooltip title="Download">
               <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
             </Tooltip>
           )}
+  
+          {/* Download folder button for directories */}
+          {record.type === 'directory' && (
+            <Tooltip title="Download Folder">
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={() => handleDownloadFolder(record.name)}
+              />
+            </Tooltip>
+          )}
+  
+          {/* Existing buttons: Rename, Copy, Move, Delete */}
           <Tooltip title="Rename">
             <Button
               icon={<EditOutlined />}
@@ -529,7 +548,7 @@ const FileManager = () => {
       ),
     },
   ];
-
+  
   // Build breadcrumb
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
