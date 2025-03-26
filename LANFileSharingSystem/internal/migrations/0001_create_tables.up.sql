@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS file_versions (
 -- Audit Logs Table with ON DELETE SET NULL for file_id
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
-    user_username VARCHAR(50),        -- Now nullable
+    user_username VARCHAR(50),            -- Foreign key to users.username
+    username_at_action VARCHAR(50),       -- Snapshot column for permanent storage
     file_id INT,
     action VARCHAR(20) NOT NULL,
     details VARCHAR(500),
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     CONSTRAINT fk_user FOREIGN KEY (user_username) REFERENCES users (username) ON DELETE SET NULL,
     CONSTRAINT fk_file FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE SET NULL
 );
+
 
 
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_username);

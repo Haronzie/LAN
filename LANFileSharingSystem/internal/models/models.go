@@ -48,12 +48,13 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 type AuditLog struct {
-	ID           int       `json:"id"`
-	UserUsername *string   `json:"user_username"` // Pointer to string to handle NULL
-	FileID       *int      `json:"file_id"`       // Pointer to int to handle NULL
-	Action       string    `json:"action"`
-	Details      string    `json:"details"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID               int       `json:"id"`
+	UserUsername     *string   `json:"user_username"`
+	UsernameAtAction *string   `json:"username_at_action"` // <-- NEW FIELD
+	FileID           *int      `json:"file_id"`
+	Action           string    `json:"action"`
+	Details          string    `json:"details"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // FileRecord represents a file stored in the system.
@@ -841,21 +842,12 @@ func (app *App) DeleteFileVersionsInFolder(folderPath string) error {
 	return nil
 }
 
-// AuditLog struct reminder:
-// type AuditLog struct {
-//     ID           int        `json:"id"`
-//     UserUsername *string    `json:"user_username"`
-//     FileID       *int       `json:"file_id"`
-//     Action       string     `json:"action"`
-//     Details      string     `json:"details"`
-//     CreatedAt    time.Time  `json:"created_at"`
-// }
-
 func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 	rows, err := app.DB.Query(`
 		SELECT 
 			id, 
-			user_username, 
+			user_username,
+			username_at_action,   -- <-- NEW
 			file_id, 
 			action, 
 			details, 
@@ -872,16 +864,17 @@ func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 	var logs []AuditLog
 
 	for rows.Next() {
-		// Use sql.NullString and sql.NullInt64 to capture potential NULL values.
 		var (
-			auditLog     AuditLog
-			userUsername sql.NullString
-			fileID       sql.NullInt64
+			auditLog         AuditLog
+			userUsername     sql.NullString
+			usernameAtAction sql.NullString
+			fileID           sql.NullInt64
 		)
 
 		if err := rows.Scan(
 			&auditLog.ID,
 			&userUsername,
+			&usernameAtAction, // read the snapshot
 			&fileID,
 			&auditLog.Action,
 			&auditLog.Details,
@@ -891,19 +884,15 @@ func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 			return nil, err
 		}
 
-		// Convert userUsername (sql.NullString) to *string
 		if userUsername.Valid {
 			auditLog.UserUsername = &userUsername.String
-		} else {
-			auditLog.UserUsername = nil
 		}
-
-		// Convert fileID (sql.NullInt64) to *int
+		if usernameAtAction.Valid {
+			auditLog.UsernameAtAction = &usernameAtAction.String
+		}
 		if fileID.Valid {
-			fileIDValue := int(fileID.Int64)
-			auditLog.FileID = &fileIDValue
-		} else {
-			auditLog.FileID = nil
+			val := int(fileID.Int64)
+			auditLog.FileID = &val
 		}
 
 		logs = append(logs, auditLog)
@@ -926,9 +915,15 @@ func (app *App) LogAudit(username string, fileID int, action, details string) {
 	}
 
 	_, err := app.DB.Exec(`
-		INSERT INTO audit_logs (user_username, file_id, action, details)
-		VALUES ($1, $2, $3, $4)
-	`, username, nullableFileID, action, details)
+		INSERT INTO audit_logs (user_username, username_at_action, file_id, action, details)
+		VALUES ($1, $2, $3, $4, $5)
+	`,
+		username,       // user_username
+		username,       // username_at_action (the snapshot)
+		nullableFileID, // file_id
+		action,
+		details,
+	)
 
 	if err != nil {
 		log.Printf("SQL Error in LogAudit: %v", err)
@@ -936,6 +931,7 @@ func (app *App) LogAudit(username string, fileID int, action, details string) {
 		log.Println("Audit log inserted successfully!")
 	}
 }
+
 func (app *App) ListAllFiles() ([]FileRecord, error) {
 	rows, err := app.DB.Query("SELECT file_name, size, content_type, uploader FROM files")
 	if err != nil {

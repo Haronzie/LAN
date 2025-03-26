@@ -41,8 +41,11 @@ const AuditLog = () => {
       title: 'User',
       dataIndex: 'user_username',   // ✅ Display the username from audit log
       key: 'user_username',
-      render: (username) => <span style={{ fontSize: '16px' }}>{username}</span>,
-    },
+      render: (val, record) => {
+        // If user_username is null (user deleted), use username_at_action
+        const displayName = val || record.username_at_action || '<deleted user>';
+        return <span style={{ fontSize: '16px' }}>{displayName}</span>;
+      }    },
     {
       title: 'Action',
       dataIndex: 'action',         // ✅ Display the action
