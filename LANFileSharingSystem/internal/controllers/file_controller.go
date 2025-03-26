@@ -736,79 +736,99 @@ type MoveFileRequest struct {
 	NewParent string `json:"new_parent"`
 }
 
-// MoveFile handles moving a file from one directory to another.
+// MoveFile handles moving a file from one folder to another.
 func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
+	// Only allow POST requests
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
 
+	// Ensure the user is authenticated
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	var req MoveFileRequest
+	// Expected JSON body: {"filename": "example.txt", "old_parent": "OldFolder", "new_parent": "NewFolder"}
+	var req struct {
+		Filename  string `json:"filename"`
+		OldParent string `json:"old_parent"`
+		NewParent string `json:"new_parent"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
+	// Trim spaces from inputs
 	req.Filename = strings.TrimSpace(req.Filename)
 	req.OldParent = strings.TrimSpace(req.OldParent)
 	req.NewParent = strings.TrimSpace(req.NewParent)
-
-	if req.Filename == "" {
-		models.RespondError(w, http.StatusBadRequest, "Filename is required")
-		return
-	}
-	if req.OldParent == req.NewParent {
-		models.RespondError(w, http.StatusBadRequest, "Old parent and new parent are the same")
+	if req.Filename == "" || req.NewParent == "" {
+		models.RespondError(w, http.StatusBadRequest, "Filename and new parent folder are required")
 		return
 	}
 
-	// 1) Retrieve the file record from the database.
+	// Retrieve the file record by filename.
 	fr, err := fc.App.GetFileRecord(req.Filename)
 	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "File not found in database")
+		models.RespondError(w, http.StatusNotFound, "File not found")
 		return
 	}
 
-	// 2) Check that the file is located in the specified old parent.
-	expectedOldPath := filepath.Join(req.OldParent, req.Filename)
-	if fr.FilePath != expectedOldPath {
-		models.RespondError(w, http.StatusBadRequest, "File is not in the specified old parent")
+	// Get the current directory from the DB record.
+	currentDir := filepath.Dir(fr.FilePath)
+	if req.OldParent != currentDir {
+		// Log a warning and use the DB value.
+		log.Printf("Warning: Provided old_parent (%s) does not match file's current directory (%s). Using DB value.", req.OldParent, currentDir)
+		req.OldParent = currentDir
+	}
+
+	uploadBase := "uploads"
+	oldFullPath := filepath.Join(uploadBase, fr.FilePath)
+	newRelativePath := filepath.Join(req.NewParent, fr.FileName)
+	newFullPath := filepath.Join(uploadBase, newRelativePath)
+
+	// Check if the source file exists on disk.
+	if _, err := os.Stat(oldFullPath); os.IsNotExist(err) {
+		models.RespondError(w, http.StatusNotFound, "Source file does not exist on disk")
 		return
 	}
 
-	// 3) Check that the destination folder exists on disk.
-	newParentDiskPath := filepath.Join("uploads", req.NewParent)
-	if _, err := os.Stat(newParentDiskPath); os.IsNotExist(err) {
-		models.RespondError(w, http.StatusBadRequest, "Destination folder does not exist on disk")
+	// Ensure the target directory exists.
+	if err := os.MkdirAll(filepath.Dir(newFullPath), 0755); err != nil {
+		log.Printf("Error creating destination directory: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Error creating destination directory")
 		return
 	}
 
-	// 4) Move the file on disk.
-	oldDiskPath := filepath.Join("uploads", fr.FilePath)
-	newRelativePath := filepath.Join(req.NewParent, req.Filename)
-	newDiskPath := filepath.Join("uploads", newRelativePath)
-	if err := os.Rename(oldDiskPath, newDiskPath); err != nil {
+	log.Printf("Moving file from %s to %s", oldFullPath, newFullPath)
+	// Move the file on disk.
+	if err := os.Rename(oldFullPath, newFullPath); err != nil {
+		log.Printf("os.Rename error: %v", err)
 		models.RespondError(w, http.StatusInternalServerError, "Error moving file on disk")
 		return
 	}
 
-	// 5) Update the file record in the database.
-	if err := fc.App.RenameFileRecord(fr.FileName, fr.FileName, newRelativePath); err != nil {
-		// Attempt rollback on disk move.
-		os.Rename(newDiskPath, oldDiskPath)
-		models.RespondError(w, http.StatusInternalServerError, "Error updating file record in DB")
+	// Update the file record in the database.
+	if err := fc.App.RenameFileRecord(req.Filename, fr.FileName, newRelativePath); err != nil {
+		// Attempt to roll back the move if the DB update fails.
+		os.Rename(newFullPath, oldFullPath)
+		log.Printf("Database update error: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Error updating file record in database")
 		return
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' moved file '%s' from '%s' to '%s'.",
-		user.Username, req.Filename, req.OldParent, req.NewParent))
+	// Log audit activity for the move.
+	action := "MOVE"
+	details := fmt.Sprintf("File '%s' moved from '%s' to '%s'", fr.FileName, req.OldParent, req.NewParent)
+	fc.App.LogAudit(user.Username, fr.ID, action, details)
+	fc.App.LogActivity(fmt.Sprintf("User '%s' moved file '%s' from '%s' to '%s'", user.Username, fr.FileName, req.OldParent, req.NewParent))
 
+	// Respond with success.
 	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("File '%s' moved successfully", req.Filename),
+		"message": fmt.Sprintf("File '%s' moved successfully to folder '%s'", fr.FileName, req.NewParent),
 	})
 }

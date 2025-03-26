@@ -446,7 +446,7 @@ const FileManager = () => {
         );
       } else {
         await axios.post(
-          '/file/move',
+          '/move-file',
           {
             filename: moveItem.name,
             old_parent: currentPath,

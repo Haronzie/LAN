@@ -359,13 +359,14 @@ func (app *App) CreateFileRecord(fr FileRecord) error {
 
 func (app *App) GetFileRecord(fileName string) (FileRecord, error) {
 	row := app.DB.QueryRow(`
-        SELECT file_name, file_path, size, content_type, uploader, confidential
+        SELECT id, file_name, file_path, size, content_type, uploader, confidential
         FROM files
         WHERE file_name = $1
     `, fileName)
 
 	var fr FileRecord
 	err := row.Scan(
+		&fr.ID,
 		&fr.FileName,
 		&fr.FilePath,
 		&fr.Size,
