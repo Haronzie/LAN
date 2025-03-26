@@ -14,7 +14,8 @@ import {
   Select,
   Card,
   Breadcrumb,
-  Checkbox
+  Checkbox,
+  TreeSelect
 } from 'antd';
 import {
   UploadOutlined,
@@ -57,6 +58,8 @@ const TrainingDashboard = () => {
     if (storedUsername) {
       setCurrentUser(storedUsername);
     }
+    // Fetch the folder tree for the training container
+    fetchDirectories();
   }, []);
 
   // ----------------------------------
@@ -86,6 +89,9 @@ const TrainingDashboard = () => {
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
+  // Inside your TrainingDashboard component:
+const [directories, setDirectories] = useState([]);
+
 
   // ----------------------------------
   // NEW: Modal-Based Upload States
@@ -93,7 +99,17 @@ const TrainingDashboard = () => {
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
   const [uploadConfidential, setUploadConfidential] = useState(false);
+  const [moveConfidential, setMoveConfidential] = useState(false);
 
+  const fetchDirectories = async () => {
+    try {
+      const res = await axios.get('/directory/tree?container=training', { withCredentials: true });
+      setDirectories(res.data || []);
+    } catch (error) {
+      console.error('Error fetching directories:', error);
+    }
+  };
+  
   // ----------------------------------
   // Fetch items (directories + files)
   // ----------------------------------
@@ -432,8 +448,14 @@ const TrainingDashboard = () => {
     }
     setMoveItem(record);
     setMoveDestination(currentPath);
+    if (record.type === 'file' && record.confidential !== undefined) {
+      setMoveConfidential(record.confidential);
+    } else {
+      setMoveConfidential(false);
+    }
     setMoveModalVisible(true);
   };
+  
 
   const handleMoveConfirm = async () => {
     if (!moveDestination.trim()) {
@@ -463,7 +485,8 @@ const TrainingDashboard = () => {
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
-            container: 'training'
+            container: 'training',
+            confidential: moveConfidential  // now included
           },
           { withCredentials: true }
         );
@@ -478,6 +501,7 @@ const TrainingDashboard = () => {
       message.error(error.response?.data?.error || 'Error moving item');
     }
   };
+  
 
   // ----------------------------------
   // Table Columns
@@ -729,36 +753,27 @@ const TrainingDashboard = () => {
         </Modal>
 
         {/* Move Modal */}
-        <Modal
-          title="Move Item"
-          visible={moveModalVisible}
-          onOk={handleMoveConfirm}
-          onCancel={() => setMoveModalVisible(false)}
-          okText="Move"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Destination Folder" required>
-              <Select
-                style={{ width: '100%' }}
-                placeholder="Select a destination folder"
-                value={moveDestination}
-                onChange={(val) => setMoveDestination(val)}
-                allowClear
-              >
-                {items
-                  .filter((item) => item.type === 'directory')
-                  .map((folder) => {
-                    const folderPath = path.join(currentPath, folder.name);
-                    return (
-                      <Option key={folderPath} value={folderPath}>
-                        {folder.name}
-                      </Option>
-                    );
-                  })}
-            </Select>
-          </Form.Item>
-          </Form>
-        </Modal>
+<Modal
+  title="Move Item"
+  visible={moveModalVisible}
+  onOk={handleMoveConfirm}
+  onCancel={() => setMoveModalVisible(false)}
+  okText="Move"
+>
+  <Form layout="vertical">
+    <Form.Item label="Destination Folder" required>
+      <TreeSelect
+        style={{ width: '100%' }}
+        treeData={directories}  // now directories is defined
+        placeholder="Select destination folder"
+        value={moveDestination}
+        onChange={(val) => setMoveDestination(val)}
+        treeDefaultExpandAll
+        allowClear
+      />
+    </Form.Item>
+  </Form>
+</Modal>
 
         {/* NEW Modal-Based Upload */}
         <Modal

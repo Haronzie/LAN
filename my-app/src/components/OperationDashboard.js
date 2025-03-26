@@ -14,7 +14,8 @@ import {
   Select,
   Card,
   Breadcrumb,
-  Checkbox
+  Checkbox,
+  TreeSelect
 } from 'antd';
 import {
   UploadOutlined,
@@ -712,36 +713,27 @@ const OperationDashboard = () => {
         </Modal>
 
         {/* Move Modal */}
-        <Modal
-          title="Move Item"
-          visible={moveModalVisible}
-          onOk={handleMoveConfirm}
-          onCancel={() => setMoveModalVisible(false)}
-          okText="Move"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Destination Folder" required>
-              <Select
-                style={{ width: '100%' }}
-                placeholder="Select a destination folder"
-                value={moveDestination}
-                onChange={(val) => setMoveDestination(val)}
-                allowClear
-              >
-                {items
-                  .filter((item) => item.type === 'directory')
-                  .map((folder) => {
-                    const folderPath = path.join(currentPath, folder.name);
-                    return (
-                      <Option key={folderPath} value={folderPath}>
-                        {folder.name}
-                      </Option>
-                    );
-                  })}
-              </Select>
-            </Form.Item>
-          </Form>
-        </Modal>
+<Modal
+  title="Move Item"
+  visible={moveModalVisible}
+  onOk={handleMoveConfirm}
+  onCancel={() => setMoveModalVisible(false)}
+  okText="Move"
+>
+  <Form layout="vertical">
+    <Form.Item label="Destination Folder" required>
+      <TreeSelect
+        style={{ width: '100%' }}
+        treeData={directories}  // Use your pre-fetched folder tree here
+        placeholder="Select destination folder"
+        value={moveDestination}
+        onChange={(val) => setMoveDestination(val)}
+        treeDefaultExpandAll
+        allowClear
+      />
+    </Form.Item>
+  </Form>
+</Modal>
 
         {/* NEW Modal-Based Upload */}
         <Modal
