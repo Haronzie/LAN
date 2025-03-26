@@ -3,7 +3,6 @@ import {
   Layout,
   Table,
   Button,
-  Upload,
   message,
   Input,
   Row,
@@ -14,7 +13,8 @@ import {
   Form,
   Select,
   Card,
-  Breadcrumb
+  Breadcrumb,
+  Checkbox
 } from 'antd';
 import {
   UploadOutlined,
@@ -35,12 +35,22 @@ import path from 'path-browserify';
 const { Content } = Layout;
 const { Option } = Select;
 
+/**
+ * Helper to format file sizes in human-readable form.
+ */
+function formatFileSize(size) {
+  if (size === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(size) / Math.log(1024));
+  return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+}
+
 const ResearchDashboard = () => {
   const navigate = useNavigate();
 
-  // =========================================
+  // ----------------------------------------
   // Current user from localStorage
-  // =========================================
+  // ----------------------------------------
   const [currentUser, setCurrentUser] = useState('');
   useEffect(() => {
     const storedUsername = localStorage.getItem('username');
@@ -49,59 +59,55 @@ const ResearchDashboard = () => {
     }
   }, []);
 
-  // =========================================
-  // Dashboard state (path, items, search, etc.)
-  // =========================================
+  // ----------------------------------------
+  // States: path, items, loading, search
+  // ----------------------------------------
   const [currentPath, setCurrentPath] = useState('');
-  const [items, setItems] = useState([]); // Combined list of directories + files
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  
-// Convert file size to a human-readable format
-function formatFileSize(size) {
-  if (size === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(size) / Math.log(1024));
-  return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
-}
 
-
-  // Create folder modal
+  // Create Folder
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
-  // Upload
-  const [selectedFolder, setSelectedFolder] = useState('');
-  const [fileToUpload, setFileToUpload] = useState(null);
-
-  // Rename state
+  // Rename
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
 
-  // Copy state (for both files and directories)
+  // Copy
   const [copyModalVisible, setCopyModalVisible] = useState(false);
   const [copyItem, setCopyItem] = useState(null);
   const [copyNewName, setCopyNewName] = useState('');
   const [selectedDestination, setSelectedDestination] = useState('');
 
-  // Move state (only available to owners)
+  // Move
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
 
-  // =========================================
+  // ----------------------------------------
+  // NEW: Modal-Based Upload States
+  // ----------------------------------------
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(null);
+  const [uploadConfidential, setUploadConfidential] = useState(false);
+
+  // ----------------------------------------
   // Fetch Directories + Files
-  // =========================================
+  // ----------------------------------------
   const fetchItems = async () => {
     setLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
+
       // 1) Directories
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
         withCredentials: true
       });
       const directories = Array.isArray(dirRes.data) ? dirRes.data : [];
+
       // 2) Files
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true
@@ -110,17 +116,14 @@ function formatFileSize(size) {
         name: f.name,
         type: 'file',
         size: f.size,
-        formattedSize: formatFileSize(f.size), // Store formatted size
-        uploader: f.uploader,
+        formattedSize: formatFileSize(f.size),
+        uploader: f.uploader
       }));
-      
-      // Combine items
+
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
-      message.error(
-        error.response?.data?.error || 'Error fetching directory contents'
-      );
+      message.error(error.response?.data?.error || 'Error fetching directory contents');
       setItems([]);
     } finally {
       setLoading(false);
@@ -132,21 +135,16 @@ function formatFileSize(size) {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // Set upload folder when currentPath changes
-  useEffect(() => {
-    setSelectedFolder(currentPath || '');
-  }, [currentPath]);
-
-  // =========================================
-  // Search + Filter
-  // =========================================
+  // ----------------------------------------
+  // Search Filtering
+  // ----------------------------------------
   const filteredItems = items.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // =========================================
+  // ----------------------------------------
   // Create Folder
-  // =========================================
+  // ----------------------------------------
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -168,9 +166,9 @@ function formatFileSize(size) {
     }
   };
 
-  // =========================================
+  // ----------------------------------------
   // Navigation & Breadcrumbs
-  // =========================================
+  // ----------------------------------------
   const handleFolderClick = (folderName) => {
     const newPath = path.join(currentPath, folderName);
     setCurrentPath(newPath);
@@ -198,45 +196,76 @@ function formatFileSize(size) {
     const isLast = index === segments.length - 1;
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
+        {isLast ? seg : (
+          <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
+            {seg}
+          </a>
+        )}
       </Breadcrumb.Item>
     );
   });
 
-  // =========================================
-  // Upload File
-  // =========================================
-  const customUpload = async ({ file, onSuccess, onError }) => {
-    if (!selectedFolder) {
-      message.error('No folder selected for upload.');
-      onError(new Error('No folder selected'));
+  // ----------------------------------------
+  // NEW: Modal-Based Upload
+  // ----------------------------------------
+  const handleOpenUploadModal = () => {
+    if (!currentPath) {
+      message.error('Please select or create a folder before uploading.');
       return;
     }
+    setUploadingFile(null);
+    setUploadConfidential(false);
+    setUploadModalVisible(true);
+  };
+
+  const doModalUpload = async (isConfidential) => {
+    if (!uploadingFile) {
+      message.error('Please select a file first');
+      return;
+    }
+    if (!currentPath) {
+      message.error('Please select or create a folder first');
+      return;
+    }
+
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('directory', selectedFolder);
+    formData.append('file', uploadingFile);
+    formData.append('directory', currentPath);
+    formData.append('confidential', isConfidential ? 'true' : 'false');
     formData.append('container', 'research');
+
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       message.success(res.data.message || 'File uploaded successfully');
-      onSuccess(null, file);
-      setFileToUpload(null);
+      setUploadModalVisible(false);
+      setUploadingFile(null);
+      setUploadConfidential(false);
       fetchItems();
     } catch (error) {
-      console.error('Upload error:', error);
-      onError(error);
-      message.error('Error uploading file');
+      console.error('Modal-based upload error:', error);
+      message.error(error.response?.data?.error || 'Error uploading file');
     }
   };
 
-  // =========================================
-  // Delete (File or Folder)
-  // =========================================
+  const handleModalUpload = () => {
+    if (!uploadConfidential) {
+      Modal.confirm({
+        title: 'Upload as non-confidential?',
+        content: 'Are you sure you want to upload this file without marking it as confidential?',
+        onOk: () => doModalUpload(false)
+      });
+    } else {
+      doModalUpload(true);
+    }
+  };
+
+  // ----------------------------------------
+  // Delete
+  // ----------------------------------------
   const handleDelete = async (record) => {
-    // For directories, check "created_by"; for files, check "uploader"
     const isOwner =
       record.type === 'directory'
         ? record.created_by === currentUser
@@ -265,9 +294,9 @@ function formatFileSize(size) {
     }
   };
 
-  // =========================================
-  // Download (File Only) and Download Folder (when not owner)
-  // =========================================
+  // ----------------------------------------
+  // Download
+  // ----------------------------------------
   const handleDownload = (fileName) => {
     const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
     window.open(downloadUrl, '_blank');
@@ -279,9 +308,9 @@ function formatFileSize(size) {
     window.open(downloadUrl, '_blank');
   };
 
-  // =========================================
-  // Rename (Owner only)
-  // =========================================
+  // ----------------------------------------
+  // Rename
+  // ----------------------------------------
   const handleRename = (record) => {
     const isOwner =
       record.type === 'directory'
@@ -335,9 +364,9 @@ function formatFileSize(size) {
     }
   };
 
-  // =========================================
-  // Copy (Available to all users)
-  // =========================================
+  // ----------------------------------------
+  // Copy
+  // ----------------------------------------
   const handleCopy = (record) => {
     const suggestedName = record.name + '_copy';
     setCopyItem(record);
@@ -391,9 +420,9 @@ function formatFileSize(size) {
     }
   };
 
-  // =========================================
-  // Move (Only available to owners)
-  // =========================================
+  // ----------------------------------------
+  // Move
+  // ----------------------------------------
   const handleMove = (record) => {
     const isOwner =
       record.type === 'directory'
@@ -452,9 +481,9 @@ function formatFileSize(size) {
     }
   };
 
-  // =========================================
+  // ----------------------------------------
   // Table Columns
-  // =========================================
+  // ----------------------------------------
   const columns = [
     {
       title: 'Name',
@@ -480,38 +509,41 @@ function formatFileSize(size) {
     },
     {
       title: 'Size',
-      dataIndex: 'formattedSize', // Use formatted size
+      dataIndex: 'formattedSize',
       key: 'size',
       render: (size, record) => (record.type === 'directory' ? '--' : size),
-    }
-    ,
+    },
     {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        // Determine ownership: for directories check "created_by", for files check "uploader"
         const isOwner =
           record.type === 'directory'
             ? record.created_by === currentUser
             : record.uploader === currentUser;
+
         return (
           <Space>
+            {/* Download for files */}
             {record.type === 'file' && (
               <Tooltip title="Download">
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
               </Tooltip>
             )}
-            {/* For directories, if not owned, show Download Folder */}
+
+            {/* If directory not owned => Download Folder */}
             {record.type === 'directory' && !isOwner && (
               <Tooltip title="Download Folder">
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
-            {/* Copy action available to all users */}
+
+            {/* Copy is available to all */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
-            {/* Only show rename, delete, and move if user is owner */}
+
+            {/* Rename, delete, move only if owner */}
             {isOwner && (
               <>
                 <Tooltip title="Rename">
@@ -536,43 +568,31 @@ function formatFileSize(size) {
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col>
-  <Button
-    type="primary"
-    icon={<ArrowLeftOutlined />}
-    onClick={() => navigate('/user')}
-  >
-    Back to Dashboard
-  </Button>
-</Col>
+          <Col>
+            <Button
+              type="primary"
+              icon={<ArrowLeftOutlined />}
+              onClick={() => navigate('/user')}
+            >
+              Back to Dashboard
+            </Button>
+          </Col>
 
           <Col>
             <h2 style={{ margin: 0 }}>Research Dashboard</h2>
           </Col>
+
+          {/* Instead of an Upload component with customRequest, we use a modal-based approach */}
           <Col>
-            <Upload
-              customRequest={customUpload}
-              showUploadList={false}
-              onChange={({ file }) => setFileToUpload(file)}
+            <Button
+              type="primary"
+              icon={<UploadOutlined />}
+              onClick={() => handleOpenUploadModal()}
             >
-              <Button type="primary" icon={<UploadOutlined />}>
-                Upload File
-              </Button>
-            </Upload>
+              Upload File
+            </Button>
           </Col>
         </Row>
-
-        {/* Selected File Card */}
-        {fileToUpload && (
-          <Card title="Selected File" bordered={false} style={{ marginBottom: 16 }}>
-            <p>
-              <strong>File Name:</strong> {fileToUpload.name}
-            </p>
-            <p>
-              <strong>Target Folder:</strong> {selectedFolder || '(none)'}
-            </p>
-          </Card>
-        )}
 
         {/* Navigation Row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
@@ -587,25 +607,6 @@ function formatFileSize(size) {
             </Button>
           </Col>
           <Col>
-            <Select
-              value={selectedFolder}
-              onChange={setSelectedFolder}
-              placeholder="Select Folder for Upload"
-              style={{ width: 200 }}
-            >
-              {filteredItems
-                .filter((item) => item.type === 'directory')
-                .map((folder, index) => {
-                  const folderPath = path.join(currentPath, folder.name);
-                  return (
-                    <Option key={index} value={folderPath}>
-                      {folder.name}
-                    </Option>
-                  );
-                })}
-            </Select>
-          </Col>
-          <Col>
             <Input
               placeholder="Search..."
               value={searchTerm}
@@ -617,7 +618,20 @@ function formatFileSize(size) {
 
         {/* Breadcrumb */}
         <Breadcrumb style={{ marginBottom: 16 }}>
-          {breadcrumbItems}
+          <Breadcrumb.Item key="root">
+            {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
+          </Breadcrumb.Item>
+          {segments.map((seg, index) => (
+            <Breadcrumb.Item key={index}>
+              {index === segments.length - 1 ? (
+                seg
+              ) : (
+                <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
+                  {seg}
+                </a>
+              )}
+            </Breadcrumb.Item>
+          ))}
         </Breadcrumb>
 
         {/* Table of Items */}
@@ -684,26 +698,25 @@ function formatFileSize(size) {
               />
             </Form.Item>
             <Form.Item label="Destination Folder (Optional)">
-  <Select
-    style={{ width: '100%' }}
-    placeholder="Select folder or leave blank"
-    value={selectedDestination}
-    onChange={(val) => setSelectedDestination(val)}
-    allowClear
-  >
-    {items
-      .filter((item) => item.type === 'directory')
-      .map((folder) => {
-        const folderPath = path.join(currentPath, folder.name);
-        return (
-          <Option key={folderPath} value={folderPath}>
-            {folder.name}
-          </Option>
-        );
-      })}
-  </Select>
-</Form.Item>
-
+              <Select
+                style={{ width: '100%' }}
+                placeholder="Select folder or leave blank"
+                value={selectedDestination}
+                onChange={(val) => setSelectedDestination(val)}
+                allowClear
+              >
+                {items
+                  .filter((item) => item.type === 'directory')
+                  .map((folder) => {
+                    const folderPath = path.join(currentPath, folder.name);
+                    return (
+                      <Option key={folderPath} value={folderPath}>
+                        {folder.name}
+                      </Option>
+                    );
+                  })}
+              </Select>
+            </Form.Item>
           </Form>
         </Modal>
 
@@ -716,27 +729,77 @@ function formatFileSize(size) {
           okText="Move"
         >
           <Form layout="vertical">
-          <Form.Item label="Destination Folder" required>
-  <Select
-    style={{ width: '100%' }}
-    placeholder="Select a destination folder"
-    value={moveDestination}
-    onChange={(val) => setMoveDestination(val)}
-    allowClear
-  >
-    {items
-      .filter((item) => item.type === 'directory')
-      .map((folder) => {
-        const folderPath = path.join(currentPath, folder.name);
-        return (
-          <Option key={folderPath} value={folderPath}>
-            {folder.name}
-          </Option>
-        );
-      })}
-  </Select>
-</Form.Item>
+            <Form.Item label="Destination Folder" required>
+              <Select
+                style={{ width: '100%' }}
+                placeholder="Select a destination folder"
+                value={moveDestination}
+                onChange={(val) => setMoveDestination(val)}
+                allowClear
+              >
+                {items
+                  .filter((item) => item.type === 'directory')
+                  .map((folder) => {
+                    const folderPath = path.join(currentPath, folder.name);
+                    return (
+                      <Option key={folderPath} value={folderPath}>
+                        {folder.name}
+                      </Option>
+                    );
+                  })}
+            </Select>
+            </Form.Item>
+          </Form>
+        </Modal>
 
+        {/* NEW Modal-Based Upload */}
+        <Modal
+          title="Upload File"
+          visible={uploadModalVisible}
+          onOk={handleModalUpload}
+          onCancel={() => {
+            setUploadModalVisible(false);
+            setUploadingFile(null);
+            setUploadConfidential(false);
+          }}
+          okText="Upload"
+        >
+          <p>Target Folder: {currentPath || '(none)'}</p>
+          <Form layout="vertical">
+            <Form.Item>
+              <Button
+                icon={<UploadOutlined />}
+                onClick={() => {
+                  // Show a file picker
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.onchange = (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setUploadingFile(file);
+                    }
+                  };
+                  input.click();
+                }}
+              >
+                Select File
+              </Button>
+            </Form.Item>
+
+            {uploadingFile && (
+              <Card size="small" style={{ marginTop: 16 }}>
+                <strong>Selected File:</strong> {uploadingFile.name}
+              </Card>
+            )}
+
+            <Form.Item label="Mark as Confidential?" style={{ marginTop: 16 }}>
+              <Checkbox
+                checked={uploadConfidential}
+                onChange={(e) => setUploadConfidential(e.target.checked)}
+              >
+                Confidential
+              </Checkbox>
+            </Form.Item>
           </Form>
         </Modal>
       </Content>
