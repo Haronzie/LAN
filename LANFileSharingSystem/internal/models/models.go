@@ -49,8 +49,8 @@ type User struct {
 }
 type AuditLog struct {
 	ID           int       `json:"id"`
-	UserUsername string    `json:"user_username"` // ✅ Use user_username, not user_id
-	FileID       *int      `json:"file_id"`
+	UserUsername *string   `json:"user_username"` // Pointer to string to handle NULL
+	FileID       *int      `json:"file_id"`       // Pointer to int to handle NULL
 	Action       string    `json:"action"`
 	Details      string    `json:"details"`
 	CreatedAt    time.Time `json:"created_at"`
@@ -840,9 +840,26 @@ func (app *App) DeleteFileVersionsInFolder(folderPath string) error {
 	}
 	return nil
 }
+
+// AuditLog struct reminder:
+// type AuditLog struct {
+//     ID           int        `json:"id"`
+//     UserUsername *string    `json:"user_username"`
+//     FileID       *int       `json:"file_id"`
+//     Action       string     `json:"action"`
+//     Details      string     `json:"details"`
+//     CreatedAt    time.Time  `json:"created_at"`
+// }
+
 func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 	rows, err := app.DB.Query(`
-		SELECT id, user_username, file_id, action, details, created_at  -- ✅ Use user_username
+		SELECT 
+			id, 
+			user_username, 
+			file_id, 
+			action, 
+			details, 
+			created_at
 		FROM audit_logs
 		ORDER BY created_at DESC
 	`)
@@ -853,23 +870,35 @@ func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 	defer rows.Close()
 
 	var logs []AuditLog
-	for rows.Next() {
-		var auditLog AuditLog
-		var fileID sql.NullInt64
 
-		// ✅ Use the correct struct field name
+	for rows.Next() {
+		// Use sql.NullString and sql.NullInt64 to capture potential NULL values.
+		var (
+			auditLog     AuditLog
+			userUsername sql.NullString
+			fileID       sql.NullInt64
+		)
+
 		if err := rows.Scan(
 			&auditLog.ID,
-			&auditLog.UserUsername, // ✅ Use UserUsername instead of UserID
+			&userUsername,
 			&fileID,
 			&auditLog.Action,
 			&auditLog.Details,
-			&auditLog.CreatedAt); err != nil {
-
+			&auditLog.CreatedAt,
+		); err != nil {
 			log.Println("Error scanning audit log row:", err)
 			return nil, err
 		}
 
+		// Convert userUsername (sql.NullString) to *string
+		if userUsername.Valid {
+			auditLog.UserUsername = &userUsername.String
+		} else {
+			auditLog.UserUsername = nil
+		}
+
+		// Convert fileID (sql.NullInt64) to *int
 		if fileID.Valid {
 			fileIDValue := int(fileID.Int64)
 			auditLog.FileID = &fileIDValue
@@ -879,6 +908,12 @@ func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 
 		logs = append(logs, auditLog)
 	}
+
+	if err := rows.Err(); err != nil {
+		log.Println("Row iteration error:", err)
+		return nil, err
+	}
+
 	return logs, nil
 }
 
