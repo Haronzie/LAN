@@ -2,3 +2,49 @@
 [36mINFO[0m[2025-03-27 15:55:57]main.go:150 main.main() Successfully connected to database            [36mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable"
 [36mINFO[0m[2025-03-27 15:55:57]main.go:167 main.main() Migrations applied successfully (or no changes needed)  [36mmigrationsPath[0m="file://../../internal/migrations"
 [36mINFO[0m[2025-03-27 15:55:57]main.go:271 main.main() Starting server                               [36mport[0m=8080
+[37mDEBU[0m[2025-03-28 12:56:41]main.go:138 main.main() Starting main function execution              [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:41]main.go:142 main.main() Loaded configuration from environment or default file  [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:41]main.go:145 main.main() Attempting to open DB connection              [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:41]main.go:160 main.main() Attempting to ping the database...            [37mfunction[0m=main
+[36mINFO[0m[2025-03-28 12:56:42]main.go:173 main.main() Successfully connected to database            [36mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable" [36mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:42]main.go:177 main.main() Initializing migrations...                    [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:42]main.go:189 main.main() Running migrations...                         [37mfunction[0m=main
+[36mINFO[0m[2025-03-28 12:56:42]main.go:202 main.main() Migrations applied successfully (or no changes needed)  [36mfunction[0m=main [36mmigrationsPath[0m="file://../../internal/migrations"
+[37mDEBU[0m[2025-03-28 12:56:42]main.go:205 main.main() Initializing session store...                 [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:42]main.go:209 main.main() Creating new application context (App)...     [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:42]main.go:213 main.main() Initializing WebSocket hub...                 [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:42]main.go:219 main.main() Ensuring 'uploads' folder exists...           [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:42]main.go:232 main.main() Creating new Gorilla mux router...            [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:42]main.go:237 main.main() Initializing controllers...                   [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 12:56:42]main.go:246 main.main() Defining application routes...                [37mfunction[0m=main
+[36mINFO[0m[2025-03-28 12:56:42]main.go:316 main.main() Starting server                               [36mfunction[0m=main [36mport[0m=8080
+[37mDEBU[0m[2025-03-28 12:59:11]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=6caa04fb-26bd-49ad-8d66-17369893b8fe [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 12:59:11]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=8cbc0d07-91d9-46f6-b5e6-6549712ce628 [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 12:59:21]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=1b5c6f88-9977-43b7-9c5b-30fdbdba4c57 [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 12:59:21]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=6a5131cd-ba24-4530-9266-43a113f2b4cc [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:02:31]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=194817f8-b782-41e0-8640-1fa491cb6a96 [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:02:31]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=05719d69-0841-45de-b888-58415894fdca [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:08:30]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=5b94c265-6f6b-434b-82f9-62f9e85c8e2f [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:08:30]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=fa7c9dc1-488b-45fa-8807-1a424e643d7f [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:138 main.main() Starting main function execution              [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:142 main.main() Loaded configuration from environment or default file  [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:145 main.main() Attempting to open DB connection              [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:160 main.main() Attempting to ping the database...            [37mfunction[0m=main
+[36mINFO[0m[2025-03-28 13:16:44]main.go:173 main.main() Successfully connected to database            [36mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable" [36mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:177 main.main() Initializing migrations...                    [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:189 main.main() Running migrations...                         [37mfunction[0m=main
+[36mINFO[0m[2025-03-28 13:16:44]main.go:202 main.main() Migrations applied successfully (or no changes needed)  [36mfunction[0m=main [36mmigrationsPath[0m="file://../../internal/migrations"
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:205 main.main() Initializing session store...                 [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:209 main.main() Creating new application context (App)...     [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:213 main.main() Initializing WebSocket hub...                 [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:219 main.main() Ensuring 'uploads' folder exists...           [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:232 main.main() Creating new Gorilla mux router...            [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:237 main.main() Initializing controllers...                   [37mfunction[0m=main
+[37mDEBU[0m[2025-03-28 13:16:44]main.go:246 main.main() Defining application routes...                [37mfunction[0m=main
+[36mINFO[0m[2025-03-28 13:16:44]main.go:316 main.main() Starting server                               [36mfunction[0m=main [36mport[0m=8080
+[37mDEBU[0m[2025-03-28 13:16:48]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=fd345e37-73ef-49b1-b450-069db4fc14c2 [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:16:49]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=885f1dee-57d2-4185-8798-0a8fb77f8b3f [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:16:57]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=85e67d00-4ae8-4c17-9351-a935f095c349 [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:16:57]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=6fb14766-e936-4441-a103-7484223b556b [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:16:59]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=07f76ec0-782b-4799-bf20-2a62888a5bc2 [37mfunction[0m=WebSocketHandler
+[37mDEBU[0m[2025-03-28 13:16:59]main.go:296 main.main.func1() Upgrading to WebSocket                        [37mcorrelationID[0m=ea3f1e43-63ae-4c16-817a-c1b9d7a1d5a6 [37mfunction[0m=WebSocketHandler

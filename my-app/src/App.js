@@ -15,7 +15,6 @@ import ResearchDashboard from './components/ResearchDashboard';
 import InventoryDashboard from './components/InventoryDashboard';
 import UserSettings from './components/UserSettings';
 import Settings from './components/Settings';
-import ProtectedRoute from './components/ProtectedRoute';
 import './App.css'; 
 import axios from 'axios';
 import { ToastContainer } from 'react-toastify';
@@ -25,17 +24,10 @@ function App() {
   const [adminExists, setAdminExists] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Simulated user state.
-  // In your real application, replace this with actual auth logic or context.
-  const [user, setUser] = useState({
-    isAuthenticated: false,
-    role: '', // e.g., 'admin' or 'user'
-  });
-
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exists'); // Uses proxy
+        const res = await axios.get('/admin-exists');
         setAdminExists(res.data.exists);
       } catch (error) {
         console.error('Failed to check admin status.');
@@ -44,290 +36,52 @@ function App() {
       }
     };
     checkAdmin();
-
-    // Simulate user authentication state.
-    // Replace with your actual authentication logic.
-    // For testing, if you want to test admin routes, change role to 'admin'
-    setUser({ isAuthenticated: true, role: 'user' });
   }, []);
 
   if (loading) return null;
 
   return (
     <Router>
-      <ToastContainer /> {/* Toast container for notifications */}
+      <ToastContainer />
       <Routes>
-        {/* Public Routes */}
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<LoginForm />} />
         {!adminExists && <Route path="/register" element={<RegisterForm />} />}
 
-        {/* Protected routes for any authenticated user */}
-        <Route
-          path="/upload"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              {/* Replace with your actual upload component */}
-              <div>Upload Page</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/copy-file"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Copy File Page</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/move-file"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Move File Page</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/download"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Download Page</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/files"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Files Listing</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/share"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Share File Page</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/file/rename"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Rename File Page</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/download-share"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Download Shared File Page</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/get-user-role"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Get User Role Page</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/user-role"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>User Role Info Page</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/files/all"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>All Files Listing</div>
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/upload" element={<div>Upload Page</div>} />
+        <Route path="/copy-file" element={<div>Copy File Page</div>} />
+        <Route path="/move-file" element={<div>Move File Page</div>} />
+        <Route path="/download" element={<div>Download Page</div>} />
+        <Route path="/files" element={<div>Files Listing</div>} />
+        <Route path="/share" element={<div>Share File Page</div>} />
+        <Route path="/file/rename" element={<div>Rename File Page</div>} />
+        <Route path="/download-share" element={<div>Download Shared File Page</div>} />
+        <Route path="/get-user-role" element={<div>Get User Role Page</div>} />
+        <Route path="/user-role" element={<div>User Role Info Page</div>} />
+        <Route path="/files/all" element={<div>All Files Listing</div>} />
 
-        {/* Directory Routes */}
-        <Route
-          path="/directory/create"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Create Directory</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/directory/delete"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Delete Directory</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/directory/rename"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Rename Directory</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/directory/list"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>List Directory</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/directory/copy"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Copy Directory</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/directory/tree"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Directory Tree</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/directory/move"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Move Directory</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/download-folder"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Download Folder</div>
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/directory/create" element={<div>Create Directory</div>} />
+        <Route path="/directory/delete" element={<div>Delete Directory</div>} />
+        <Route path="/directory/rename" element={<div>Rename Directory</div>} />
+        <Route path="/directory/list" element={<div>List Directory</div>} />
+        <Route path="/directory/copy" element={<div>Copy Directory</div>} />
+        <Route path="/directory/tree" element={<div>Directory Tree</div>} />
+        <Route path="/directory/move" element={<div>Move Directory</div>} />
+        <Route path="/download-folder" element={<div>Download Folder</div>} />
 
-        {/* Inventory Routes */}
-        <Route
-          path="/inventory"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Inventory Listing</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/inventory/:id"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>Inventory Detail</div>
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/inventory" element={<div>Inventory Listing</div>} />
+        <Route path="/inventory/:id" element={<div>Inventory Detail</div>} />
 
-        {/* Audit Log Route */}
-        <Route
-          path="/auditlogs"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <AuditLog />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/auditlogs" element={<AuditLog />} />
+        <Route path="/ws" element={<div>WebSocket Connection</div>} />
 
-        {/* WebSocket or Other Special Routes */}
-        <Route
-          path="/ws"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <div>WebSocket Connection</div>
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/users" element={<UserManagement />} />
+        <Route path="/admin/files" element={<FileManager />} />
+        <Route path="/admin/audit-logs" element={<AuditLog />} />
+        <Route path="/admin/settings" element={<Settings />} />
 
-        {/* Admin-specific Routes: Require "admin" role */}
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute
-              isAuthenticated={user.isAuthenticated}
-              userRole={user.role}
-              requiredRole="admin"
-            >
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/users"
-          element={
-            <ProtectedRoute
-              isAuthenticated={user.isAuthenticated}
-              userRole={user.role}
-              requiredRole="admin"
-            >
-              <UserManagement />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/files"
-          element={
-            <ProtectedRoute
-              isAuthenticated={user.isAuthenticated}
-              userRole={user.role}
-              requiredRole="admin"
-            >
-              <FileManager />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/audit-logs"
-          element={
-            <ProtectedRoute
-              isAuthenticated={user.isAuthenticated}
-              userRole={user.role}
-              requiredRole="admin"
-            >
-              <AuditLog />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/settings"
-          element={
-            <ProtectedRoute
-              isAuthenticated={user.isAuthenticated}
-              userRole={user.role}
-              requiredRole="admin"
-            >
-              <Settings />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* User Routes with Nested Routes */}
-        <Route
-          path="/user/*"
-          element={
-            <ProtectedRoute isAuthenticated={user.isAuthenticated}>
-              <UserDashboard />
-            </ProtectedRoute>
-          }
-        >
+        <Route path="/user/*" element={<UserDashboard />}>
           <Route index element={<UserDashboardHome />} />
           <Route path="home" element={<UserDashboardHome />} />
           <Route path="operation" element={<OperationDashboard />} />
