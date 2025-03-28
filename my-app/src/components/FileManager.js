@@ -40,6 +40,7 @@ function getPathSegments(p) {
   if (!p) return [];
   return p.split('/').filter(Boolean);
 }
+
 // Convert file size to human-readable format
 function formatFileSize(size) {
   if (size === 0) return '0 B';
@@ -47,8 +48,6 @@ function formatFileSize(size) {
   const i = Math.floor(Math.log(size) / Math.log(1024));
   return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
 }
-
-
 
 const FileManager = () => {
   const [items, setItems] = useState([]); // files + directories
@@ -85,18 +84,103 @@ const FileManager = () => {
   const [folderTreeData, setFolderTreeData] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState('');
 
+  // --------------------------------------------
+  // NEW: Grant/Revoke State
+  // --------------------------------------------
+  const [grantModalVisible, setGrantModalVisible] = useState(false);
+  const [revokeModalVisible, setRevokeModalVisible] = useState(false);
+  const [accessFile, setAccessFile] = useState(null);
+  const [targetUsername, setTargetUsername] = useState('');
+
+  // Track current user & admin status
+  const [currentUser, setCurrentUser] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // On mount, read username & role from localStorage
+  useEffect(() => {
+    const storedUsername = localStorage.getItem('username');
+    const storedRole = localStorage.getItem('role');
+    if (storedUsername) setCurrentUser(storedUsername);
+    if (storedRole === 'admin') setIsAdmin(true);
+  }, []);
+
   const navigate = useNavigate();
   const isRoot = currentPath === '';
 
-  const handleDownloadFolder = (folderName) => {
-    const folderPath = path.join(currentPath, folderName);
-    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
-    window.open(downloadUrl, '_blank');
+  // --------------------------------------------
+  // Grant / Revoke Handlers
+  // --------------------------------------------
+  const openGrantModal = (file) => {
+    setAccessFile(file);
+    setTargetUsername('');
+    setGrantModalVisible(true);
   };
 
-  // ---------------------------------------------
+  const openRevokeModal = (file) => {
+    setAccessFile(file);
+    setTargetUsername('');
+    setRevokeModalVisible(true);
+  };
+
+  const handleGrantAccess = async () => {
+    if (!targetUsername.trim()) {
+      message.error('Username cannot be empty');
+      return;
+    }
+    if (!accessFile || !accessFile.id) {
+      message.error('No file selected');
+      return;
+    }
+
+    try {
+      await axios.post(
+        '/grant-access',
+        {
+          file_id: accessFile.id,
+          target_user: targetUsername,
+        },
+        { withCredentials: true }
+      );
+      message.success(`Access granted to '${targetUsername}'`);
+      setGrantModalVisible(false);
+      setTargetUsername('');
+    } catch (error) {
+      console.error('Grant Access error:', error);
+      message.error(error.response?.data?.error || 'Error granting access');
+    }
+  };
+
+  const handleRevokeAccess = async () => {
+    if (!targetUsername.trim()) {
+      message.error('Username cannot be empty');
+      return;
+    }
+    if (!accessFile || !accessFile.id) {
+      message.error('No file selected');
+      return;
+    }
+
+    try {
+      await axios.post(
+        '/revoke-access',
+        {
+          file_id: accessFile.id,
+          target_user: targetUsername,
+        },
+        { withCredentials: true }
+      );
+      message.success(`Access revoked from '${targetUsername}'`);
+      setRevokeModalVisible(false);
+      setTargetUsername('');
+    } catch (error) {
+      console.error('Revoke Access error:', error);
+      message.error(error.response?.data?.error || 'Error revoking access');
+    }
+  };
+
+  // --------------------------------------------
   // Fetch items for the current folder
-  // ---------------------------------------------
+  // --------------------------------------------
   const fetchItems = async () => {
     setLoading(true);
     try {
@@ -107,18 +191,19 @@ const FileManager = () => {
       ]);
 
       // Convert files to table items
+      // Make sure the backend returns { name, size, uploader, confidential, id, etc. }
       const files = (filesRes.data || []).map((f) => ({
         name: f.name,
         type: 'file',
         size: f.size,
-        formattedSize: formatFileSize(f.size), // Add formatted size
+        formattedSize: formatFileSize(f.size),
         contentType: f.contentType,
         uploader: f.uploader,
         confidential: f.confidential,
+        id: f.id, // needed for Grant/Revoke
       }));
-      
 
-      // Directories are already in { name, type: 'directory' }
+      // Directories are already in { name, type: 'directory', etc. }
       const directories = dirsRes.data || [];
 
       setItems([...directories, ...files]);
@@ -130,9 +215,9 @@ const FileManager = () => {
     }
   };
 
-  // ---------------------------------------------
+  // --------------------------------------------
   // Fetch entire folder tree once on mount
-  // ---------------------------------------------
+  // --------------------------------------------
   const fetchFolderTree = async () => {
     try {
       const res = await axios.get('/directory/tree', { withCredentials: true });
@@ -308,6 +393,13 @@ const FileManager = () => {
     window.open(downloadUrl, '_blank');
   };
 
+  // Download folder
+  const handleDownloadFolder = (folderName) => {
+    const folderPath = path.join(currentPath, folderName);
+    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
+    window.open(downloadUrl, '_blank');
+  };
+
   // ---------------------------------------------
   // Rename
   // ---------------------------------------------
@@ -371,7 +463,7 @@ const FileManager = () => {
 
     try {
       if (copyItem.type === 'directory') {
-        // Copy folder using the updated endpoint
+        // Copy folder
         await axios.post(
           '/directory/copy',
           {
@@ -383,7 +475,7 @@ const FileManager = () => {
           { withCredentials: true }
         );
       } else {
-        // Copy file remains unchanged
+        // Copy file
         await axios.post(
           '/copy-file',
           {
@@ -498,57 +590,95 @@ const FileManager = () => {
     },
     {
       title: 'Size',
-      dataIndex: 'formattedSize', // Use formatted size
+      dataIndex: 'formattedSize',
       key: 'size',
       render: (size, record) => (record.type === 'directory' ? '--' : size),
     },
     {
       title: 'Actions',
       key: 'actions',
-      render: (record) => (
-        <Space>
-          {/* Download button for files */}
-          {record.type === 'file' && (
-            <Tooltip title="Download">
-              <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
-            </Tooltip>
-          )}
-  
-          {/* Download folder button for directories */}
-          {record.type === 'directory' && (
-            <Tooltip title="Download Folder">
+      render: (record) => {
+        // Check if the current user can manage access to a confidential file
+        const isOwner = (record.uploader === currentUser);
+        const canManageAccess =
+          record.type === 'file' &&
+          record.confidential === true &&
+          (isOwner || isAdmin);
+
+        return (
+          <Space>
+            {/* Download button for files */}
+            {record.type === 'file' && (
+              <Tooltip title="Download">
+                <Button
+                  icon={<DownloadOutlined />}
+                  onClick={() => handleDownload(record.name)}
+                />
+              </Tooltip>
+            )}
+
+            {/* Download folder button for directories */}
+            {record.type === 'directory' && (
+              <Tooltip title="Download Folder">
+                <Button
+                  icon={<DownloadOutlined />}
+                  onClick={() => handleDownloadFolder(record.name)}
+                />
+              </Tooltip>
+            )}
+
+            {/* Rename */}
+            <Tooltip title="Rename">
               <Button
-                icon={<DownloadOutlined />}
-                onClick={() => handleDownloadFolder(record.name)}
+                icon={<EditOutlined />}
+                onClick={() => {
+                  setSelectedItem(record);
+                  setRenameNewName(record.name);
+                  setRenameModalVisible(true);
+                }}
               />
             </Tooltip>
-          )}
-  
-          {/* Existing buttons: Rename, Copy, Move, Delete */}
-          <Tooltip title="Rename">
-            <Button
-              icon={<EditOutlined />}
-              onClick={() => {
-                setSelectedItem(record);
-                setRenameNewName(record.name);
-                setRenameModalVisible(true);
-              }}
-            />
-          </Tooltip>
-          <Tooltip title="Copy">
-            <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
-          </Tooltip>
-          <Tooltip title="Move">
-            <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
-          </Tooltip>
-          <Tooltip title="Delete">
-            <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
-          </Tooltip>
-        </Space>
-      ),
+
+            {/* Copy */}
+            <Tooltip title="Copy">
+              <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
+            </Tooltip>
+
+            {/* Move */}
+            <Tooltip title="Move">
+              <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
+            </Tooltip>
+
+            {/* Delete */}
+            <Tooltip title="Delete">
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDelete(record)}
+              />
+            </Tooltip>
+
+            {/* Grant/Revoke if file is confidential & user is owner or admin */}
+            {canManageAccess && (
+              <>
+                <Tooltip title="Grant Access">
+                  <Button onClick={() => openGrantModal(record)}>
+                    Grant
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Revoke Access">
+                  <Button onClick={() => openRevokeModal(record)}>
+                    Revoke
+                  </Button>
+                </Tooltip>
+              </>
+            )}
+          </Space>
+        );
+      },
     },
   ];
-  
+
   // Build breadcrumb
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
@@ -559,7 +689,11 @@ const FileManager = () => {
   segments.forEach((seg, index) => {
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {index === segments.length - 1 ? seg : <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>}
+        {index === segments.length - 1 ? seg : (
+          <a onClick={() => handleBreadcrumbClick(index)}>
+            {seg}
+          </a>
+        )}
       </Breadcrumb.Item>
     );
   });
@@ -569,26 +703,24 @@ const FileManager = () => {
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         {/* Top row: Title, Back to Dashboard, and Upload */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col xs={8} style={{ textAlign: 'left' }}>
-  <Button 
-    type="primary" 
-    icon={<ArrowLeftOutlined />} 
-    onClick={() => navigate('/admin')}
-  >
-    Back to Dashboard
-  </Button>
-</Col>
-
-  <Col xs={8} style={{ textAlign: 'center' }}>
-    <h2 style={{ margin: 0 }}>File Manager</h2>
-  </Col>
-  <Col xs={8} style={{ textAlign: 'right' }}>
-    <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
-      Upload File
-    </Button>
-  </Col>
-</Row>
-
+          <Col xs={8} style={{ textAlign: 'left' }}>
+            <Button 
+              type="primary" 
+              icon={<ArrowLeftOutlined />} 
+              onClick={() => navigate('/admin')}
+            >
+              Back to Dashboard
+            </Button>
+          </Col>
+          <Col xs={8} style={{ textAlign: 'center' }}>
+            <h2 style={{ margin: 0 }}>File Manager</h2>
+          </Col>
+          <Col xs={8} style={{ textAlign: 'right' }}>
+            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+              Upload File
+            </Button>
+          </Col>
+        </Row>
 
         {/* Breadcrumb */}
         {segments.length > 0 && (
@@ -600,7 +732,7 @@ const FileManager = () => {
         )}
 
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          {currentPath && (
+          {!isRoot && (
             <Col>
               <Button icon={<ArrowUpOutlined />} onClick={handleGoUp}>
                 Go Up
@@ -625,7 +757,7 @@ const FileManager = () => {
         <Table
           columns={columns}
           dataSource={filteredItems}
-          rowKey={(record) => record.name}
+          rowKey={(record) => record.name + record.type}
           loading={loading}
           pagination={{ pageSize: 10 }}
         />
@@ -767,6 +899,44 @@ const FileManager = () => {
                 />
               </Form.Item>
             )}
+          </Form>
+        </Modal>
+
+        {/* Grant Access Modal */}
+        <Modal
+          title="Grant Access"
+          visible={grantModalVisible}
+          onOk={handleGrantAccess}
+          onCancel={() => setGrantModalVisible(false)}
+          okText="Grant"
+        >
+          <Form layout="vertical">
+            <Form.Item label="Username to Grant" required>
+              <Input
+                value={targetUsername}
+                onChange={(e) => setTargetUsername(e.target.value)}
+                placeholder="Enter username"
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* Revoke Access Modal */}
+        <Modal
+          title="Revoke Access"
+          visible={revokeModalVisible}
+          onOk={handleRevokeAccess}
+          onCancel={() => setRevokeModalVisible(false)}
+          okText="Revoke"
+        >
+          <Form layout="vertical">
+            <Form.Item label="Username to Revoke" required>
+              <Input
+                value={targetUsername}
+                onChange={(e) => setTargetUsername(e.target.value)}
+                placeholder="Enter username"
+              />
+            </Form.Item>
           </Form>
         </Modal>
       </Content>
