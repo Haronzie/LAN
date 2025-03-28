@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS files (
     directory VARCHAR(255) NOT NULL,
     file_path VARCHAR(500),
     size BIGINT,
-    content_type VARCHAR(50),
+    content_type VARCHAR(255),
     uploader VARCHAR(50),
     confidential BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -82,3 +82,16 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_username);
 CREATE INDEX IF NOT EXISTS idx_audit_file ON audit_logs(file_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
+
+
+CREATE TABLE IF NOT EXISTS file_permissions (
+    id SERIAL PRIMARY KEY,
+    file_id INTEGER NOT NULL,
+    username VARCHAR(255) NOT NULL,
+    granted_by VARCHAR(255) NOT NULL,
+    granted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_file
+        FOREIGN KEY(file_id)
+            REFERENCES files(id)
+            ON DELETE CASCADE
+);

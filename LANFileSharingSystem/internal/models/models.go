@@ -47,6 +47,13 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+type FilePermission struct {
+	ID        int       `json:"id"`
+	FileID    int       `json:"file_id"`
+	Username  string    `json:"username"`
+	GrantedBy string    `json:"granted_by"`
+	GrantedAt time.Time `json:"granted_at"`
+}
 type AuditLog struct {
 	ID               int       `json:"id"`
 	UserUsername     *string   `json:"user_username"`
@@ -479,15 +486,14 @@ func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 	if dir == "" {
 		// Root: files with no slash at all
 		rows, err = app.DB.Query(`
-            SELECT file_name, file_path, size, content_type, uploader
+            SELECT id, file_name, file_path, size, content_type, uploader, confidential
             FROM files
             WHERE file_path NOT LIKE '%/%'
         `)
 	} else {
-		// Only immediate children of dir (e.g. "Operation/file.jpg"),
-		// not subfolders (e.g. "Operation/Report/file.jpg").
+		// Only immediate children of dir.
 		rows, err = app.DB.Query(`
-            SELECT file_name, file_path, size, content_type, uploader
+            SELECT id, file_name, file_path, size, content_type, uploader, confidential
             FROM files
             WHERE file_path LIKE $1 || '/%' 
               AND file_path NOT LIKE $1 || '/%/%'
@@ -502,7 +508,7 @@ func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 	var results []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		if err := rows.Scan(&f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader); err != nil {
+		if err := rows.Scan(&f.ID, &f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader, &f.Confidential); err != nil {
 			return nil, err
 		}
 		results = append(results, f)
@@ -958,4 +964,48 @@ func (app *App) ListAllFiles() ([]FileRecord, error) {
 		files = append(files, file)
 	}
 	return files, nil
+}
+
+// GrantFileAccess inserts a permission record for a confidential file.
+func (app *App) GrantFileAccess(fileID int, username, grantedBy string) error {
+	_, err := app.DB.Exec(`
+		INSERT INTO file_permissions (file_id, username, granted_by)
+		VALUES ($1, $2, $3)
+	`, fileID, username, grantedBy)
+	return err
+}
+
+// RevokeFileAccess removes a permission record for a confidential file.
+func (app *App) RevokeFileAccess(fileID int, username string) error {
+	_, err := app.DB.Exec(`
+		DELETE FROM file_permissions
+		WHERE file_id = $1 AND username = $2
+	`, fileID, username)
+	return err
+}
+
+// HasFileAccess checks if a user has been granted access to a confidential file.
+func (app *App) HasFileAccess(fileID int, username string) (bool, error) {
+	var count int
+	err := app.DB.QueryRow(`
+		SELECT COUNT(*) FROM file_permissions
+		WHERE file_id = $1 AND username = $2
+	`, fileID, username).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// GetFileRecordByID retrieves a file record by its ID.
+func (app *App) GetFileRecordByID(fileID int) (FileRecord, error) {
+	row := app.DB.QueryRow(`
+        SELECT id, file_name, directory, file_path, size, content_type, uploader, confidential, version_number
+        FROM files
+        WHERE id = $1
+    `, fileID)
+
+	var fr FileRecord
+	err := row.Scan(&fr.ID, &fr.FileName, &fr.Directory, &fr.FilePath, &fr.Size, &fr.ContentType, &fr.Uploader, &fr.Confidential, &fr.VersionNumber)
+	return fr, err
 }
