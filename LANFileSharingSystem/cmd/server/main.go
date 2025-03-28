@@ -39,6 +39,13 @@ LOGGING STANDARDS:
 5. To integrate with centralized logging (Splunk, ELK, etc.), set LOG_FORMAT=json
    - This switches to logrus.JSONFormatter for structured logs.
 6. Always wrap errors with context (using fmt.Errorf and %w) to preserve the original error.
+7. Use uniform error messages with unique error codes for easier troubleshooting:
+   - DB_CONN_ERR: Database connection errors.
+   - DB_PING_ERR: Database ping failures.
+   - MIG_INIT_ERR: Migration initialization failures.
+   - MIG_UP_ERR: Migration execution failures.
+   - FOLDER_CREATE_ERR: File system folder creation errors.
+   - SERVER_ERR: Server startup errors.
 */
 
 var logger *logrus.Logger
@@ -127,74 +134,107 @@ func main() {
 	// Initialize the structured logger.
 	initLogger()
 
+	// Log the start of main function execution.
+	logger.WithField("function", "main").Debug("Starting main function execution")
+
 	// Load application configuration.
 	cfg := config.LoadConfig()
-	logger.Debug("Loaded configuration from environment or default file")
+	logger.WithField("function", "main").Debug("Loaded configuration from environment or default file")
 
 	// Connect to the database.
+	logger.WithField("function", "main").Debug("Attempting to open DB connection")
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
+		// DB_CONN_ERR: Database connection errors.
 		wrappedErr := fmt.Errorf("failed to open DB connection (database: %s): %w", cfg.DatabaseURL, err)
-		logger.WithField("database", cfg.DatabaseURL).WithError(wrappedErr).Error("Database connection error")
-		logrus.Exit(1) // or os.Exit(1)
+		logger.WithField("function", "main").
+			WithField("errorCode", "DB_CONN_ERR").
+			WithField("database", cfg.DatabaseURL).
+			WithError(wrappedErr).
+			Error("Database connection error")
+		logrus.Exit(1)
 	}
 	defer db.Close()
 
-	// Debug log: Attempting to ping the DB
-	logger.Debug("Attempting to ping the database...")
+	// Debug log: Attempting to ping the DB.
+	logger.WithField("function", "main").Debug("Attempting to ping the database...")
 	if err := db.Ping(); err != nil {
+		// DB_PING_ERR: Database ping failures.
 		wrappedErr := fmt.Errorf("failed to ping DB (database: %s): %w", cfg.DatabaseURL, err)
-		logger.WithField("database", cfg.DatabaseURL).WithError(wrappedErr).Error("Database ping error")
+		logger.WithField("function", "main").
+			WithField("errorCode", "DB_PING_ERR").
+			WithField("database", cfg.DatabaseURL).
+			WithError(wrappedErr).
+			Error("Database ping error")
 		logrus.Exit(1)
 	}
-	logger.WithField("database", cfg.DatabaseURL).Info("Successfully connected to database")
+	logger.WithField("function", "main").
+		WithField("database", cfg.DatabaseURL).
+		Info("Successfully connected to database")
 
 	// AUTOMATICALLY RUN MIGRATIONS HERE
 	migrationsPath := "file://../../internal/migrations"
-	logger.Debug("Initializing migrations...")
+	logger.WithField("function", "main").Debug("Initializing migrations...")
 	m, err := migrate.New(migrationsPath, cfg.DatabaseURL)
 	if err != nil {
+		// MIG_INIT_ERR: Migration initialization failures.
 		wrappedErr := fmt.Errorf("migration initialization error (path: %s): %w", migrationsPath, err)
-		logger.WithField("migrationsPath", migrationsPath).WithError(wrappedErr).Error("Migration initialization failed")
+		logger.WithField("function", "main").
+			WithField("errorCode", "MIG_INIT_ERR").
+			WithField("migrationsPath", migrationsPath).
+			WithError(wrappedErr).
+			Error("Migration initialization failed")
 		logrus.Exit(1)
 	}
-	logger.Debug("Running migrations...")
+	logger.WithField("function", "main").Debug("Running migrations...")
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		// MIG_UP_ERR: Migration execution failures.
 		wrappedErr := fmt.Errorf("migration error (path: %s): %w", migrationsPath, err)
-		logger.WithField("migrationsPath", migrationsPath).WithError(wrappedErr).Error("Migration up failed")
+		logger.WithField("function", "main").
+			WithField("errorCode", "MIG_UP_ERR").
+			WithField("migrationsPath", migrationsPath).
+			WithError(wrappedErr).
+			Error("Migration up failed")
 		logrus.Exit(1)
 	}
-	logger.WithField("migrationsPath", migrationsPath).Info("Migrations applied successfully (or no changes needed)")
+	logger.WithField("function", "main").
+		WithField("migrationsPath", migrationsPath).
+		Info("Migrations applied successfully (or no changes needed)")
 
 	// Initialize session store using a secret key from configuration.
-	logger.Debug("Initializing session store...")
+	logger.WithField("function", "main").Debug("Initializing session store...")
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
 
 	// Initialize the application model (shared context).
-	logger.Debug("Creating new application context (App)...")
+	logger.WithField("function", "main").Debug("Creating new application context (App)...")
 	app := models.NewApp(db, store)
 
 	// Initialize the notification hub and attach it to your app context.
-	logger.Debug("Initializing WebSocket hub...")
+	logger.WithField("function", "main").Debug("Initializing WebSocket hub...")
 	hub := ws.NewHub()
 	go hub.Run()
 	app.NotificationHub = hub
 
 	// Ensure the 'uploads' folder exists.
-	logger.Debug("Ensuring 'uploads' folder exists...")
+	logger.WithField("function", "main").Debug("Ensuring 'uploads' folder exists...")
 	if err := os.MkdirAll("uploads", 0755); err != nil {
+		// FOLDER_CREATE_ERR: File system folder creation errors.
 		wrappedErr := fmt.Errorf("error creating 'uploads' folder: %w", err)
-		logger.WithField("folder", "uploads").WithError(wrappedErr).Error("Folder creation error")
+		logger.WithField("function", "main").
+			WithField("errorCode", "FOLDER_CREATE_ERR").
+			WithField("folder", "uploads").
+			WithError(wrappedErr).
+			Error("Folder creation error")
 		logrus.Exit(1)
 	}
 
 	// Create a new router.
-	logger.Debug("Creating new Gorilla mux router...")
+	logger.WithField("function", "main").Debug("Creating new Gorilla mux router...")
 	router := mux.NewRouter()
-	router.Use(middleware.RateLimitMiddleware)
+	// Removed the first RateLimitMiddleware call here to avoid duplication.
 
 	// Initialize controllers with the application context.
-	logger.Debug("Initializing controllers...")
+	logger.WithField("function", "main").Debug("Initializing controllers...")
 	authController := controllers.NewAuthController(app)
 	fileController := controllers.NewFileController(app)
 	userController := controllers.NewUserController(app)
@@ -203,7 +243,7 @@ func main() {
 	inventoryController := controllers.NewInventoryController(app)
 
 	// Define your routes...
-	logger.Debug("Defining application routes...")
+	logger.WithField("function", "main").Debug("Defining application routes...")
 	router.HandleFunc("/register", authController.Register).Methods("POST")
 	router.HandleFunc("/login", authController.Login).Methods("POST")
 	router.HandleFunc("/forgot-password", authController.ForgotPassword).Methods("POST")
@@ -249,16 +289,18 @@ func main() {
 
 	// WebSocket route
 	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		// Attach correlation ID to logs inside the handler, if needed
+		// Attach correlation ID to logs inside the handler, if needed.
 		corrID := getCorrelationID(r)
-		logger.WithField("correlationID", corrID).Debug("Upgrading to WebSocket")
+		logger.WithField("function", "WebSocketHandler").
+			WithField("correlationID", corrID).
+			Debug("Upgrading to WebSocket")
 		ws.ServeWs(hub, w, r)
 	}).Methods("GET")
 
 	// Add correlation ID middleware before other middlewares.
 	router.Use(correlationIDMiddleware)
 
-	// Add any other middleware (e.g., RateLimit).
+	// Add rate limit middleware (applied only once now).
 	router.Use(middleware.RateLimitMiddleware)
 
 	// Wrap your router with CORS middleware.
@@ -269,10 +311,17 @@ func main() {
 	)(router)
 
 	// Start the HTTP server.
-	logger.WithField("port", cfg.Port).Info("Starting server")
+	logger.WithField("function", "main").
+		WithField("port", cfg.Port).
+		Info("Starting server")
 	if err := http.ListenAndServe(":"+cfg.Port, corsRouter); err != nil {
+		// SERVER_ERR: Server startup errors.
 		wrappedErr := fmt.Errorf("server failed on port %s: %w", cfg.Port, err)
-		logger.WithField("port", cfg.Port).WithError(wrappedErr).Error("Server error")
+		logger.WithField("function", "main").
+			WithField("errorCode", "SERVER_ERR").
+			WithField("port", cfg.Port).
+			WithError(wrappedErr).
+			Error("Server error")
 		logrus.Exit(1)
 	}
 }

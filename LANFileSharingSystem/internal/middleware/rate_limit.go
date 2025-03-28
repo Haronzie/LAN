@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
 )
 
@@ -61,7 +61,7 @@ func RateLimitMiddleware(next http.Handler) http.Handler {
 		// Reserve a token
 		reservation := limiter.ReserveN(time.Now(), 1)
 		if !reservation.OK() {
-			log.Printf("Rate limit exceeded for IP: %s", ip)
+			logrus.WithField("ip", ip).Warn("Rate limit exceeded")
 			setRateLimitHeaders(w, limiter, 0, 0)
 			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 			return
@@ -71,7 +71,7 @@ func RateLimitMiddleware(next http.Handler) http.Handler {
 		delay := reservation.Delay()
 		if delay > 0 {
 			reservation.Cancel()
-			log.Printf("Rate limit exceeded for IP: %s", ip)
+			logrus.WithField("ip", ip).Warn("Rate limit exceeded due to delay")
 			resetTime := int(delay.Seconds())
 			setRateLimitHeaders(w, limiter, 0, resetTime)
 			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
