@@ -729,13 +729,6 @@ func (fc *FileController) DownloadShare(w http.ResponseWriter, r *http.Request) 
 	io.Copy(w, f)
 }
 
-// MoveFileRequest represents the payload for moving a file.
-type MoveFileRequest struct {
-	Filename  string `json:"filename"`
-	OldParent string `json:"old_parent"`
-	NewParent string `json:"new_parent"`
-}
-
 // MoveFile handles moving a file from one folder to another.
 func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	// Only allow POST requests
@@ -752,11 +745,7 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Expected JSON body: {"filename": "example.txt", "old_parent": "OldFolder", "new_parent": "NewFolder"}
-	var req struct {
-		Filename  string `json:"filename"`
-		OldParent string `json:"old_parent"`
-		NewParent string `json:"new_parent"`
-	}
+	var req models.MoveFileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return

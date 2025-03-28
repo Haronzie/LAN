@@ -191,6 +191,7 @@ func main() {
 	// Create a new router.
 	logger.Debug("Creating new Gorilla mux router...")
 	router := mux.NewRouter()
+	router.Use(middleware.RateLimitMiddleware)
 
 	// Initialize controllers with the application context.
 	logger.Debug("Initializing controllers...")

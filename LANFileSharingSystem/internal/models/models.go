@@ -57,6 +57,13 @@ type AuditLog struct {
 	CreatedAt        time.Time `json:"created_at"`
 }
 
+// MoveFileRequest represents the payload for moving a file.
+type MoveFileRequest struct {
+	Filename  string `json:"filename"`
+	OldParent string `json:"old_parent"`
+	NewParent string `json:"new_parent"`
+}
+
 // FileRecord represents a file stored in the system.
 type FileRecord struct {
 	ID            int    `json:"id"`
