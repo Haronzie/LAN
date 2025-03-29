@@ -332,33 +332,49 @@ const UserManagement = () => {
 
       {/* Update User Modal */}
       <Modal
-        open={isUpdateUserModalOpen}
-        title="Update User"
-        onCancel={() => setIsUpdateUserModalOpen(false)}
-        onOk={handleUpdateUser}
-        okText="Update"
-        destroyOnClose
-      >
-        <Form form={updateForm} layout="vertical">
-          <Form.Item name="old_username" label="Old Username">
-            <Input disabled />
-          </Form.Item>
-          <Form.Item
-            name="new_username"
-            label="New Username"
-            rules={[{ required: true, message: 'Please input the new username!' }]}
-          >
-            <Input placeholder="Enter new username" />
-          </Form.Item>
-          <Form.Item
-            name="new_password"
-            label="New Password"
-            rules={[{ required: true, message: 'Please input the new password!' }]}
-          >
-            <Input.Password placeholder="Enter new password" />
-          </Form.Item>
-        </Form>
-      </Modal>
+  open={isUpdateUserModalOpen}
+  title="Update User"
+  onCancel={() => setIsUpdateUserModalOpen(false)}
+  onOk={handleUpdateUser}
+  okText="Update"
+  destroyOnClose
+>
+  <Form form={updateForm} layout="vertical">
+    <Form.Item name="old_username" label="Old Username">
+      <Input disabled />
+    </Form.Item>
+    <Form.Item
+      name="new_username"
+      label="New Username"
+      rules={[{ required: true, message: 'Please input the new username!' }]}
+    >
+      <Input placeholder="Enter new username" />
+    </Form.Item>
+    <Form.Item
+      name="new_password"
+      label={
+        <span>
+          New Password&nbsp;
+          <Popover content={passwordPolicyContent} title="Password Requirements">
+            <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'pointer' }} />
+          </Popover>
+        </span>
+      }
+      rules={[
+        { required: true, message: 'Please input the new password!' },
+        {
+          pattern: new RegExp(
+            "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,}$"
+          ),
+          message:
+            'Password must be at least 8 characters long, include uppercase, lowercase, a number, and a special character'
+        }
+      ]}
+    >
+      <Input.Password placeholder="Enter new password" />
+    </Form.Item>
+  </Form>
+</Modal>
     </div>
   );
 };
