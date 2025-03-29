@@ -1,13 +1,16 @@
 package models
 
 import (
+	"archive/zip"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"LANFileSharingSystem/internal/ws"
@@ -1033,4 +1036,33 @@ func (app *App) ListFilePermissions(fileID int) ([]FilePermission, error) {
 		perms = append(perms, p)
 	}
 	return perms, nil
+}
+func AddFileToArchive(archive *zip.Writer, filePath, nameInZip string) error {
+	fileToZip, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer fileToZip.Close()
+
+	// Get file info for header.
+	info, err := fileToZip.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+	// Use the provided name instead of the full path.
+	header.Name = nameInZip
+	header.Method = zip.Deflate
+
+	writer, err := archive.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(writer, fileToZip)
+	return err
 }

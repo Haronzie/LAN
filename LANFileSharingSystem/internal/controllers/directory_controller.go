@@ -698,11 +698,20 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 
 // DownloadFolder handles zipping and downloading a folder.
 func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Request) {
+	// Only allow GET requests.
 	if r.Method != http.MethodGet {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
 
+	// Authenticate the user.
+	user, err := dc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Retrieve and validate the 'directory' query parameter.
 	folder := strings.TrimSpace(r.URL.Query().Get("directory"))
 	if folder == "" {
 		models.RespondError(w, http.StatusBadRequest, "Missing directory parameter")
@@ -716,6 +725,7 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Create a temporary file for the ZIP archive.
 	zipFile, err := os.CreateTemp("", "folder-*.zip")
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Could not create temporary file")
@@ -725,48 +735,88 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 	defer zipFile.Close()
 
 	zipWriter := zip.NewWriter(zipFile)
-	err = filepath.Walk(absFolder, func(filePath string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+
+	// Walk through the folder recursively.
+	err = filepath.Walk(absFolder, func(filePath string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
+
+		// Compute the relative path within the folder.
 		relPath, err := filepath.Rel(absFolder, filePath)
 		if err != nil {
 			return err
 		}
 		relPath = filepath.ToSlash(relPath)
+
+		// Create a ZIP header.
 		header, err := zip.FileInfoHeader(info)
 		if err != nil {
 			return err
 		}
 		header.Name = relPath
 		if info.IsDir() {
+			// Ensure directory names end with "/".
 			header.Name += "/"
 		} else {
 			header.Method = zip.Deflate
 		}
 
-		writer, err := zipWriter.CreateHeader(header)
-		if err != nil {
-			return err
-		}
+		// If this is a file, apply access filtering.
 		if !info.IsDir() {
-			file, err := os.Open(filePath)
-			if err != nil {
-				return err
+			includeFile := true
+			// Build the file record path as stored in the DB.
+			fileRecordPath := filepath.ToSlash(filepath.Join(folder, relPath))
+			fr, err := dc.App.GetFileRecordByPath(fileRecordPath)
+			if err == nil {
+				if fr.Confidential {
+					if fr.Uploader != user.Username && user.Role != "admin" {
+						allowed, perr := dc.App.HasFileAccess(fr.ID, user.Username)
+						if perr != nil || !allowed {
+							includeFile = false
+						}
+					}
+				}
 			}
-			defer file.Close()
-			if _, err := io.Copy(writer, file); err != nil {
-				return err
+			if includeFile {
+				// Use the helper function to add the file.
+				if err := models.AddFileToArchive(zipWriter, filePath, relPath); err != nil {
+					log.Printf("Error adding file %s to archive: %v", filePath, err)
+					return err
+				}
+			} else {
+				// Add a placeholder file indicating restricted access.
+				placeholderName := relPath + ".restricted.txt"
+				placeholderContent := "This file is confidential and you are not authorized to download it."
+				writer, err := zipWriter.Create(placeholderName)
+				if err != nil {
+					log.Printf("Error creating placeholder for %s: %v", relPath, err)
+					return err
+				}
+				if _, err := writer.Write([]byte(placeholderContent)); err != nil {
+					log.Printf("Error writing placeholder content for %s: %v", relPath, err)
+					return err
+				}
 			}
+			return nil
 		}
-		return nil
+
+		// For directories, simply create the header.
+		_, err = zipWriter.CreateHeader(header)
+		return err
 	})
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error zipping folder: "+err.Error())
 		return
 	}
-	zipWriter.Close()
 
+	// Finalize the ZIP archive.
+	if err := zipWriter.Close(); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error finalizing zip archive")
+		return
+	}
+
+	// Open the ZIP file for reading.
 	zipFileForRead, err := os.Open(zipFile.Name())
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error opening zipped folder")
@@ -774,6 +824,7 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 	}
 	defer zipFileForRead.Close()
 
+	// Set response headers and stream the ZIP archive.
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", info.Name()))
 	if _, err := io.Copy(w, zipFileForRead); err != nil {
