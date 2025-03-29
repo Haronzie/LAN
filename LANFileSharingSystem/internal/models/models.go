@@ -922,10 +922,10 @@ func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 	return logs, nil
 }
 
-func (app *App) LogAudit(username string, fileID int, action, details string) {
+func (app *App) LogAudit(username string, fileID *int, action, details string) {
 	var nullableFileID sql.NullInt64
-	if fileID > 0 {
-		nullableFileID = sql.NullInt64{Int64: int64(fileID), Valid: true}
+	if fileID != nil {
+		nullableFileID = sql.NullInt64{Int64: int64(*fileID), Valid: true}
 	} else {
 		nullableFileID = sql.NullInt64{Valid: false}
 	}
@@ -936,7 +936,7 @@ func (app *App) LogAudit(username string, fileID int, action, details string) {
 	`,
 		username,       // user_username
 		username,       // username_at_action (the snapshot)
-		nullableFileID, // file_id
+		nullableFileID, // file_id (nil if no file applies)
 		action,
 		details,
 	)

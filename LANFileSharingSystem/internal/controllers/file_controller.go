@@ -149,8 +149,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		fc.App.LogActivity(fmt.Sprintf("User '%s' re-uploaded file '%s' (version %d).", user.Username, rawFileName, newVer))
 		action := "REUPLOAD"
 		details := fmt.Sprintf("File '%s' re-uploaded as version %d", rawFileName, newVer)
-		fc.App.LogAudit(user.Username, fileID, action, details)
-
+		fc.App.LogAudit(user.Username, &fileID, action, details)
 		notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, newVer))
 		if fc.App.NotificationHub != nil {
 			fc.App.NotificationHub.Broadcast(notification)
@@ -188,7 +187,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 
 	action := "UPLOAD"
 	details := fmt.Sprintf("File '%s' uploaded (version 1)", rawFileName)
-	fc.App.LogAudit(user.Username, fileID, action, details)
+	fc.App.LogAudit(user.Username, &fileID, action, details)
 	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded new file '%s' (version 1).", user.Username, rawFileName))
 
 	notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, 1))
@@ -268,7 +267,7 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 		// ✅ Log the audit event as a RENAME action (not UPLOAD)
 		action := "RENAME"
 		details := fmt.Sprintf("File renamed from '%s' to '%s'", req.OldFilename, req.NewFilename)
-		fc.App.LogAudit(user.Username, fileID, action, details)
+		fc.App.LogAudit(user.Username, &fileID, action, details)
 		log.Println("Audit log added:", details)
 	} else {
 		log.Println("Error: File ID not found for path", newRelativePath)
@@ -314,7 +313,7 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ✅ Log the audit entry BEFORE deletion
-	fc.App.LogAudit(user.Username, fr.ID, "DELETE", fmt.Sprintf("File '%s' deleted", fr.FileName))
+	fc.App.LogAudit(user.Username, &fr.ID, "DELETE", fmt.Sprintf("File '%s' deleted", fr.FileName))
 
 	fullPath := filepath.Join("uploads", fr.FilePath)
 	if removeErr := os.Remove(fullPath); removeErr != nil && !os.IsNotExist(removeErr) {
@@ -585,7 +584,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		// ✅ Log the audit event for copying with action "COPY"
 		action := "COPY"
 		details := fmt.Sprintf("File copied from '%s' to '%s'", req.SourceFile, newRelativePath)
-		fc.App.LogAudit(user.Username, newFileID, action, details)
+		fc.App.LogAudit(user.Username, &newFileID, action, details)
 		log.Println("Audit log added:", details)
 	} else {
 		log.Println("Error: File ID not found for path", newRelativePath)
@@ -855,7 +854,7 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	// Log audit activity for the move.
 	action := "MOVE"
 	details := fmt.Sprintf("File '%s' moved from '%s' to '%s'", fr.FileName, req.OldParent, req.NewParent)
-	fc.App.LogAudit(user.Username, fr.ID, action, details)
+	fc.App.LogAudit(user.Username, &fr.ID, action, details)
 	fc.App.LogActivity(fmt.Sprintf("User '%s' moved file '%s' from '%s' to '%s'", user.Username, fr.FileName, req.OldParent, req.NewParent))
 
 	// Respond with success.

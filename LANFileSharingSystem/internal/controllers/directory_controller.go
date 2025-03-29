@@ -822,11 +822,9 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// ===== Audit Log: record the folder download event =====
-	// Adjust to match your existing LogAudit or LogActivity signature.
 	dc.App.LogAudit(
 		user.Username,
-		0, // fileID can be nil if this is a folder-level action
+		nil, // fileID is nil because this is a folder-level event
 		"DOWNLOAD_FOLDER",
 		fmt.Sprintf("User '%s' downloaded folder '%s'. Allowed files: %d, filtered: %d",
 			user.Username, folder, allowedCount, filteredCount),
