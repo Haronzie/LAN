@@ -736,6 +736,9 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 
 	zipWriter := zip.NewWriter(zipFile)
 
+	// Keep track of how many files were allowed vs. filtered.
+	var allowedCount, filteredCount int
+
 	// Walk through the folder recursively.
 	err = filepath.Walk(absFolder, func(filePath string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -762,13 +765,14 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 			header.Method = zip.Deflate
 		}
 
-		// If this is a file, apply access filtering.
+		// Only apply confidential checks if it's a file (not a directory).
 		if !info.IsDir() {
 			includeFile := true
 			// Build the file record path as stored in the DB.
 			fileRecordPath := filepath.ToSlash(filepath.Join(folder, relPath))
 			fr, err := dc.App.GetFileRecordByPath(fileRecordPath)
 			if err == nil {
+				// If the file is confidential, check if the user is permitted.
 				if fr.Confidential {
 					if fr.Uploader != user.Username && user.Role != "admin" {
 						allowed, perr := dc.App.HasFileAccess(fr.ID, user.Username)
@@ -779,12 +783,14 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 				}
 			}
 			if includeFile {
-				// Use the helper function to add the file.
+				allowedCount++
+				// Use a helper function (models.AddFileToArchive) or inline logic:
 				if err := models.AddFileToArchive(zipWriter, filePath, relPath); err != nil {
 					log.Printf("Error adding file %s to archive: %v", filePath, err)
 					return err
 				}
 			} else {
+				filteredCount++
 				// Add a placeholder file indicating restricted access.
 				placeholderName := relPath + ".restricted.txt"
 				placeholderContent := "This file is confidential and you are not authorized to download it."
@@ -801,7 +807,7 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 			return nil
 		}
 
-		// For directories, simply create the header.
+		// For directories, just create the header (no file copy).
 		_, err = zipWriter.CreateHeader(header)
 		return err
 	})
@@ -815,6 +821,16 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 		models.RespondError(w, http.StatusInternalServerError, "Error finalizing zip archive")
 		return
 	}
+
+	// ===== Audit Log: record the folder download event =====
+	// Adjust to match your existing LogAudit or LogActivity signature.
+	dc.App.LogAudit(
+		user.Username,
+		0, // fileID can be nil if this is a folder-level action
+		"DOWNLOAD_FOLDER",
+		fmt.Sprintf("User '%s' downloaded folder '%s'. Allowed files: %d, filtered: %d",
+			user.Username, folder, allowedCount, filteredCount),
+	)
 
 	// Open the ZIP file for reading.
 	zipFileForRead, err := os.Open(zipFile.Name())
