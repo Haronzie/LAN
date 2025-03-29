@@ -27,7 +27,8 @@ import {
   EditOutlined,
   CopyOutlined,
   SwapOutlined,
-  ArrowLeftOutlined
+  ArrowLeftOutlined,
+  LockOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -49,21 +50,24 @@ function formatFileSize(size) {
 const TrainingDashboard = () => {
   const navigate = useNavigate();
 
-  // ----------------------------------
-  // Current user from localStorage
-  // ----------------------------------
+  // Current user and role states
   const [currentUser, setCurrentUser] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+
   useEffect(() => {
     const storedUsername = localStorage.getItem('username');
+    const storedRole = localStorage.getItem('role');
     if (storedUsername) {
       setCurrentUser(storedUsername);
     }
-    // Fetch the folder tree for the training container
+    if (storedRole === 'admin') {
+      setIsAdmin(true);
+    }
     fetchDirectories();
   }, []);
 
   // ----------------------------------
-  // States: path, items, loading, search
+  // States: path, items, loading, search, etc.
   // ----------------------------------
   const [currentPath, setCurrentPath] = useState('');
   const [items, setItems] = useState([]);
@@ -89,18 +93,31 @@ const TrainingDashboard = () => {
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
-  // Inside your TrainingDashboard component:
-const [directories, setDirectories] = useState([]);
 
+  // Directory tree for moving files/folders
+  const [directories, setDirectories] = useState([]);
 
-  // ----------------------------------
-  // NEW: Modal-Based Upload States
-  // ----------------------------------
+  // Upload Modal states
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
   const [uploadConfidential, setUploadConfidential] = useState(false);
-  const [moveConfidential, setMoveConfidential] = useState(false);
 
+  // ----------------------------------
+  // Confidential file access check
+  // ----------------------------------
+  const checkFileAccess = (record) => {
+    if (record.type !== 'file') return true;
+    return (
+      !record.confidential ||
+      record.uploader === currentUser ||
+      isAdmin ||
+      (record.authorizedUsers && record.authorizedUsers.includes(currentUser))
+    );
+  };
+
+  // ----------------------------------
+  // Fetch Directories
+  // ----------------------------------
   const fetchDirectories = async () => {
     try {
       const res = await axios.get('/directory/tree?container=training', { withCredentials: true });
@@ -109,7 +126,7 @@ const [directories, setDirectories] = useState([]);
       console.error('Error fetching directories:', error);
     }
   };
-  
+
   // ----------------------------------
   // Fetch items (directories + files)
   // ----------------------------------
@@ -122,21 +139,24 @@ const [directories, setDirectories] = useState([]);
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
         withCredentials: true
       });
-      const directories = Array.isArray(dirRes.data) ? dirRes.data : [];
+      const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
 
-      // 2) Fetch files
+      // 2) Fetch files (including confidential flag and authorizedUsers if available)
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true
       });
       const fetchedFiles = (fileRes.data || []).map((f) => ({
+        id: f.id,
         name: f.name,
         type: 'file',
         size: f.size,
         formattedSize: formatFileSize(f.size),
-        uploader: f.uploader
+        uploader: f.uploader,
+        confidential: f.confidential,
+        authorizedUsers: f.permissions ? f.permissions.map(p => p.username) : []
       }));
 
-      setItems([...directories, ...fetchedFiles]);
+      setItems([...fetchedDirs, ...fetchedFiles]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
       message.error(error.response?.data?.error || 'Error fetching directory contents');
@@ -151,7 +171,7 @@ const [directories, setDirectories] = useState([]);
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // Filter by Search
+  // Filter by search term
   const filteredItems = items.filter((item) =>
     (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -210,17 +230,13 @@ const [directories, setDirectories] = useState([]);
     const isLast = index === segments.length - 1;
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {isLast ? seg : (
-          <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
-            {seg}
-          </a>
-        )}
+        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
       </Breadcrumb.Item>
     );
   });
 
   // ----------------------------------
-  // NEW: Modal-Based Upload Approach
+  // Upload Modal
   // ----------------------------------
   const handleOpenUploadModal = () => {
     if (!currentPath) {
@@ -241,7 +257,6 @@ const [directories, setDirectories] = useState([]);
       message.error('Please select or create a folder first');
       return;
     }
-
     const formData = new FormData();
     formData.append('file', uploadingFile);
     formData.append('directory', currentPath);
@@ -448,14 +463,8 @@ const [directories, setDirectories] = useState([]);
     }
     setMoveItem(record);
     setMoveDestination(currentPath);
-    if (record.type === 'file' && record.confidential !== undefined) {
-      setMoveConfidential(record.confidential);
-    } else {
-      setMoveConfidential(false);
-    }
     setMoveModalVisible(true);
   };
-  
 
   const handleMoveConfirm = async () => {
     if (!moveDestination.trim()) {
@@ -485,8 +494,7 @@ const [directories, setDirectories] = useState([]);
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
-            container: 'training',
-            confidential: moveConfidential  // now included
+            container: 'training'
           },
           { withCredentials: true }
         );
@@ -501,10 +509,9 @@ const [directories, setDirectories] = useState([]);
       message.error(error.response?.data?.error || 'Error moving item');
     }
   };
-  
 
   // ----------------------------------
-  // Table Columns
+  // Table Columns (with Confidential File Check)
   // ----------------------------------
   const columns = [
     {
@@ -520,6 +527,17 @@ const [directories, setDirectories] = useState([]);
             </Space>
           );
         }
+        if (record.type === 'file') {
+          const hasAccess = checkFileAccess(record);
+          if (!hasAccess) {
+            return (
+              <Space>
+                <LockOutlined style={{ color: 'red' }} />
+                <span>{name} (Locked)</span>
+              </Space>
+            );
+          }
+        }
         return name;
       }
     },
@@ -533,7 +551,7 @@ const [directories, setDirectories] = useState([]);
       title: 'Size',
       dataIndex: 'formattedSize',
       key: 'size',
-      render: (size, record) => (record.type === 'directory' ? '--' : size),
+      render: (size, record) => (record.type === 'directory' ? '--' : size)
     },
     {
       title: 'Actions',
@@ -543,46 +561,38 @@ const [directories, setDirectories] = useState([]);
           record.type === 'directory'
             ? record.created_by === currentUser
             : record.uploader === currentUser;
-
+        const hasAccess = record.type === 'file' ? checkFileAccess(record) : true;
         return (
           <Space>
-            {/* Download for files */}
-            {record.type === 'file' && (
-              <Tooltip title="Download">
-                <Button
-                  icon={<DownloadOutlined />}
-                  onClick={() => handleDownload(record.name)}
-                />
-              </Tooltip>
-            )}
-            {/* If directory not owned => Download Folder */}
-            {record.type === 'directory' && !isOwner && (
+            {/* Download action for files */}
+            {record.type === 'file' &&
+              (hasAccess ? (
+                <Tooltip title="Download">
+                  <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
+                </Tooltip>
+              ) : (
+                <Tooltip title="Access Denied">
+                  <Button icon={<LockOutlined />} disabled />
+                </Tooltip>
+              ))}
+            {/* Download action for folders */}
+            {record.type === 'directory' && (
               <Tooltip title="Download Folder">
-                <Button
-                  icon={<DownloadOutlined />}
-                  onClick={() => handleDownloadFolder(record.name)}
-                />
+                <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
-            {/* Copy is available to all */}
+            {/* Copy action available for all */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
-
-            {/* Rename, delete, move only if owner */}
+            {/* Rename, Delete, and Move available only if owner */}
             {isOwner && (
               <>
                 <Tooltip title="Rename">
                   <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
                 </Tooltip>
-                <Tooltip
-                  title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}
-                >
-                  <Button
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => handleDelete(record)}
-                  />
+                <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
+                  <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
                 </Tooltip>
                 <Tooltip title="Move">
                   <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
@@ -601,26 +611,15 @@ const [directories, setDirectories] = useState([]);
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <Button
-              type="primary"
-              icon={<ArrowLeftOutlined />}
-              onClick={() => navigate('/user')}
-            >
+            <Button type="primary" icon={<ArrowLeftOutlined />} onClick={() => navigate('/user')}>
               Back to Dashboard
             </Button>
           </Col>
-
           <Col>
             <h2 style={{ margin: 0 }}>Training Dashboard</h2>
           </Col>
-
-          {/* Remove the old "Upload (Existing)" code, keep only the modal-based approach */}
           <Col>
-            <Button
-              type="primary"
-              icon={<UploadOutlined />}
-              onClick={handleOpenUploadModal}
-            >
+            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
               Upload File
             </Button>
           </Col>
@@ -649,28 +648,13 @@ const [directories, setDirectories] = useState([]);
         </Row>
 
         {/* Breadcrumb */}
-        <Breadcrumb style={{ marginBottom: 16 }}>
-          <Breadcrumb.Item key="root">
-            {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
-          </Breadcrumb.Item>
-          {segments.map((seg, index) => (
-            <Breadcrumb.Item key={index}>
-              {index === segments.length - 1 ? (
-                seg
-              ) : (
-                <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
-                  {seg}
-                </a>
-              )}
-            </Breadcrumb.Item>
-          ))}
-        </Breadcrumb>
+        <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
 
         {/* Table of Items */}
         <Table
           columns={columns}
           dataSource={filteredItems}
-          rowKey={(record) => record.name + record.type}
+          rowKey={(record) => (record.id ? record.id : record.name + record.type)}
           loading={loading}
           pagination={{ pageSize: 10 }}
         />
@@ -753,29 +737,29 @@ const [directories, setDirectories] = useState([]);
         </Modal>
 
         {/* Move Modal */}
-<Modal
-  title="Move Item"
-  visible={moveModalVisible}
-  onOk={handleMoveConfirm}
-  onCancel={() => setMoveModalVisible(false)}
-  okText="Move"
->
-  <Form layout="vertical">
-    <Form.Item label="Destination Folder" required>
-      <TreeSelect
-        style={{ width: '100%' }}
-        treeData={directories}  // now directories is defined
-        placeholder="Select destination folder"
-        value={moveDestination}
-        onChange={(val) => setMoveDestination(val)}
-        treeDefaultExpandAll
-        allowClear
-      />
-    </Form.Item>
-  </Form>
-</Modal>
+        <Modal
+          title="Move Item"
+          visible={moveModalVisible}
+          onOk={handleMoveConfirm}
+          onCancel={() => setMoveModalVisible(false)}
+          okText="Move"
+        >
+          <Form layout="vertical">
+            <Form.Item label="Destination Folder" required>
+              <TreeSelect
+                style={{ width: '100%' }}
+                treeData={directories}
+                placeholder="Select destination folder"
+                value={moveDestination}
+                onChange={(val) => setMoveDestination(val)}
+                treeDefaultExpandAll
+                allowClear
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
 
-        {/* NEW Modal-Based Upload */}
+        {/* Upload Modal */}
         <Modal
           title="Upload File"
           visible={uploadModalVisible}
@@ -793,7 +777,6 @@ const [directories, setDirectories] = useState([]);
               <Button
                 icon={<UploadOutlined />}
                 onClick={() => {
-                  // Show a file picker
                   const input = document.createElement('input');
                   input.type = 'file';
                   input.onchange = (e) => {

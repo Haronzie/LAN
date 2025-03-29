@@ -346,43 +346,52 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Retrieve the current user from the session.
+	// Retrieve the current user from the session
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	// Get the filename from query params.
+	// Get file location parameters
+	directory := r.URL.Query().Get("directory")
 	fileName := r.URL.Query().Get("filename")
-	if fileName == "" {
-		models.RespondError(w, http.StatusBadRequest, "Filename is required")
+	if fileName == "" || directory == "" {
+		models.RespondError(w, http.StatusBadRequest, "Directory and filename are required")
 		return
 	}
 
-	// Fetch the file record by filename.
-	fr, err := fc.App.GetFileRecord(fileName)
+	// Sanitize inputs and build full path
+	cleanDir := filepath.Clean(directory)
+	cleanName := filepath.Clean(fileName)
+	if strings.Contains(cleanDir, "..") || strings.Contains(cleanName, "..") {
+		models.RespondError(w, http.StatusBadRequest, "Invalid path components")
+		return
+	}
+
+	relativePath := filepath.Join(cleanDir, cleanName)
+
+	// Fetch the file record by path
+	fr, err := fc.App.GetFileRecordByPath(relativePath)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "File not found")
 		return
 	}
 
-	// -------------------------------------------
 	// Confidentiality Check
-	// -------------------------------------------
 	if fr.Confidential {
-		// If not the uploader or an admin, check the file_permissions table.
+		// Allow uploader/admin or users with explicit permission
 		if fr.Uploader != user.Username && user.Role != "admin" {
-			// HasFileAccess is a method you implement to check file_permissions.
 			allowed, err := fc.App.HasFileAccess(fr.ID, user.Username)
 			if err != nil || !allowed {
-				models.RespondError(w, http.StatusForbidden, "Access denied to confidential file")
+				models.RespondError(w, http.StatusForbidden,
+					"Access denied to confidential file")
 				return
 			}
 		}
 	}
 
-	// Proceed with decryption and streaming.
+	// Decryption workflow
 	encryptedFilePath := filepath.Join("uploads", fr.FilePath)
 	tempDecryptedPath := encryptedFilePath + ".dec"
 
@@ -392,32 +401,47 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decrypt the file into the temporary decrypted file.
+	// Decrypt to temporary file
 	if err := encryption.DecryptFile(key, encryptedFilePath, tempDecryptedPath); err != nil {
 		os.Remove(tempDecryptedPath)
-		models.RespondError(w, http.StatusInternalServerError, "Error decrypting file")
+		log.Printf("Decryption failed for %s: %v", relativePath, err)
+		models.RespondError(w, http.StatusInternalServerError,
+			"Error decrypting file")
 		return
 	}
 
-	// Open the decrypted file.
+	// Ensure cleanup even if errors occur after this point
+	defer func() {
+		if err := os.Remove(tempDecryptedPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("Failed to clean up temp file %s: %v", tempDecryptedPath, err)
+		}
+	}()
+
+	// Stream decrypted content
 	f, err := os.Open(tempDecryptedPath)
 	if err != nil {
-		os.Remove(tempDecryptedPath)
-		models.RespondError(w, http.StatusInternalServerError, "Error opening decrypted file")
+		log.Printf("Failed to open decrypted file %s: %v", tempDecryptedPath, err)
+		models.RespondError(w, http.StatusInternalServerError,
+			"Error opening decrypted file")
 		return
 	}
 	defer f.Close()
-	// Remove the temporary decrypted file after streaming.
-	defer os.Remove(tempDecryptedPath)
 
 	w.Header().Set("Content-Type", fr.ContentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+
 	if _, err := io.Copy(w, f); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error sending file")
+		log.Printf("Streaming error for %s: %v", relativePath, err)
+		models.RespondError(w, http.StatusInternalServerError,
+			"Error sending file")
 		return
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' downloaded and decrypted file '%s'.", user.Username, fileName))
+	// Audit log
+	fc.App.LogActivity(
+		fmt.Sprintf("User '%s' downloaded file '%s' (ID: %d)",
+			user.Username, fr.FileName, fr.ID))
 }
 
 // CopyFile creates a copy of an existing file in the storage and inserts a new record in the database.
@@ -599,6 +623,16 @@ func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
 	// Convert FileRecord objects into JSON-friendly maps
 	var output []map[string]interface{}
 	for _, f := range files {
+		permissions, err := fc.App.ListFilePermissions(f.ID)
+		if err != nil {
+			log.Printf("Warning: could not fetch permissions for file ID %d: %v\n", f.ID, err)
+			// not fatal, just continue
+		}
+		// Build an array of permission objects with a "username" property
+		var permissionObjects []map[string]string
+		for _, p := range permissions {
+			permissionObjects = append(permissionObjects, map[string]string{"username": p.Username})
+		}
 		output = append(output, map[string]interface{}{
 			"name":         f.FileName,
 			"type":         "file",        // for your frontend to distinguish
@@ -607,10 +641,11 @@ func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
 			"uploader":     f.Uploader,
 			"id":           f.ID,
 			"confidential": f.Confidential,
+			"permissions":  permissionObjects,
 		})
 	}
 
-	// Respond with the JSON array
+	// Respond with the JSON array.
 	models.RespondJSON(w, http.StatusOK, output)
 }
 
@@ -848,22 +883,41 @@ func (fc *FileController) RevokeFileAccess(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Retrieve the file record by its ID.
+	// Validate input.
+	if strings.TrimSpace(req.TargetUser) == "" {
+		models.RespondError(w, http.StatusBadRequest, "Target username cannot be empty")
+		return
+	}
+
+	// ✅ Check if target user exists (optional but recommended).
+	if _, err := fc.App.GetUserByUsername(req.TargetUser); err != nil {
+		models.RespondError(w, http.StatusNotFound, "Target user not found")
+		return
+	}
+
+	// Retrieve the file record.
 	fileRecord, err := fc.App.GetFileRecordByID(req.FileID)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "File not found")
 		return
 	}
 
-	// Ensure the file is marked confidential.
+	// Validate file confidentiality.
 	if !fileRecord.Confidential {
 		models.RespondError(w, http.StatusBadRequest, "File is not confidential")
 		return
 	}
 
-	// Allow only the uploader or an admin to revoke permission.
+	// Authorization check.
 	if fileRecord.Uploader != user.Username && user.Role != "admin" {
-		models.RespondError(w, http.StatusForbidden, "Not authorized to revoke access to this file")
+		models.RespondError(w, http.StatusForbidden, "Not authorized to revoke access")
+		return
+	}
+
+	// Check if the user has access (optional but improves feedback).
+	hasAccess, err := fc.App.HasFileAccess(req.FileID, req.TargetUser)
+	if err != nil || !hasAccess {
+		models.RespondError(w, http.StatusBadRequest, "User does not have access to this file")
 		return
 	}
 
@@ -873,7 +927,7 @@ func (fc *FileController) RevokeFileAccess(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Log activity and return success.
+	// Log and respond.
 	fc.App.LogActivity(fmt.Sprintf("User '%s' revoked access to file '%d' for user '%s'.", user.Username, req.FileID, req.TargetUser))
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Access revoked"})
 }
@@ -896,6 +950,18 @@ func (fc *FileController) GrantFileAccess(w http.ResponseWriter, r *http.Request
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
+	// Optional: Check that the target username is not empty.
+	if strings.TrimSpace(req.TargetUser) == "" {
+		models.RespondError(w, http.StatusBadRequest, "Target username cannot be empty")
+		return
+	}
+	if _, err := fc.App.GetUserByUsername(req.TargetUser); err != nil {
+		models.RespondError(w, http.StatusNotFound, "Target user not found")
+		return
+	}
+
+	log.Printf("GrantFileAccess called with fileID: %d", req.FileID)
 
 	// Retrieve the file record by its ID.
 	fileRecord, err := fc.App.GetFileRecordByID(req.FileID)

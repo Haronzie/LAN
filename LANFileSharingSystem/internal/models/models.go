@@ -73,15 +73,14 @@ type MoveFileRequest struct {
 
 // FileRecord represents a file stored in the system.
 type FileRecord struct {
-	ID            int    `json:"id"`
-	FileName      string `json:"file_name"`
-	Directory     string `json:"directory"` // <-- New field
-	FilePath      string `json:"file_path"`
-	Size          int64  `json:"size"`
-	ContentType   string `json:"content_type"`
-	Uploader      string `json:"uploader"`
-	Confidential  bool   `json:"confidential"`
-	VersionNumber int    `json:"version_number"`
+	ID           int    `json:"id"`
+	FileName     string `json:"file_name"`
+	Directory    string `json:"directory"` // <-- New field
+	FilePath     string `json:"file_path"`
+	Size         int64  `json:"size"`
+	ContentType  string `json:"content_type"`
+	Uploader     string `json:"uploader"`
+	Confidential bool   `json:"confidential"`
 }
 
 // -------------------------------------
@@ -967,45 +966,71 @@ func (app *App) ListAllFiles() ([]FileRecord, error) {
 }
 
 // GrantFileAccess inserts a permission record for a confidential file.
-func (app *App) GrantFileAccess(fileID int, username, grantedBy string) error {
+func (app *App) GrantFileAccess(fileID int, targetUser, grantedBy string) error {
 	_, err := app.DB.Exec(`
-		INSERT INTO file_permissions (file_id, username, granted_by)
-		VALUES ($1, $2, $3)
-	`, fileID, username, grantedBy)
+        INSERT INTO file_permissions(file_id, username, granted_by, granted_at)
+        VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+    `, fileID, targetUser, grantedBy)
 	return err
 }
 
 // RevokeFileAccess removes a permission record for a confidential file.
-func (app *App) RevokeFileAccess(fileID int, username string) error {
+
+func (app *App) RevokeFileAccess(fileID int, targetUser string) error {
 	_, err := app.DB.Exec(`
-		DELETE FROM file_permissions
-		WHERE file_id = $1 AND username = $2
-	`, fileID, username)
+        DELETE FROM file_permissions
+        WHERE file_id = $1 AND username = $2
+    `, fileID, targetUser)
 	return err
 }
 
 // HasFileAccess checks if a user has been granted access to a confidential file.
 func (app *App) HasFileAccess(fileID int, username string) (bool, error) {
-	var count int
-	err := app.DB.QueryRow(`
-		SELECT COUNT(*) FROM file_permissions
-		WHERE file_id = $1 AND username = $2
-	`, fileID, username).Scan(&count)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
+	var exists bool
+	// Use `EXISTS` for efficiency
+	query := `
+        SELECT EXISTS(
+            SELECT 1
+            FROM file_permissions
+            WHERE file_id = $1 AND username = $2
+        )`
+	err := app.DB.QueryRow(query, fileID, username).Scan(&exists)
+	return exists, err
 }
 
 // GetFileRecordByID retrieves a file record by its ID.
 func (app *App) GetFileRecordByID(fileID int) (FileRecord, error) {
-	row := app.DB.QueryRow(`
-        SELECT id, file_name, directory, file_path, size, content_type, uploader, confidential, version_number
-        FROM files
-        WHERE id = $1
-    `, fileID)
+	query := "SELECT id, file_name, directory, file_path, size, content_type, uploader, confidential FROM files WHERE id = $1"
+	log.Printf("Executing query: %s with fileID: %d", query, fileID)
+	row := app.DB.QueryRow(query, fileID)
 
 	var fr FileRecord
-	err := row.Scan(&fr.ID, &fr.FileName, &fr.Directory, &fr.FilePath, &fr.Size, &fr.ContentType, &fr.Uploader, &fr.Confidential, &fr.VersionNumber)
+	err := row.Scan(&fr.ID, &fr.FileName, &fr.Directory, &fr.FilePath, &fr.Size, &fr.ContentType, &fr.Uploader, &fr.Confidential)
+	if err != nil {
+		log.Printf("Error scanning file record for id %d: %v", fileID, err)
+	} else {
+		log.Printf("Successfully retrieved file record: %+v", fr)
+	}
 	return fr, err
+}
+func (app *App) ListFilePermissions(fileID int) ([]FilePermission, error) {
+	rows, err := app.DB.Query(`
+        SELECT id, file_id, username, granted_by, granted_at
+        FROM file_permissions
+        WHERE file_id = $1
+    `, fileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var perms []FilePermission
+	for rows.Next() {
+		var p FilePermission
+		if err := rows.Scan(&p.ID, &p.FileID, &p.Username, &p.GrantedBy, &p.GrantedAt); err != nil {
+			return nil, err
+		}
+		perms = append(perms, p)
+	}
+	return perms, nil
 }

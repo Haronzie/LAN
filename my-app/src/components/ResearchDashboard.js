@@ -16,7 +16,6 @@ import {
   Breadcrumb,
   Checkbox,
   TreeSelect
-
 } from 'antd';
 import {
   UploadOutlined,
@@ -28,7 +27,8 @@ import {
   EditOutlined,
   CopyOutlined,
   SwapOutlined,
-  ArrowLeftOutlined
+  ArrowLeftOutlined,
+  LockOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -51,18 +51,22 @@ const ResearchDashboard = () => {
   const navigate = useNavigate();
 
   // ----------------------------------------
-  // Current user from localStorage
+  // Current user and admin status from localStorage
   // ----------------------------------------
   const [currentUser, setCurrentUser] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
     const storedUsername = localStorage.getItem('username');
+    const storedRole = localStorage.getItem('role');
     if (storedUsername) {
       setCurrentUser(storedUsername);
+    }
+    if (storedRole === 'admin') {
+      setIsAdmin(true);
     }
     // Fetch folder tree for the research container
     fetchDirectories();
   }, []);
-  
 
   // ----------------------------------------
   // States: path, items, loading, search
@@ -93,14 +97,29 @@ const ResearchDashboard = () => {
   const [moveDestination, setMoveDestination] = useState('');
   const [directories, setDirectories] = useState([]);
 
-
   // ----------------------------------------
-  // NEW: Modal-Based Upload States
+  // Modal-Based Upload States
   // ----------------------------------------
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
   const [uploadConfidential, setUploadConfidential] = useState(false);
 
+  // ----------------------------------------
+  // Confidential File Access Check
+  // ----------------------------------------
+  const checkFileAccess = (record) => {
+    if (record.type !== 'file') return true;
+    return (
+      !record.confidential ||
+      record.uploader === currentUser ||
+      isAdmin ||
+      (record.authorizedUsers && record.authorizedUsers.includes(currentUser))
+    );
+  };
+
+  // ----------------------------------------
+  // Fetch Directory Tree for Move Destination
+  // ----------------------------------------
   const fetchDirectories = async () => {
     try {
       const res = await axios.get('/directory/tree?container=research', { withCredentials: true });
@@ -109,35 +128,37 @@ const ResearchDashboard = () => {
       console.error('Error fetching directories:', error);
     }
   };
-  
-  
+
   // ----------------------------------------
-  // Fetch Directories + Files
+  // Fetch Directories + Files (with confidential info)
   // ----------------------------------------
   const fetchItems = async () => {
     setLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
 
-      // 1) Directories
+      // 1) Fetch directories
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
         withCredentials: true
       });
-      const directories = Array.isArray(dirRes.data) ? dirRes.data : [];
+      const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
 
-      // 2) Files
+      // 2) Fetch files and include confidential and permission info
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true
       });
-      const files = (fileRes.data || []).map((f) => ({
+      const fetchedFiles = (fileRes.data || []).map((f) => ({
+        id: f.id,
         name: f.name,
         type: 'file',
         size: f.size,
         formattedSize: formatFileSize(f.size),
-        uploader: f.uploader
+        uploader: f.uploader,
+        confidential: f.confidential,
+        authorizedUsers: f.permissions ? f.permissions.map(p => p.username) : []
       }));
 
-      setItems([...directories, ...files]);
+      setItems([...fetchedDirs, ...fetchedFiles]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
       message.error(error.response?.data?.error || 'Error fetching directory contents');
@@ -213,17 +234,13 @@ const ResearchDashboard = () => {
     const isLast = index === segments.length - 1;
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {isLast ? seg : (
-          <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
-            {seg}
-          </a>
-        )}
+        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
       </Breadcrumb.Item>
     );
   });
 
   // ----------------------------------------
-  // NEW: Modal-Based Upload
+  // Modal-Based Upload
   // ----------------------------------------
   const handleOpenUploadModal = () => {
     if (!currentPath) {
@@ -499,7 +516,7 @@ const ResearchDashboard = () => {
   };
 
   // ----------------------------------------
-  // Table Columns
+  // Table Columns with Confidential File Check
   // ----------------------------------------
   const columns = [
     {
@@ -515,6 +532,17 @@ const ResearchDashboard = () => {
             </Space>
           );
         }
+        if (record.type === 'file') {
+          const hasAccess = checkFileAccess(record);
+          if (!hasAccess) {
+            return (
+              <Space>
+                <LockOutlined style={{ color: 'red' }} />
+                <span>{name} (Locked)</span>
+              </Space>
+            );
+          }
+        }
         return name;
       }
     },
@@ -528,7 +556,7 @@ const ResearchDashboard = () => {
       title: 'Size',
       dataIndex: 'formattedSize',
       key: 'size',
-      render: (size, record) => (record.type === 'directory' ? '--' : size),
+      render: (size, record) => (record.type === 'directory' ? '--' : size)
     },
     {
       title: 'Actions',
@@ -538,24 +566,29 @@ const ResearchDashboard = () => {
           record.type === 'directory'
             ? record.created_by === currentUser
             : record.uploader === currentUser;
-
         return (
           <Space>
-            {/* Download for files */}
+            {/* Download for files with access check */}
             {record.type === 'file' && (
-              <Tooltip title="Download">
-                <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
-              </Tooltip>
+              checkFileAccess(record) ? (
+                <Tooltip title="Download">
+                  <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
+                </Tooltip>
+              ) : (
+                <Tooltip title="Access Denied">
+                  <Button icon={<LockOutlined />} disabled />
+                </Tooltip>
+              )
             )}
 
-            {/* If directory not owned => Download Folder */}
-            {record.type === 'directory' && !isOwner && (
+            {/* Download for folders */}
+            {record.type === 'directory' && (
               <Tooltip title="Download Folder">
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
 
-            {/* Copy is available to all */}
+            {/* Copy available for all */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
@@ -586,26 +619,15 @@ const ResearchDashboard = () => {
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <Button
-              type="primary"
-              icon={<ArrowLeftOutlined />}
-              onClick={() => navigate('/user')}
-            >
+            <Button type="primary" icon={<ArrowLeftOutlined />} onClick={() => navigate('/user')}>
               Back to Dashboard
             </Button>
           </Col>
-
           <Col>
             <h2 style={{ margin: 0 }}>Research Dashboard</h2>
           </Col>
-
-          {/* Instead of an Upload component with customRequest, we use a modal-based approach */}
           <Col>
-            <Button
-              type="primary"
-              icon={<UploadOutlined />}
-              onClick={() => handleOpenUploadModal()}
-            >
+            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
               Upload File
             </Button>
           </Col>
@@ -640,13 +662,7 @@ const ResearchDashboard = () => {
           </Breadcrumb.Item>
           {segments.map((seg, index) => (
             <Breadcrumb.Item key={index}>
-              {index === segments.length - 1 ? (
-                seg
-              ) : (
-                <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>
-                  {seg}
-                </a>
-              )}
+              {index === segments.length - 1 ? seg : <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>{seg}</a>}
             </Breadcrumb.Item>
           ))}
         </Breadcrumb>
@@ -655,7 +671,7 @@ const ResearchDashboard = () => {
         <Table
           columns={columns}
           dataSource={filteredItems}
-          rowKey={(record) => record.name + record.type}
+          rowKey={(record) => record.id ? record.id : record.name + record.type}
           loading={loading}
           pagination={{ pageSize: 10 }}
         />
@@ -738,30 +754,29 @@ const ResearchDashboard = () => {
         </Modal>
 
         {/* Move Modal */}
-<Modal
-  title="Move Item"
-  visible={moveModalVisible}
-  onOk={handleMoveConfirm}
-  onCancel={() => setMoveModalVisible(false)}
-  okText="Move"
->
-  <Form layout="vertical">
-    <Form.Item label="Destination Folder">
-      <TreeSelect
-        style={{ width: '100%' }}
-        treeData={directories}  // Use your folder tree state
-        placeholder="Select destination folder"
-        value={moveDestination}
-        onChange={(val) => setMoveDestination(val)}
-        treeDefaultExpandAll
-        allowClear
-      />
-    </Form.Item>
-  </Form>
-</Modal>
+        <Modal
+          title="Move Item"
+          visible={moveModalVisible}
+          onOk={handleMoveConfirm}
+          onCancel={() => setMoveModalVisible(false)}
+          okText="Move"
+        >
+          <Form layout="vertical">
+            <Form.Item label="Destination Folder">
+              <TreeSelect
+                style={{ width: '100%' }}
+                treeData={directories}
+                placeholder="Select destination folder"
+                value={moveDestination}
+                onChange={(val) => setMoveDestination(val)}
+                treeDefaultExpandAll
+                allowClear
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
 
-
-        {/* NEW Modal-Based Upload */}
+        {/* Modal-Based Upload */}
         <Modal
           title="Upload File"
           visible={uploadModalVisible}
@@ -779,7 +794,6 @@ const ResearchDashboard = () => {
               <Button
                 icon={<UploadOutlined />}
                 onClick={() => {
-                  // Show a file picker
                   const input = document.createElement('input');
                   input.type = 'file';
                   input.onchange = (e) => {

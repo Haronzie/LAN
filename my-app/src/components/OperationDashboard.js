@@ -37,7 +37,7 @@ import path from 'path-browserify';
 const { Content } = Layout;
 const { Option } = Select;
 
-/**
+/**d
  * Helper to format file sizes in human-readable form.
  */
 function formatFileSize(size) {
@@ -93,6 +93,16 @@ const OperationDashboard = () => {
   const [accessFile, setAccessFile] = useState(null);
   const [targetUsername, setTargetUsername] = useState('');
 
+  const checkFileAccess = (record) => {
+    if (record.type !== 'file') return true;
+    return (
+      !record.confidential ||
+      record.uploader === currentUser ||
+      isAdmin ||
+      (record.authorizedUsers && record.authorizedUsers.includes(currentUser))
+    );
+  };
+
   // Check if current user is admin
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -135,18 +145,19 @@ const OperationDashboard = () => {
       });
       const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
 
-      // 2) Fetch files (must include id and confidential from the server)
+      // 2) Fetch files with permissions data
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true,
       });
       const fetchedFiles = (fileRes.data || []).map((f) => ({
-        id: f.id,                     // Make sure backend returns "id"
+        id: f.id,
         name: f.name,
         type: 'file',
         size: f.size,
         formattedSize: formatFileSize(f.size),
         uploader: f.uploader,
-        confidential: f.confidential, // Make sure backend returns "confidential"
+        confidential: f.confidential,
+        authorizedUsers: f.permissions?.map(p => p.username) || [], // NEW: Get authorized users
       }));
 
       setItems([...fetchedDirs, ...fetchedFiles]);
@@ -530,11 +541,14 @@ const OperationDashboard = () => {
       message.success(`Access granted to '${targetUsername}'`);
       setGrantModalVisible(false);
       setTargetUsername('');
+      // Refresh the list so that the updated permissions are reflected.
+      fetchItems();
     } catch (error) {
       console.error('Grant Access error:', error);
       message.error(error.response?.data?.error || 'Error granting access');
     }
   };
+  
 
   const handleRevokeAccess = async () => {
     if (!targetUsername.trim()) {
@@ -580,9 +594,9 @@ const OperationDashboard = () => {
             </Space>
           );
         }
-        // For files, check if it's confidential and locked for the current user.
         if (record.type === 'file') {
-          if (record.confidential && record.uploader !== currentUser && !isAdmin) {
+          const hasAccess = checkFileAccess(record);
+          if (!hasAccess) {
             return (
               <Space>
                 <LockOutlined style={{ color: 'red' }} />
@@ -620,23 +634,34 @@ const OperationDashboard = () => {
           record.type === 'file' &&
           record.confidential &&
           (isOwner || isAdmin);
+          const hasAccess = checkFileAccess(record);
 
         return (
           <Space>
             {/* Download for files */}
-            {record.type === 'file' &&
-              (record.confidential && record.uploader !== currentUser && !isAdmin ? (
-                <Tooltip title="Access Denied">
-                  <Button icon={<LockOutlined />} disabled />
-                </Tooltip>
-              ) : (
+            {record.type === 'file' && (
+              hasAccess ? (
                 <Tooltip title="Download">
-                  <Button
-                    icon={<DownloadOutlined />}
-                    onClick={() => handleDownload(record.name)}
-                  />
+                   <Button
+                   icon={<DownloadOutlined />}
+                   onClick={() => handleDownload(record.name)}
+                   />
                 </Tooltip>
-              ))}
+                 ) : (
+                  <Tooltip title="Access Denied">
+                     <Button icon={<LockOutlined />} disabled />
+                     </Tooltip>
+                 )
+                )}
+                 {/* Download for folders */}
+        {record.type === 'directory' && (
+          <Tooltip title="Download Folder">
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={() => handleDownloadFolder(record.name)}
+            />
+          </Tooltip>
+        )}
 
             {/* Copy action available for all */}
             <Tooltip title="Copy">

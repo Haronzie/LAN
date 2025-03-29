@@ -144,6 +144,7 @@ const FileManager = () => {
       message.success(`Access granted to '${targetUsername}'`);
       setGrantModalVisible(false);
       setTargetUsername('');
+      fetchItems(); // ✅ Added refresh
     } catch (error) {
       console.error('Grant Access error:', error);
       message.error(error.response?.data?.error || 'Error granting access');
@@ -172,11 +173,13 @@ const FileManager = () => {
       message.success(`Access revoked from '${targetUsername}'`);
       setRevokeModalVisible(false);
       setTargetUsername('');
+      fetchItems(); // ✅ Added refresh
     } catch (error) {
       console.error('Revoke Access error:', error);
       message.error(error.response?.data?.error || 'Error revoking access');
     }
   };
+
 
   // --------------------------------------------
   // Fetch items for the current folder
@@ -389,7 +392,9 @@ const FileManager = () => {
   // Download file
   // ---------------------------------------------
   const handleDownload = (fileName) => {
-    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+    const encodedDir = encodeURIComponent(currentPath);
+    const encodedFile = encodeURIComponent(fileName);
+    const downloadUrl = `http://localhost:8080/download?directory=${encodedDir}&filename=${encodedFile}`;
     window.open(downloadUrl, '_blank');
   };
 
