@@ -926,6 +926,7 @@ func (fc *FileController) RevokeFileAccess(w http.ResponseWriter, r *http.Reques
 		models.RespondError(w, http.StatusInternalServerError, "Error revoking access")
 		return
 	}
+	fc.App.LogAudit(user.Username, req.FileID, "REVOKE_ACCESS", fmt.Sprintf("Access revoked for user '%s' for file '%d'", req.TargetUser, req.FileID))
 
 	// Log and respond.
 	fc.App.LogActivity(fmt.Sprintf("User '%s' revoked access to file '%d' for user '%s'.", user.Username, req.FileID, req.TargetUser))
@@ -987,6 +988,7 @@ func (fc *FileController) GrantFileAccess(w http.ResponseWriter, r *http.Request
 		models.RespondError(w, http.StatusInternalServerError, "Error granting access")
 		return
 	}
+	fc.App.LogAudit(user.Username, req.FileID, "GRANT_ACCESS", fmt.Sprintf("Access granted to user '%s' for file '%d'", req.TargetUser, req.FileID))
 
 	// Log activity and return success.
 	fc.App.LogActivity(fmt.Sprintf("User '%s' granted access to file '%d' for user '%s'.", user.Username, req.FileID, req.TargetUser))

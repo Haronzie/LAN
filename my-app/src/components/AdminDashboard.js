@@ -19,7 +19,6 @@ import {
 } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import AddResourceModal from './AddResourceModal';
 import { Column } from '@ant-design/charts'; // Import the chart
 import './AdminDashboard.css';
 
@@ -33,7 +32,6 @@ const AdminDashboard = () => {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [adminName, setAdminName] = useState('Admin');
-  const [modalVisible, setModalVisible] = useState(false);
   const navigate = useNavigate();
 
   // ---------------------------------------------------
@@ -132,7 +130,7 @@ const AdminDashboard = () => {
       fetchUsers();
       fetchFiles();
       fetchAuditLogs();
-    }, 30000);
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 

@@ -25,7 +25,16 @@ const AuditLog = () => {
   };
 
   useEffect(() => {
+    // Initial fetch on component mount
     fetchAuditLogs();
+
+    // Set up polling to fetch audit logs every 5 seconds (5000 ms)
+    const interval = setInterval(() => {
+      fetchAuditLogs();
+    }, 5000);
+
+    // Clean up the interval when the component unmounts
+    return () => clearInterval(interval);
   }, []);
 
   const columns = [
@@ -45,7 +54,8 @@ const AuditLog = () => {
         // If user_username is null (user deleted), use username_at_action
         const displayName = val || record.username_at_action || '<deleted user>';
         return <span style={{ fontSize: '16px' }}>{displayName}</span>;
-      }    },
+      }
+    },
     {
       title: 'Action',
       dataIndex: 'action',         // ✅ Display the action

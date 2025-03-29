@@ -13,3 +13,7 @@
 [36mINFO[0m[2025-03-29 13:41:33]main.go:173 main.main() Successfully connected to database            [36mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable" [36mfunction[0m=main
 [36mINFO[0m[2025-03-29 13:41:33]main.go:202 main.main() Migrations applied successfully (or no changes needed)  [36mfunction[0m=main [36mmigrationsPath[0m="file://../../internal/migrations"
 [36mINFO[0m[2025-03-29 13:41:33]main.go:318 main.main() Starting server                               [36mfunction[0m=main [36mport[0m=8080
+[31mERRO[0m[2025-03-29 15:18:00]main.go:168 main.main() Database ping error                           [31mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable" [31merror[0m="failed to ping DB (database: postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable): pq: database \"Cdrrmo\" does not exist" [31merrorCode[0m=DB_PING_ERR [31mfunction[0m=main
+[36mINFO[0m[2025-03-29 15:18:19]main.go:173 main.main() Successfully connected to database            [36mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable" [36mfunction[0m=main
+[36mINFO[0m[2025-03-29 15:18:19]main.go:202 main.main() Migrations applied successfully (or no changes needed)  [36mfunction[0m=main [36mmigrationsPath[0m="file://../../internal/migrations"
+[36mINFO[0m[2025-03-29 15:18:19]main.go:318 main.main() Starting server                               [36mfunction[0m=main [36mport[0m=8080
