@@ -609,13 +609,15 @@ const FileManager = () => {
       key: 'actions',
       render: (record) => {
         const isOwner = record.uploader === currentUser;
+
         const canManageAccess =
           record.type === 'file' &&
-          record.confidential === true &&
+          record.confidential &&
           (isOwner || isAdmin);
 
         return (
           <Space>
+            {/* Download */}
             {record.type === 'file' && (
               <Tooltip title="Download">
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
@@ -626,6 +628,8 @@ const FileManager = () => {
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
+
+            {/* Rename */}
             <Tooltip title="Rename">
               <Button
                 icon={<EditOutlined />}
@@ -636,24 +640,34 @@ const FileManager = () => {
                 }}
               />
             </Tooltip>
+
+            {/* Copy */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
+
+            {/* Move */}
             <Tooltip title="Move">
               <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
             </Tooltip>
+
+            {/* Delete */}
             <Tooltip title="Delete">
               <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
             </Tooltip>
+
+            {/* Grant Access */}
             {canManageAccess && (
-              <>
-                <Tooltip title="Grant Access">
-                  <Button onClick={() => openGrantModal(record)}>Grant</Button>
-                </Tooltip>
-                <Tooltip title="Revoke Access">
-                  <Button onClick={() => openRevokeModal(record)}>Revoke</Button>
-                </Tooltip>
-              </>
+              <Tooltip title="Grant Access">
+                <Button onClick={() => openGrantModal(record)}>Grant</Button>
+              </Tooltip>
+            )}
+
+            {/* Revoke Access */}
+            {canManageAccess && (
+              <Tooltip title="Revoke Access">
+                <Button onClick={() => openRevokeModal(record)}>Revoke</Button>
+              </Tooltip>
             )}
           </Space>
         );
