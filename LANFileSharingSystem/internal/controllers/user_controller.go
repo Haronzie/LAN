@@ -234,3 +234,41 @@ func (uc *UserController) GetUserRole(w http.ResponseWriter, r *http.Request) {
 		"role": user.Role,
 	})
 }
+
+// FetchUserList allows authenticated users to fetch a list of users for granting/revoking access.
+func (uc *UserController) FetchUserList(w http.ResponseWriter, r *http.Request) {
+	// Ensure the user is authenticated
+	user, err := uc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Unauthorized: Session invalid")
+		return
+	}
+
+	// Log the user fetching the list
+	log.Printf("User '%s' is fetching the user list.", user.Username)
+
+	// Parse query parameters for search
+	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
+
+	// Fetch the list of users
+	users, err := uc.App.ListUsers()
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving users")
+		return
+	}
+
+	// Filter users based on the search query (case-insensitive)
+	var filteredUsers []models.User
+	for _, u := range users {
+		if searchQuery == "" || strings.Contains(strings.ToLower(u.Username), strings.ToLower(searchQuery)) {
+			// Exclude sensitive information like passwords
+			filteredUsers = append(filteredUsers, models.User{
+				Username: u.Username,
+				Role:     u.Role,
+			})
+		}
+	}
+
+	// Respond with the filtered list of users
+	models.RespondJSON(w, http.StatusOK, filteredUsers)
+}

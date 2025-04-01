@@ -384,8 +384,7 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		if fr.Uploader != user.Username && user.Role != "admin" {
 			allowed, err := fc.App.HasFileAccess(fr.ID, user.Username)
 			if err != nil || !allowed {
-				models.RespondError(w, http.StatusForbidden,
-					"Access denied to confidential file")
+				models.RespondError(w, http.StatusForbidden, "Access denied to confidential file")
 				return
 			}
 		}

@@ -15,7 +15,8 @@ import {
   Card,
   Breadcrumb,
   Checkbox,
-  TreeSelect
+  TreeSelect,
+  Spin
 } from 'antd';
 import {
   UploadOutlined,
@@ -92,6 +93,27 @@ const OperationDashboard = () => {
   const [revokeModalVisible, setRevokeModalVisible] = useState(false);
   const [accessFile, setAccessFile] = useState(null);
   const [targetUsername, setTargetUsername] = useState('');
+
+  const [userOptions, setUserOptions] = useState([]); // Store fetched user options
+const [fetchingUsers, setFetchingUsers] = useState(false); // Loading state for user search
+
+// Function to handle user search
+const handleUserSearch = async (value) => {
+  if (!value) {
+    setUserOptions([]);
+    return;
+  }
+  setFetchingUsers(true);
+  try {
+    const response = await axios.get(`/users?search=${value}`, { withCredentials: true });
+    setUserOptions(response.data || []); // Assuming API returns an array of users
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    message.error('Failed to fetch users');
+  } finally {
+    setFetchingUsers(false);
+  }
+};
 
   const checkFileAccess = (record) => {
     if (record.type !== 'file') return true;
@@ -929,41 +951,71 @@ const OperationDashboard = () => {
 
         {/* Grant Access Modal */}
         <Modal
-          title="Grant Access"
-          visible={grantModalVisible}
-          onOk={handleGrantAccess}
-          onCancel={() => setGrantModalVisible(false)}
-          okText="Grant"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Username to Grant" required>
-              <Input
-                value={targetUsername}
-                onChange={(e) => setTargetUsername(e.target.value)}
-                placeholder="Enter the username to grant access"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+  title="Grant Access"
+  visible={grantModalVisible}
+  onOk={handleGrantAccess}
+  onCancel={() => setGrantModalVisible(false)}
+  okText="Grant"
+>
+  <Form layout="vertical">
+    <Form.Item
+      label="Select User to Grant Access"
+      required
+      tooltip="Begin typing to search for a username"
+    >
+      <Select
+        showSearch
+        placeholder="Type to search for a user"
+        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
+        onSearch={handleUserSearch}
+        onChange={(value) => setTargetUsername(value)}
+        filterOption={false} // Disable default filtering to rely on API search
+        style={{ width: '100%' }}
+        allowClear
+      >
+        {userOptions.map((user) => (
+          <Select.Option key={user.username} value={user.username}>
+            {user.username}
+          </Select.Option>
+        ))}
+      </Select>
+    </Form.Item>
+  </Form>
+</Modal>
 
         {/* Revoke Access Modal */}
         <Modal
-          title="Revoke Access"
-          visible={revokeModalVisible}
-          onOk={handleRevokeAccess}
-          onCancel={() => setRevokeModalVisible(false)}
-          okText="Revoke"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Username to Revoke" required>
-              <Input
-                value={targetUsername}
-                onChange={(e) => setTargetUsername(e.target.value)}
-                placeholder="Enter the username to revoke access"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+  title="Revoke Access"
+  visible={revokeModalVisible}
+  onOk={handleRevokeAccess}
+  onCancel={() => setRevokeModalVisible(false)}
+  okText="Revoke"
+>
+  <Form layout="vertical">
+    <Form.Item
+      label="Select User to Revoke Access"
+      required
+      tooltip="Begin typing to search for a username"
+    >
+      <Select
+        showSearch
+        placeholder="Type to search for a user"
+        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
+        onSearch={handleUserSearch}
+        onChange={(value) => setTargetUsername(value)}
+        filterOption={false} // Disable default filtering to rely on API search
+        style={{ width: '100%' }}
+        allowClear
+      >
+        {userOptions.map((user) => (
+          <Select.Option key={user.username} value={user.username}>
+            {user.username}
+          </Select.Option>
+        ))}
+      </Select>
+    </Form.Item>
+  </Form>
+</Modal>
       </Content>
     </Layout>
   );

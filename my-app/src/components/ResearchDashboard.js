@@ -15,7 +15,8 @@ import {
   Card,
   Breadcrumb,
   Checkbox,
-  TreeSelect
+  TreeSelect,
+  Spin
 } from 'antd';
 import {
   UploadOutlined,
@@ -516,6 +517,92 @@ const ResearchDashboard = () => {
   };
 
   // ----------------------------------------
+  // Grant/Revoke State
+  // ----------------------------------------
+  const [grantModalVisible, setGrantModalVisible] = useState(false);
+  const [revokeModalVisible, setRevokeModalVisible] = useState(false);
+  const [accessFile, setAccessFile] = useState(null);
+  const [targetUsername, setTargetUsername] = useState('');
+  const [userOptions, setUserOptions] = useState([]); // Store fetched user options
+  const [fetchingUsers, setFetchingUsers] = useState(false); // Loading state for user search
+
+  // Function to handle user search
+  const handleUserSearch = async (value) => {
+    if (!value) {
+      setUserOptions([]);
+      return;
+    }
+    setFetchingUsers(true);
+    try {
+      const response = await axios.get(`/users/fetch?search=${value}`, { withCredentials: true });
+      setUserOptions(response.data || []); // Assuming API returns an array of users
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      message.error('Failed to fetch users');
+    } finally {
+      setFetchingUsers(false);
+    }
+  };
+
+  // Grant Access
+  const handleGrantAccess = async () => {
+    if (!targetUsername.trim()) {
+      message.error('Username cannot be empty');
+      return;
+    }
+    if (!accessFile || !accessFile.id) {
+      message.error('No file selected');
+      return;
+    }
+    try {
+      await axios.post(
+        '/grant-access',
+        {
+          file_id: accessFile.id,
+          target_user: targetUsername,
+        },
+        { withCredentials: true }
+      );
+      message.success(`Access granted to '${targetUsername}'`);
+      setGrantModalVisible(false);
+      setTargetUsername('');
+      fetchItems(); // Refresh the list to reflect updated permissions
+    } catch (error) {
+      console.error('Grant Access error:', error);
+      message.error(error.response?.data?.error || 'Error granting access');
+    }
+  };
+
+  // Revoke Access
+  const handleRevokeAccess = async () => {
+    if (!targetUsername.trim()) {
+      message.error('Username cannot be empty');
+      return;
+    }
+    if (!accessFile || !accessFile.id) {
+      message.error('No file selected');
+      return;
+    }
+    try {
+      await axios.post(
+        '/revoke-access',
+        {
+          file_id: accessFile.id,
+          target_user: targetUsername,
+        },
+        { withCredentials: true }
+      );
+      message.success(`Access revoked from '${targetUsername}'`);
+      setRevokeModalVisible(false);
+      setTargetUsername('');
+      fetchItems(); // Refresh the list to reflect updated permissions
+    } catch (error) {
+      console.error('Revoke Access error:', error);
+      message.error(error.response?.data?.error || 'Error revoking access');
+    }
+  };
+
+  // ----------------------------------------
   // Table Columns with Confidential File Check
   // ----------------------------------------
   const columns = [
@@ -566,11 +653,19 @@ const ResearchDashboard = () => {
           record.type === 'directory'
             ? record.created_by === currentUser
             : record.uploader === currentUser;
+
+        const canManageAccess =
+          record.type === 'file' &&
+          record.confidential &&
+          (isOwner || isAdmin);
+
+        const hasAccess = checkFileAccess(record);
+
         return (
           <Space>
-            {/* Download for files with access check */}
+            {/* Download */}
             {record.type === 'file' && (
-              checkFileAccess(record) ? (
+              hasAccess ? (
                 <Tooltip title="Download">
                   <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
                 </Tooltip>
@@ -580,32 +675,66 @@ const ResearchDashboard = () => {
                 </Tooltip>
               )
             )}
-
-            {/* Download for folders */}
             {record.type === 'directory' && (
               <Tooltip title="Download Folder">
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
 
-            {/* Copy available for all */}
+            {/* Rename */}
+            {isOwner && (
+              <Tooltip title="Rename">
+                <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
+              </Tooltip>
+            )}
+
+            {/* Copy */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
 
-            {/* Rename, delete, move only if owner */}
+            {/* Move */}
             {isOwner && (
-              <>
-                <Tooltip title="Rename">
-                  <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
-                </Tooltip>
-                <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
-                  <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
-                </Tooltip>
-                <Tooltip title="Move">
-                  <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
-                </Tooltip>
-              </>
+              <Tooltip title="Move">
+                <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
+              </Tooltip>
+            )}
+
+            {/* Delete */}
+            {isOwner && (
+              <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
+                <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+              </Tooltip>
+            )}
+
+            {/* Grant Access */}
+            {canManageAccess && (
+              <Tooltip title="Grant Access">
+                <Button
+                  onClick={() => {
+                    setAccessFile(record);
+                    setTargetUsername('');
+                    setGrantModalVisible(true);
+                  }}
+                >
+                  Grant
+                </Button>
+              </Tooltip>
+            )}
+
+            {/* Revoke Access */}
+            {canManageAccess && (
+              <Tooltip title="Revoke Access">
+                <Button
+                  onClick={() => {
+                    setAccessFile(record);
+                    setTargetUsername('');
+                    setRevokeModalVisible(true);
+                  }}
+                >
+                  Revoke
+                </Button>
+              </Tooltip>
             )}
           </Space>
         );
@@ -822,6 +951,74 @@ const ResearchDashboard = () => {
               >
                 Confidential
               </Checkbox>
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* Grant Access Modal */}
+        <Modal
+          title="Grant Access"
+          visible={grantModalVisible}
+          onOk={handleGrantAccess}
+          onCancel={() => setGrantModalVisible(false)}
+          okText="Grant"
+        >
+          <Form layout="vertical">
+            <Form.Item
+              label="Select User to Grant Access"
+              required
+              tooltip="Begin typing to search for a username"
+            >
+              <Select
+                showSearch
+                placeholder="Type to search for a user"
+                notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
+                onSearch={handleUserSearch}
+                onChange={(value) => setTargetUsername(value)}
+                filterOption={false} // Disable default filtering to rely on API search
+                style={{ width: '100%' }}
+                allowClear
+              >
+                {userOptions.map((user) => (
+                  <Select.Option key={user.username} value={user.username}>
+                    {user.username}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* Revoke Access Modal */}
+        <Modal
+          title="Revoke Access"
+          visible={revokeModalVisible}
+          onOk={handleRevokeAccess}
+          onCancel={() => setRevokeModalVisible(false)}
+          okText="Revoke"
+        >
+          <Form layout="vertical">
+            <Form.Item
+              label="Select User to Revoke Access"
+              required
+              tooltip="Begin typing to search for a username"
+            >
+              <Select
+                showSearch
+                placeholder="Type to search for a user"
+                notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
+                onSearch={handleUserSearch}
+                onChange={(value) => setTargetUsername(value)}
+                filterOption={false} // Disable default filtering to rely on API search
+                style={{ width: '100%' }}
+                allowClear
+              >
+                {userOptions.map((user) => (
+                  <Select.Option key={user.username} value={user.username}>
+                    {user.username}
+                  </Select.Option>
+                ))}
+              </Select>
             </Form.Item>
           </Form>
         </Modal>

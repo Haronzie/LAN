@@ -82,6 +82,8 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 	dc.App.LogActivity(fmt.Sprintf("User '%s' created directory '%s' (parent: '%s').",
 		user.Username, req.Name, req.Parent))
 
+	dc.App.LogAudit(user.Username, 0, "CREATE_FOLDER", fmt.Sprintf("User '%s' created folder '%s' under parent '%s'.", user.Username, req.Name, req.Parent))
+
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Directory '%s' created successfully", req.Name),
 	})
@@ -156,6 +158,7 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 	dc.App.LogActivity(fmt.Sprintf(
 		"User '%s' deleted directory '%s' (parent: '%s') and all its contents.",
 		user.Username, req.Name, req.Parent))
+	dc.App.LogAudit(user.Username, 0, "DELETE_FOLDER", fmt.Sprintf("User '%s' deleted folder '%s' under parent '%s'.", user.Username, req.Name, req.Parent))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Directory '%s' and its contents deleted successfully", req.Name),
@@ -233,6 +236,7 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 	dc.App.LogActivity(fmt.Sprintf(
 		"User '%s' renamed directory from '%s' to '%s' (parent: '%s').",
 		user.Username, req.OldName, req.NewName, req.Parent))
+	dc.App.LogAudit(user.Username, 0, "RENAME_FOLDER", fmt.Sprintf("User '%s' renamed folder from '%s' to '%s' under parent '%s'.", user.Username, req.OldName, req.NewName, req.Parent))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Directory renamed from '%s' to '%s' successfully",
@@ -362,6 +366,7 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 
 	dc.App.LogActivity(fmt.Sprintf("User '%s' copied folder from '%s' to '%s'.",
 		user.Username, sourceRelPath, destRelPath))
+	dc.App.LogAudit(user.Username, 0, "COPY_FOLDER", fmt.Sprintf("User '%s' copied folder from '%s' to '%s'.", user.Username, sourceRelPath, destRelPath))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Folder copied to '%s' successfully", destRelPath),
@@ -690,6 +695,7 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 
 	dc.App.LogActivity(fmt.Sprintf("User '%s' moved directory '%s' from '%s' to '%s'.",
 		user.Username, req.Name, req.OldParent, req.NewParent))
+	dc.App.LogAudit(user.Username, 0, "MOVE_FOLDER", fmt.Sprintf("User '%s' moved folder '%s' from '%s' to '%s'.", user.Username, req.Name, req.OldParent, req.NewParent))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Directory '%s' moved successfully", req.Name),

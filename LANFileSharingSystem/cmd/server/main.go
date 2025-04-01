@@ -256,6 +256,7 @@ func main() {
 	router.HandleFunc("/share", fileController.ShareFile).Methods("POST")
 	router.HandleFunc("/file/rename", fileController.RenameFile).Methods("PUT")
 	router.HandleFunc("/download-share", fileController.DownloadShare).Methods("GET")
+	router.HandleFunc("/users/fetch", userController.FetchUserList).Methods("GET")
 	router.HandleFunc("/users", userController.ListUsers).Methods("GET")
 	router.HandleFunc("/user/add", userController.AddUser).Methods("POST")
 	router.HandleFunc("/user/update", userController.UpdateUser).Methods("PUT")

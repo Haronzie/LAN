@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Layout,
   Table,
@@ -15,7 +15,9 @@ import {
   Breadcrumb,
   Upload,
   TreeSelect,
-  Checkbox
+  Checkbox,
+  Select,
+  Spin
 } from 'antd';
 import {
   UploadOutlined,
@@ -32,8 +34,65 @@ import {
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
+import debounce from 'lodash.debounce';
 
 const { Content } = Layout;
+const { Option } = Select;
+
+// Professional Searchable Dropdown Component for Grant/Revoke access
+const UserSearchSelect = ({ onUserSelect }) => {
+  const [options, setOptions] = useState([]);
+  const [fetching, setFetching] = useState(false);
+
+  // Debounced search function to reduce API calls
+  const fetchUserOptions = useCallback(
+    debounce(async (value) => {
+      if (!value) {
+        setOptions([]);
+        setFetching(false);
+        return;
+      }
+      setFetching(true);
+      try {
+        const response = await axios.get(`/users?search=${value}`, { withCredentials: true });
+        // Assuming the endpoint returns an array of user objects with a 'username' property.
+        setOptions(response.data || []);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      } finally {
+        setFetching(false);
+      }
+    }, 500),
+    []
+  );
+
+  const handleSearch = (value) => {
+    fetchUserOptions(value);
+  };
+
+  return (
+    <Select
+  showSearch
+  placeholder="Type to search for a user"
+  notFoundContent={fetching ? <Spin size="small" /> : null}
+  onSearch={handleSearch}
+  onChange={(value) => onUserSelect(value)}
+  filterOption={(input, option) =>
+    option.children.toLowerCase().startsWith(input.toLowerCase())
+  }
+  style={{ width: '100%' }}
+  allowClear
+>
+  {options.map((user) => (
+    <Option key={user.username} value={user.username}>
+      {user.username}
+    </Option>
+  ))}
+</Select>
+
+
+  );
+};
 
 // Helper: split a path like "Folder/Subfolder" into segments
 function getPathSegments(p) {
@@ -84,9 +143,7 @@ const FileManager = () => {
   const [folderTreeData, setFolderTreeData] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState('');
 
-  // --------------------------------------------
-  // NEW: Grant/Revoke State
-  // --------------------------------------------
+  // Grant/Revoke state
   const [grantModalVisible, setGrantModalVisible] = useState(false);
   const [revokeModalVisible, setRevokeModalVisible] = useState(false);
   const [accessFile, setAccessFile] = useState(null);
@@ -107,9 +164,7 @@ const FileManager = () => {
   const navigate = useNavigate();
   const isRoot = currentPath === '';
 
-  // --------------------------------------------
   // Grant / Revoke Handlers
-  // --------------------------------------------
   const openGrantModal = (file) => {
     setAccessFile(file);
     setTargetUsername('');
@@ -123,28 +178,24 @@ const FileManager = () => {
   };
 
   const handleGrantAccess = async () => {
-    if (!targetUsername.trim()) {
-      message.error('Username cannot be empty');
+    if (!targetUsername) {
+      message.error('Please select a user to grant access.');
       return;
     }
     if (!accessFile || !accessFile.id) {
-      message.error('No file selected');
+      message.error('No file selected.');
       return;
     }
-
     try {
       await axios.post(
         '/grant-access',
-        {
-          file_id: accessFile.id,
-          target_user: targetUsername,
-        },
+        { file_id: accessFile.id, target_user: targetUsername },
         { withCredentials: true }
       );
       message.success(`Access granted to '${targetUsername}'`);
       setGrantModalVisible(false);
       setTargetUsername('');
-      fetchItems(); // ✅ Added refresh
+      fetchItems();
     } catch (error) {
       console.error('Grant Access error:', error);
       message.error(error.response?.data?.error || 'Error granting access');
@@ -152,49 +203,40 @@ const FileManager = () => {
   };
 
   const handleRevokeAccess = async () => {
-    if (!targetUsername.trim()) {
-      message.error('Username cannot be empty');
+    if (!targetUsername) {
+      message.error('Please select a user to revoke access.');
       return;
     }
     if (!accessFile || !accessFile.id) {
-      message.error('No file selected');
+      message.error('No file selected.');
       return;
     }
-
     try {
       await axios.post(
         '/revoke-access',
-        {
-          file_id: accessFile.id,
-          target_user: targetUsername,
-        },
+        { file_id: accessFile.id, target_user: targetUsername },
         { withCredentials: true }
       );
       message.success(`Access revoked from '${targetUsername}'`);
       setRevokeModalVisible(false);
       setTargetUsername('');
-      fetchItems(); // ✅ Added refresh
+      fetchItems();
     } catch (error) {
       console.error('Revoke Access error:', error);
       message.error(error.response?.data?.error || 'Error revoking access');
     }
   };
 
-
-  // --------------------------------------------
   // Fetch items for the current folder
-  // --------------------------------------------
   const fetchItems = async () => {
     setLoading(true);
     try {
       const directoryParam = encodeURIComponent(currentPath);
       const [filesRes, dirsRes] = await Promise.all([
         axios.get(`/files?directory=${directoryParam}`, { withCredentials: true }),
-        axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true }),
+        axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true })
       ]);
 
-      // Convert files to table items
-      // Make sure the backend returns { name, size, uploader, confidential, id, etc. }
       const files = (filesRes.data || []).map((f) => ({
         name: f.name,
         type: 'file',
@@ -203,12 +245,10 @@ const FileManager = () => {
         contentType: f.contentType,
         uploader: f.uploader,
         confidential: f.confidential,
-        id: f.id, // needed for Grant/Revoke
+        id: f.id
       }));
 
-      // Directories are already in { name, type: 'directory', etc. }
       const directories = dirsRes.data || [];
-
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching items:', error);
@@ -218,16 +258,13 @@ const FileManager = () => {
     }
   };
 
-  // --------------------------------------------
-  // Fetch entire folder tree once on mount
-  // --------------------------------------------
+  // Fetch entire folder tree on mount
   const fetchFolderTree = async () => {
     try {
       const res = await axios.get('/directory/tree', { withCredentials: true });
       setFolderTreeData(res.data || []);
     } catch (error) {
       console.error('Error fetching folder tree:', error);
-      // not fatal
     }
   };
 
@@ -235,25 +272,23 @@ const FileManager = () => {
     fetchFolderTree();
   }, []);
 
-  // Whenever currentPath changes, reload items
+  // Reload items when currentPath changes
   useEffect(() => {
     fetchItems();
   }, [currentPath]);
 
-  // (Optional) Poll for changes every 10s
+  // Optional polling every 10 seconds
   useEffect(() => {
     const interval = setInterval(fetchItems, 10000);
     return () => clearInterval(interval);
   }, [currentPath]);
 
-  // Filter by search term
+  // Filter items by search term
   const filteredItems = items.filter((item) =>
     (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // ---------------------------------------------
   // Create folder
-  // ---------------------------------------------
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -269,7 +304,6 @@ const FileManager = () => {
       setCreateFolderModal(false);
       setNewFolderName('');
       fetchItems();
-      // Refresh the folder tree so new folder appears
       fetchFolderTree();
     } catch (error) {
       console.error('Create folder error:', error);
@@ -277,9 +311,7 @@ const FileManager = () => {
     }
   };
 
-  // ---------------------------------------------
   // Folder navigation
-  // ---------------------------------------------
   const handleFolderClick = (folderName) => {
     const newPath = isRoot ? folderName : path.join(currentPath, folderName);
     setCurrentPath(newPath);
@@ -297,9 +329,7 @@ const FileManager = () => {
     setCurrentPath(newPath);
   };
 
-  // ---------------------------------------------
-  // Upload
-  // ---------------------------------------------
+  // Upload handling
   const handleOpenUploadModal = () => {
     if (isRoot) {
       message.error('Please select an existing folder before uploading a file.');
@@ -310,7 +340,6 @@ const FileManager = () => {
     setUploadModalVisible(true);
   };
 
-  // Confirmed upload helper
   const doUpload = async (isConfidential) => {
     const formData = new FormData();
     if (!uploadingFile) {
@@ -324,7 +353,7 @@ const FileManager = () => {
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       message.success(res.data.message || 'File uploaded successfully');
       setUploadModalVisible(false);
@@ -346,39 +375,33 @@ const FileManager = () => {
       message.error('Please select a folder first');
       return;
     }
-
-    // If user did NOT mark confidential, ask for confirmation
     if (!uploadConfidential) {
       Modal.confirm({
         title: 'Upload as non-confidential?',
         content: 'Are you sure you want to upload this file without marking it as confidential?',
-        onOk: () => doUpload(false),
+        onOk: () => doUpload(false)
       });
     } else {
-      // If user DID mark confidential, just proceed
       doUpload(true);
     }
   };
 
-  // ---------------------------------------------
-  // Delete (file or folder)
-  // ---------------------------------------------
+  // Delete file or folder
   const handleDelete = async (record) => {
     try {
       if (record.type === 'directory') {
         await axios.delete('/directory/delete', {
           data: { name: record.name, parent: currentPath },
-          withCredentials: true,
+          withCredentials: true
         });
       } else {
         await axios.delete('/delete-file', {
           data: { filename: record.name },
-          withCredentials: true,
+          withCredentials: true
         });
       }
       message.success(`${record.name} deleted successfully`);
       fetchItems();
-      // Refresh the folder tree if a folder was deleted
       if (record.type === 'directory') {
         fetchFolderTree();
       }
@@ -388,9 +411,7 @@ const FileManager = () => {
     }
   };
 
-  // ---------------------------------------------
-  // Download file
-  // ---------------------------------------------
+  // Download file or folder
   const handleDownload = (fileName) => {
     const encodedDir = encodeURIComponent(currentPath);
     const encodedFile = encodeURIComponent(fileName);
@@ -398,16 +419,13 @@ const FileManager = () => {
     window.open(downloadUrl, '_blank');
   };
 
-  // Download folder
   const handleDownloadFolder = (folderName) => {
     const folderPath = path.join(currentPath, folderName);
     const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
     window.open(downloadUrl, '_blank');
   };
 
-  // ---------------------------------------------
   // Rename
-  // ---------------------------------------------
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
       message.error('New name cannot be empty');
@@ -420,18 +438,17 @@ const FileManager = () => {
           {
             old_name: selectedItem.name,
             new_name: renameNewName,
-            parent: currentPath,
+            parent: currentPath
           },
           { withCredentials: true }
         );
-        // Refresh folder tree so renamed folder is updated
         fetchFolderTree();
       } else {
         await axios.put(
           '/file/rename',
           {
             old_filename: selectedItem.name,
-            new_filename: renameNewName,
+            new_filename: renameNewName
           },
           { withCredentials: true }
         );
@@ -446,9 +463,7 @@ const FileManager = () => {
     }
   };
 
-  // ---------------------------------------------
   // Copy
-  // ---------------------------------------------
   const handleCopy = (record) => {
     const suggestedName = record.name + '_copy';
     setCopyItem(record);
@@ -465,41 +480,35 @@ const FileManager = () => {
       message.error('No item selected to copy');
       return;
     }
-
     try {
       if (copyItem.type === 'directory') {
-        // Copy folder
         await axios.post(
           '/directory/copy',
           {
             source_name: copyItem.name,
             source_parent: currentPath,
             new_name: copyNewName,
-            destination_parent: selectedDestination || currentPath,
+            destination_parent: selectedDestination || currentPath
           },
           { withCredentials: true }
         );
       } else {
-        // Copy file
         await axios.post(
           '/copy-file',
           {
             source_file: copyItem.name,
             new_file_name: copyNewName,
-            destination_folder: selectedDestination || currentPath,
+            destination_folder: selectedDestination || currentPath
           },
           { withCredentials: true }
         );
       }
-
       message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
       setCopyModalVisible(false);
       setCopyNewName('');
       setCopyItem(null);
       setSelectedDestination('');
       fetchItems();
-
-      // If a folder was copied, refresh the tree so the new folder shows
       if (copyItem.type === 'directory') {
         fetchFolderTree();
       }
@@ -509,9 +518,7 @@ const FileManager = () => {
     }
   };
 
-  // ---------------------------------------------
   // Move
-  // ---------------------------------------------
   const handleMove = (record) => {
     setMoveItem(record);
     setMoveDestination(currentPath);
@@ -537,7 +544,7 @@ const FileManager = () => {
           {
             name: moveItem.name,
             old_parent: currentPath,
-            new_parent: moveDestination,
+            new_parent: moveDestination
           },
           { withCredentials: true }
         );
@@ -548,7 +555,7 @@ const FileManager = () => {
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
-            confidential: moveConfidential,
+            confidential: moveConfidential
           },
           { withCredentials: true }
         );
@@ -567,9 +574,7 @@ const FileManager = () => {
     }
   };
 
-  // ---------------------------------------------
   // Table columns
-  // ---------------------------------------------
   const columns = [
     {
       title: 'Name',
@@ -585,26 +590,25 @@ const FileManager = () => {
           );
         }
         return name;
-      },
+      }
     },
     {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
-      render: (type) => (type === 'directory' ? 'Folder' : 'File'),
+      render: (type) => (type === 'directory' ? 'Folder' : 'File')
     },
     {
       title: 'Size',
       dataIndex: 'formattedSize',
       key: 'size',
-      render: (size, record) => (record.type === 'directory' ? '--' : size),
+      render: (size, record) => (record.type === 'directory' ? '--' : size)
     },
     {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        // Check if the current user can manage access to a confidential file
-        const isOwner = (record.uploader === currentUser);
+        const isOwner = record.uploader === currentUser;
         const canManageAccess =
           record.type === 'file' &&
           record.confidential === true &&
@@ -612,27 +616,16 @@ const FileManager = () => {
 
         return (
           <Space>
-            {/* Download button for files */}
             {record.type === 'file' && (
               <Tooltip title="Download">
-                <Button
-                  icon={<DownloadOutlined />}
-                  onClick={() => handleDownload(record.name)}
-                />
+                <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
               </Tooltip>
             )}
-
-            {/* Download folder button for directories */}
             {record.type === 'directory' && (
               <Tooltip title="Download Folder">
-                <Button
-                  icon={<DownloadOutlined />}
-                  onClick={() => handleDownloadFolder(record.name)}
-                />
+                <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
-
-            {/* Rename */}
             <Tooltip title="Rename">
               <Button
                 icon={<EditOutlined />}
@@ -643,62 +636,42 @@ const FileManager = () => {
                 }}
               />
             </Tooltip>
-
-            {/* Copy */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
-
-            {/* Move */}
             <Tooltip title="Move">
               <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
             </Tooltip>
-
-            {/* Delete */}
             <Tooltip title="Delete">
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => handleDelete(record)}
-              />
+              <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
             </Tooltip>
-
-            {/* Grant/Revoke if file is confidential & user is owner or admin */}
             {canManageAccess && (
               <>
                 <Tooltip title="Grant Access">
-                  <Button onClick={() => openGrantModal(record)}>
-                    Grant
-                  </Button>
+                  <Button onClick={() => openGrantModal(record)}>Grant</Button>
                 </Tooltip>
                 <Tooltip title="Revoke Access">
-                  <Button onClick={() => openRevokeModal(record)}>
-                    Revoke
-                  </Button>
+                  <Button onClick={() => openRevokeModal(record)}>Revoke</Button>
                 </Tooltip>
               </>
             )}
           </Space>
         );
-      },
-    },
+      }
+    }
   ];
 
-  // Build breadcrumb
+  // Breadcrumb
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
     <Breadcrumb.Item key="root">
       {isRoot ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
-    </Breadcrumb.Item>,
+    </Breadcrumb.Item>
   ];
   segments.forEach((seg, index) => {
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
-        {index === segments.length - 1 ? seg : (
-          <a onClick={() => handleBreadcrumbClick(index)}>
-            {seg}
-          </a>
-        )}
+        {index === segments.length - 1 ? seg : <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>}
       </Breadcrumb.Item>
     );
   });
@@ -706,14 +679,9 @@ const FileManager = () => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
-        {/* Top row: Title, Back to Dashboard, and Upload */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col xs={8} style={{ textAlign: 'left' }}>
-            <Button 
-              type="primary" 
-              icon={<ArrowLeftOutlined />} 
-              onClick={() => navigate('/admin')}
-            >
+            <Button type="primary" icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin')}>
               Back to Dashboard
             </Button>
           </Col>
@@ -727,7 +695,6 @@ const FileManager = () => {
           </Col>
         </Row>
 
-        {/* Breadcrumb */}
         {segments.length > 0 && (
           <Row style={{ marginBottom: 16 }}>
             <Col>
@@ -821,7 +788,7 @@ const FileManager = () => {
           <Upload
             beforeUpload={(file) => {
               setUploadingFile(file);
-              return false; // Prevent auto-upload
+              return false;
             }}
             maxCount={1}
           >
@@ -832,7 +799,6 @@ const FileManager = () => {
               <strong>Selected File:</strong> {uploadingFile.name}
             </Card>
           )}
-
           <Form layout="vertical" style={{ marginTop: 16 }}>
             <Form.Item label="Mark as Confidential?">
               <Checkbox
@@ -861,7 +827,6 @@ const FileManager = () => {
                 placeholder="Enter new name"
               />
             </Form.Item>
-            {/* TreeSelect for optional destination folder */}
             <Form.Item label="Destination Folder (Optional)">
               <TreeSelect
                 style={{ width: '100%' }}
@@ -907,40 +872,40 @@ const FileManager = () => {
           </Form>
         </Modal>
 
-        {/* Grant Access Modal */}
+        {/* Grant Access Modal with Professional Searchable Dropdown */}
         <Modal
           title="Grant Access"
           visible={grantModalVisible}
           onOk={handleGrantAccess}
           onCancel={() => setGrantModalVisible(false)}
-          okText="Grant"
+          okText="Grant Access"
         >
           <Form layout="vertical">
-            <Form.Item label="Username to Grant" required>
-              <Input
-                value={targetUsername}
-                onChange={(e) => setTargetUsername(e.target.value)}
-                placeholder="Enter username"
-              />
+            <Form.Item
+              label="Select User to Grant Access"
+              required
+              tooltip="Begin typing to search for a username"
+            >
+              <UserSearchSelect onUserSelect={(value) => setTargetUsername(value)} />
             </Form.Item>
           </Form>
         </Modal>
 
-        {/* Revoke Access Modal */}
+        {/* Revoke Access Modal with Professional Searchable Dropdown */}
         <Modal
           title="Revoke Access"
           visible={revokeModalVisible}
           onOk={handleRevokeAccess}
           onCancel={() => setRevokeModalVisible(false)}
-          okText="Revoke"
+          okText="Revoke Access"
         >
           <Form layout="vertical">
-            <Form.Item label="Username to Revoke" required>
-              <Input
-                value={targetUsername}
-                onChange={(e) => setTargetUsername(e.target.value)}
-                placeholder="Enter username"
-              />
+            <Form.Item
+              label="Select User to Revoke Access"
+              required
+              tooltip="Begin typing to search for a username"
+            >
+              <UserSearchSelect onUserSelect={(value) => setTargetUsername(value)} />
             </Form.Item>
           </Form>
         </Modal>
