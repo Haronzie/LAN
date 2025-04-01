@@ -194,11 +194,13 @@ const FileManager = () => {
       );
       message.success(`Access granted to '${targetUsername}'`);
       setGrantModalVisible(false);
-      setTargetUsername('');
+      setTargetUsername(''); // Reset targetUsername
       fetchItems();
     } catch (error) {
       console.error('Grant Access error:', error);
       message.error(error.response?.data?.error || 'Error granting access');
+    } finally {
+      setTargetUsername(''); // Ensure the input is cleared
     }
   };
 
@@ -219,11 +221,13 @@ const FileManager = () => {
       );
       message.success(`Access revoked from '${targetUsername}'`);
       setRevokeModalVisible(false);
-      setTargetUsername('');
+      setTargetUsername(''); // Reset targetUsername
       fetchItems();
     } catch (error) {
       console.error('Revoke Access error:', error);
       message.error(error.response?.data?.error || 'Error revoking access');
+    } finally {
+      setTargetUsername(''); // Ensure the input is cleared
     }
   };
 
