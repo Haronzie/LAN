@@ -105,7 +105,7 @@ const handleUserSearch = async (value) => {
   }
   setFetchingUsers(true);
   try {
-    const response = await axios.get(`/users?search=${value}`, { withCredentials: true });
+    const response = await axios.get(`/users/fetch?search=${value}`, { withCredentials: true }); // Updated endpoint
     setUserOptions(response.data || []); // Assuming API returns an array of users
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -651,12 +651,12 @@ const handleUserSearch = async (value) => {
             ? record.created_by === currentUser
             : record.uploader === currentUser;
 
-        // Condition to show Grant/Revoke: file is confidential + user is owner or admin + it's a file
         const canManageAccess =
           record.type === 'file' &&
           record.confidential &&
-          (isOwner || isAdmin);
-          const hasAccess = checkFileAccess(record);
+          (isOwner || isAdmin); // Include admin in the condition
+
+        const hasAccess = checkFileAccess(record);
 
         return (
           <Space>
@@ -685,53 +685,60 @@ const handleUserSearch = async (value) => {
           </Tooltip>
         )}
 
-            {/* Copy action available for all */}
+            {/* Rename */}
+            {isOwner && (
+              <Tooltip title="Rename">
+                <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
+              </Tooltip>
+            )}
+
+            {/* Copy */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
 
-            {/* Grant / Revoke if canManageAccess */}
-            {canManageAccess && (
-              <>
-                <Tooltip title="Grant Access">
-                  <Button
-                    onClick={() => {
-                      setAccessFile(record);
-                      setTargetUsername('');
-                      setGrantModalVisible(true);
-                    }}
-                  >
-                    Grant
-                  </Button>
-                </Tooltip>
-
-                <Tooltip title="Revoke Access">
-                  <Button
-                    onClick={() => {
-                      setAccessFile(record);
-                      setTargetUsername('');
-                      setRevokeModalVisible(true);
-                    }}
-                  >
-                    Revoke
-                  </Button>
-                </Tooltip>
-              </>
+            {/* Move */}
+            {isOwner && (
+              <Tooltip title="Move">
+                <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
+              </Tooltip>
             )}
 
-            {/* Rename, delete, move if owner */}
+            {/* Delete */}
             {isOwner && (
-              <>
-                <Tooltip title="Rename">
-                  <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
-                </Tooltip>
-                <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
-                  <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
-                </Tooltip>
-                <Tooltip title="Move">
-                  <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
-                </Tooltip>
-              </>
+              <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
+                <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+              </Tooltip>
+            )}
+
+            {/* Grant Access */}
+            {canManageAccess && (
+              <Tooltip title="Grant Access">
+                <Button
+                  onClick={() => {
+                    setAccessFile(record);
+                    setTargetUsername('');
+                    setGrantModalVisible(true);
+                  }}
+                >
+                  Grant
+                </Button>
+              </Tooltip>
+            )}
+
+            {/* Revoke Access */}
+            {canManageAccess && (
+              <Tooltip title="Revoke Access">
+                <Button
+                  onClick={() => {
+                    setAccessFile(record);
+                    setTargetUsername('');
+                    setRevokeModalVisible(true);
+                  }}
+                >
+                  Revoke
+                </Button>
+              </Tooltip>
             )}
           </Space>
         );
