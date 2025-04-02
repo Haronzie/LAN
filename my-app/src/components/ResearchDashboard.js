@@ -957,71 +957,73 @@ const ResearchDashboard = () => {
 
         {/* Grant Access Modal */}
         <Modal
-          title="Grant Access"
-          visible={grantModalVisible}
-          onOk={handleGrantAccess}
-          onCancel={() => setGrantModalVisible(false)}
-          okText="Grant"
-        >
-          <Form layout="vertical">
-            <Form.Item
-              label="Select User to Grant Access"
-              required
-              tooltip="Begin typing to search for a username"
-            >
-              <Select
-                showSearch
-                placeholder="Type to search for a user"
-                notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
-                onSearch={handleUserSearch}
-                onChange={(value) => setTargetUsername(value)}
-                filterOption={false} // Disable default filtering to rely on API search
-                style={{ width: '100%' }}
-                allowClear
-              >
-                {userOptions.map((user) => (
-                  <Select.Option key={user.username} value={user.username}>
-                    {user.username}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Form>
-        </Modal>
+  title="Grant Access"
+  visible={grantModalVisible}
+  onOk={handleGrantAccess}
+  onCancel={() => setGrantModalVisible(false)}
+  okText="Grant"
+>
+  <Form layout="vertical">
+    <Form.Item
+      label="Select User to Grant Access"
+      required
+      tooltip="Begin typing to search for a username"
+    >
+      <Select
+        showSearch
+        placeholder="Type to search for a user"
+        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
+        onSearch={handleUserSearch}
+        onChange={(value) => setTargetUsername(value)}
+        filterOption={false} // rely on API search results
+        style={{ width: '100%' }}
+        allowClear
+        value={targetUsername}  // Controlled value
+      >
+        {userOptions.map((user) => (
+          <Select.Option key={user.username} value={user.username}>
+            {user.username}
+          </Select.Option>
+        ))}
+      </Select>
+    </Form.Item>
+  </Form>
+</Modal>
 
         {/* Revoke Access Modal */}
         <Modal
-          title="Revoke Access"
-          visible={revokeModalVisible}
-          onOk={handleRevokeAccess}
-          onCancel={() => setRevokeModalVisible(false)}
-          okText="Revoke"
-        >
-          <Form layout="vertical">
-            <Form.Item
-              label="Select User to Revoke Access"
-              required
-              tooltip="Begin typing to search for a username"
-            >
-              <Select
-                showSearch
-                placeholder="Type to search for a user"
-                notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
-                onSearch={handleUserSearch}
-                onChange={(value) => setTargetUsername(value)}
-                filterOption={false} // Disable default filtering to rely on API search
-                style={{ width: '100%' }}
-                allowClear
-              >
-                {userOptions.map((user) => (
-                  <Select.Option key={user.username} value={user.username}>
-                    {user.username}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Form>
-        </Modal>
+  title="Revoke Access"
+  visible={revokeModalVisible}
+  onOk={handleRevokeAccess}
+  onCancel={() => setRevokeModalVisible(false)}
+  okText="Revoke"
+>
+  <Form layout="vertical">
+    <Form.Item
+      label="Select User to Revoke Access"
+      required
+      tooltip="Begin typing to search for a username"
+    >
+      <Select
+        showSearch
+        placeholder="Type to search for a user"
+        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
+        onSearch={handleUserSearch}
+        onChange={(value) => setTargetUsername(value)}
+        filterOption={false}
+        style={{ width: '100%' }}
+        allowClear
+        value={targetUsername}  // Controlled value
+      >
+        {userOptions.map((user) => (
+          <Select.Option key={user.username} value={user.username}>
+            {user.username}
+          </Select.Option>
+        ))}
+      </Select>
+    </Form.Item>
+  </Form>
+</Modal>
       </Content>
     </Layout>
   );

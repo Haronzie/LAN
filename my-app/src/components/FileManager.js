@@ -40,7 +40,8 @@ const { Content } = Layout;
 const { Option } = Select;
 
 // Professional Searchable Dropdown Component for Grant/Revoke access
-const UserSearchSelect = ({ onUserSelect }) => {
+// Professional Searchable Dropdown Component for Grant/Revoke access
+const UserSearchSelect = ({ value, onUserSelect }) => {
   const [options, setOptions] = useState([]);
   const [fetching, setFetching] = useState(false);
 
@@ -66,33 +67,33 @@ const UserSearchSelect = ({ onUserSelect }) => {
     []
   );
 
-  const handleSearch = (value) => {
-    fetchUserOptions(value);
+  const handleSearch = (inputValue) => {
+    fetchUserOptions(inputValue);
   };
 
   return (
     <Select
-  showSearch
-  placeholder="Type to search for a user"
-  notFoundContent={fetching ? <Spin size="small" /> : null}
-  onSearch={handleSearch}
-  onChange={(value) => onUserSelect(value)}
-  filterOption={(input, option) =>
-    option.children.toLowerCase().startsWith(input.toLowerCase())
-  }
-  style={{ width: '100%' }}
-  allowClear
->
-  {options.map((user) => (
-    <Option key={user.username} value={user.username}>
-      {user.username}
-    </Option>
-  ))}
-</Select>
-
-
+      showSearch
+      placeholder="Type to search for a user"
+      notFoundContent={fetching ? <Spin size="small" /> : null}
+      onSearch={handleSearch}
+      onChange={(value) => onUserSelect(value)}
+      filterOption={(input, option) =>
+        option.children.toLowerCase().startsWith(input.toLowerCase())
+      }
+      style={{ width: '100%' }}
+      allowClear
+      value={value}
+    >
+      {options.map((user) => (
+        <Option key={user.username} value={user.username}>
+          {user.username}
+        </Option>
+      ))}
+    </Select>
   );
 };
+
 
 // Helper: split a path like "Folder/Subfolder" into segments
 function getPathSegments(p) {
@@ -892,41 +893,49 @@ const FileManager = () => {
 
         {/* Grant Access Modal with Professional Searchable Dropdown */}
         <Modal
-          title="Grant Access"
-          visible={grantModalVisible}
-          onOk={handleGrantAccess}
-          onCancel={() => setGrantModalVisible(false)}
-          okText="Grant Access"
-        >
-          <Form layout="vertical">
-            <Form.Item
-              label="Select User to Grant Access"
-              required
-              tooltip="Begin typing to search for a username"
-            >
-              <UserSearchSelect onUserSelect={(value) => setTargetUsername(value)} />
-            </Form.Item>
-          </Form>
-        </Modal>
+  title="Grant Access"
+  visible={grantModalVisible}
+  onOk={handleGrantAccess}
+  onCancel={() => setGrantModalVisible(false)}
+  okText="Grant Access"
+>
+  <Form layout="vertical">
+    <Form.Item
+      label="Select User to Grant Access"
+      required
+      tooltip="Begin typing to search for a username"
+    >
+      <UserSearchSelect 
+        value={targetUsername}
+        onUserSelect={(value) => setTargetUsername(value)} 
+      />
+    </Form.Item>
+  </Form>
+</Modal>
+
 
         {/* Revoke Access Modal with Professional Searchable Dropdown */}
         <Modal
-          title="Revoke Access"
-          visible={revokeModalVisible}
-          onOk={handleRevokeAccess}
-          onCancel={() => setRevokeModalVisible(false)}
-          okText="Revoke Access"
-        >
-          <Form layout="vertical">
-            <Form.Item
-              label="Select User to Revoke Access"
-              required
-              tooltip="Begin typing to search for a username"
-            >
-              <UserSearchSelect onUserSelect={(value) => setTargetUsername(value)} />
-            </Form.Item>
-          </Form>
-        </Modal>
+  title="Revoke Access"
+  visible={revokeModalVisible}
+  onOk={handleRevokeAccess}
+  onCancel={() => setRevokeModalVisible(false)}
+  okText="Revoke Access"
+>
+  <Form layout="vertical">
+    <Form.Item
+      label="Select User to Revoke Access"
+      required
+      tooltip="Begin typing to search for a username"
+    >
+      <UserSearchSelect 
+        value={targetUsername}
+        onUserSelect={(value) => setTargetUsername(value)} 
+      />
+    </Form.Item>
+  </Form>
+</Modal>
+
       </Content>
     </Layout>
   );

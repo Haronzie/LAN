@@ -957,7 +957,7 @@ const handleUserSearch = async (value) => {
         </Modal>
 
         {/* Grant Access Modal */}
-        <Modal
+<Modal
   title="Grant Access"
   visible={grantModalVisible}
   onOk={handleGrantAccess}
@@ -976,9 +976,10 @@ const handleUserSearch = async (value) => {
         notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
         onSearch={handleUserSearch}
         onChange={(value) => setTargetUsername(value)}
-        filterOption={false} // Disable default filtering to rely on API search
+        filterOption={false} // rely on API search
         style={{ width: '100%' }}
         allowClear
+        value={targetUsername} 
       >
         {userOptions.map((user) => (
           <Select.Option key={user.username} value={user.username}>
@@ -990,6 +991,40 @@ const handleUserSearch = async (value) => {
   </Form>
 </Modal>
 
+{/* Revoke Access Modal */}
+<Modal
+  title="Revoke Access"
+  visible={revokeModalVisible}
+  onOk={handleRevokeAccess}
+  onCancel={() => setRevokeModalVisible(false)}
+  okText="Revoke"
+>
+  <Form layout="vertical">
+    <Form.Item
+      label="Select User to Revoke Access"
+      required
+      tooltip="Begin typing to search for a username"
+    >
+      <Select
+        showSearch
+        placeholder="Type to search for a user"
+        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
+        onSearch={handleUserSearch}
+        onChange={(value) => setTargetUsername(value)}
+        filterOption={false} // rely on API search
+        style={{ width: '100%' }}
+        allowClear
+        value={targetUsername}
+      >
+        {userOptions.map((user) => (
+          <Select.Option key={user.username} value={user.username}>
+            {user.username}
+          </Select.Option>
+        ))}
+      </Select>
+    </Form.Item>
+  </Form>
+</Modal>
         {/* Revoke Access Modal */}
         <Modal
   title="Revoke Access"
@@ -1010,9 +1045,10 @@ const handleUserSearch = async (value) => {
         notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
         onSearch={handleUserSearch}
         onChange={(value) => setTargetUsername(value)}
-        filterOption={false} // Disable default filtering to rely on API search
+        filterOption={false} // rely on API search
         style={{ width: '100%' }}
         allowClear
+        value={targetUsername}
       >
         {userOptions.map((user) => (
           <Select.Option key={user.username} value={user.username}>
