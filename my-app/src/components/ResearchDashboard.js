@@ -29,7 +29,8 @@ import {
   CopyOutlined,
   SwapOutlined,
   ArrowLeftOutlined,
-  LockOutlined
+  LockOutlined,
+  FileOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -603,6 +604,14 @@ const ResearchDashboard = () => {
   };
 
   // ----------------------------------------
+  // Add the handleViewFile function
+  // ----------------------------------------
+  const handleViewFile = (file) => {
+    const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
+    window.open(previewUrl, '_blank');
+  };
+
+  // ----------------------------------------
   // Table Columns with Confidential File Check
   // ----------------------------------------
   const columns = [
@@ -663,6 +672,13 @@ const ResearchDashboard = () => {
 
         return (
           <Space>
+            {/* View File */}
+            {record.type === 'file' && hasAccess && (
+              <Tooltip title="View File">
+                <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
+              </Tooltip>
+            )}
+
             {/* Download */}
             {record.type === 'file' && (
               hasAccess ? (

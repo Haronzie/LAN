@@ -29,7 +29,8 @@ import {
   EditOutlined,
   CopyOutlined,
   SwapOutlined,
-  ArrowLeftOutlined
+  ArrowLeftOutlined,
+  FileOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -159,7 +160,7 @@ const FileManager = () => {
     const storedUsername = localStorage.getItem('username');
     const storedRole = localStorage.getItem('role');
     if (storedUsername) setCurrentUser(storedUsername);
-    if (storedRole === 'admin') setIsAdmin(true);
+    if (storedRole === 'admin') setIsAdmin(true)
   }, []);
 
   const navigate = useNavigate();
@@ -430,6 +431,11 @@ const FileManager = () => {
     window.open(downloadUrl, '_blank');
   };
 
+  const handleViewFile = (file) => {
+    const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
+    window.open(previewUrl, '_blank');
+  };
+
   // Rename
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
@@ -622,6 +628,13 @@ const FileManager = () => {
 
         return (
           <Space>
+            {/* View File */}
+            {record.type === 'file' && (
+              <Tooltip title="View File">
+                <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
+              </Tooltip>
+            )}
+
             {/* Download */}
             {record.type === 'file' && (
               <Tooltip title="Download">

@@ -993,3 +993,93 @@ func (fc *FileController) GrantFileAccess(w http.ResponseWriter, r *http.Request
 	fc.App.LogActivity(fmt.Sprintf("User '%s' granted access to file '%d' for user '%s'.", user.Username, req.FileID, req.TargetUser))
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Access granted"})
 }
+
+// Preview handles file preview requests by decrypting files and sending them with inline disposition.
+func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	// Retrieve the current user from the session
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Get file location parameters
+	directory := r.URL.Query().Get("directory")
+	fileName := r.URL.Query().Get("filename")
+	if fileName == "" || directory == "" {
+		models.RespondError(w, http.StatusBadRequest, "Directory and filename are required")
+		return
+	}
+
+	// Sanitize inputs and build full path
+	cleanDir := filepath.Clean(directory)
+	cleanName := filepath.Clean(fileName)
+	if strings.Contains(cleanDir, "..") || strings.Contains(cleanName, "..") {
+		models.RespondError(w, http.StatusBadRequest, "Invalid path components")
+		return
+	}
+
+	relativePath := filepath.Join(cleanDir, cleanName)
+
+	// Fetch the file record by path
+	fr, err := fc.App.GetFileRecordByPath(relativePath)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// Confidentiality Check (same as Download)
+	if fr.Confidential {
+		if fr.Uploader != user.Username && user.Role != "admin" {
+			allowed, err := fc.App.HasFileAccess(fr.ID, user.Username)
+			if err != nil || !allowed {
+				models.RespondError(w, http.StatusForbidden, "Access denied to confidential file")
+				return
+			}
+		}
+	}
+
+	// Decryption workflow (same as Download)
+	encryptedFilePath := filepath.Join("uploads", fr.FilePath)
+	tempDecryptedPath := encryptedFilePath + ".dec"
+
+	key := []byte(os.Getenv("ENCRYPTION_KEY"))
+	if len(key) != 32 {
+		models.RespondError(w, http.StatusInternalServerError, "Invalid encryption key")
+		return
+	}
+
+	if err := encryption.DecryptFile(key, encryptedFilePath, tempDecryptedPath); err != nil {
+		os.Remove(tempDecryptedPath)
+		log.Printf("Decryption failed for %s: %v", relativePath, err)
+		models.RespondError(w, http.StatusInternalServerError, "Error decrypting file")
+		return
+	}
+	defer os.Remove(tempDecryptedPath)
+
+	// Stream decrypted content with INLINE disposition
+	f, err := os.Open(tempDecryptedPath)
+	if err != nil {
+		log.Printf("Failed to open decrypted file %s: %v", tempDecryptedPath, err)
+		models.RespondError(w, http.StatusInternalServerError, "Error opening decrypted file")
+		return
+	}
+	defer f.Close()
+
+	w.Header().Set("Content-Type", fr.ContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", fr.FileName))
+
+	if _, err := io.Copy(w, f); err != nil {
+		log.Printf("Streaming error for %s: %v", relativePath, err)
+		models.RespondError(w, http.StatusInternalServerError, "Error sending file")
+		return
+	}
+
+	// Audit log
+	fc.App.LogActivity(fmt.Sprintf("User '%s' previewed file '%s' (ID: %d)", user.Username, fr.FileName, fr.ID))
+}
