@@ -330,3 +330,26 @@ func (uc *UserController) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
 		"message": fmt.Sprintf("Admin privileges revoked from '%s'", targetUsername),
 	})
 }
+func (uc *UserController) GetFirstAdmin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	// (Optional) Ensure the requester is an admin or at least authenticated:
+	user, err := uc.App.GetUserFromSession(r)
+	if err != nil || user.Role != "admin" {
+		models.RespondError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	firstAdmin, err := uc.App.GetFirstAdmin()
+	if err != nil {
+		// If no admin exists or DB error, respond accordingly
+		log.Println("Error retrieving first admin:", err)
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving first admin")
+		return
+	}
+
+	// Return the first admin's info (e.g., username and role)
+	models.RespondJSON(w, http.StatusOK, firstAdmin)
+}

@@ -271,6 +271,7 @@ func main() {
 	router.HandleFunc("/revoke-access", fileController.RevokeFileAccess).Methods("POST")
 	router.HandleFunc("/preview", fileController.Preview).Methods("GET")
 	router.HandleFunc("/revoke-admin", userController.RevokeAdmin).Methods("POST")
+	router.HandleFunc("/get-first-admin", userController.GetFirstAdmin).Methods("GET")
 
 	// Directory routes
 	router.HandleFunc("/directory/create", directoryController.Create).Methods("POST")
