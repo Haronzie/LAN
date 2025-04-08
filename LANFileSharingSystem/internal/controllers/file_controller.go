@@ -1003,14 +1003,12 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Retrieve the current user from the session
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	// Get file location parameters
 	directory := r.URL.Query().Get("directory")
 	fileName := r.URL.Query().Get("filename")
 	if fileName == "" || directory == "" {
@@ -1018,7 +1016,6 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Sanitize inputs and build full path
 	cleanDir := filepath.Clean(directory)
 	cleanName := filepath.Clean(fileName)
 	if strings.Contains(cleanDir, "..") || strings.Contains(cleanName, "..") {
@@ -1028,25 +1025,20 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 
 	relativePath := filepath.Join(cleanDir, cleanName)
 
-	// Fetch the file record by path
 	fr, err := fc.App.GetFileRecordByPath(relativePath)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "File not found")
 		return
 	}
 
-	// Confidentiality Check
-	if fr.Confidential {
-		if fr.Uploader != user.Username && user.Role != "admin" {
-			allowed, err := fc.App.HasFileAccess(fr.ID, user.Username)
-			if err != nil || !allowed {
-				models.RespondError(w, http.StatusForbidden, "Access denied to confidential file")
-				return
-			}
+	if fr.Confidential && fr.Uploader != user.Username && user.Role != "admin" {
+		allowed, err := fc.App.HasFileAccess(fr.ID, user.Username)
+		if err != nil || !allowed {
+			models.RespondError(w, http.StatusForbidden, "Access denied to confidential file")
+			return
 		}
 	}
 
-	// Decryption workflow (same as Download)
 	encryptedFilePath := filepath.Join("uploads", fr.FilePath)
 	tempDecryptedPath := encryptedFilePath + ".dec"
 
@@ -1062,10 +1054,8 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusInternalServerError, "Error decrypting file")
 		return
 	}
-	// Ensure cleanup of the decrypted file
 	defer os.Remove(tempDecryptedPath)
 
-	// Determine if conversion is needed
 	ext := strings.ToLower(filepath.Ext(fr.FileName))
 	supportedDirectly := []string{".pdf", ".jpg", ".jpeg", ".png", ".gif"}
 	needsConversion := true
@@ -1076,57 +1066,71 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If conversion is needed, use LibreOffice to convert to PDF.
 	finalPath := tempDecryptedPath
+	contentType := fr.ContentType
+
 	if needsConversion {
-		// Create a temporary directory for conversion
 		tempDir, err := ioutil.TempDir("", "libreoffice_convert")
 		if err != nil {
-			models.RespondError(w, http.StatusInternalServerError, "Error creating temporary directory")
+			models.RespondError(w, http.StatusInternalServerError, "Error creating temp dir for conversion")
 			return
 		}
-		// Ensure temporary directory cleanup
 		defer os.RemoveAll(tempDir)
 
-		// Run libreoffice in headless mode to convert the file
-		cmd := exec.Command("libreoffice", "--headless", "--convert-to", "pdf", "--outdir", tempDir, tempDecryptedPath)
-		if err := cmd.Run(); err != nil {
+		cmd := exec.Command("/Applications/LibreOffice.app/Contents/MacOS/soffice",
+			"--headless", "--convert-to", "pdf",
+			"--outdir", tempDir,
+			tempDecryptedPath)
+
+		out, err := cmd.CombinedOutput()
+		log.Printf("LibreOffice conversion command output:\n%s", string(out))
+		if err != nil {
 			log.Printf("LibreOffice conversion failed: %v", err)
-			// If conversion fails, fallback to original file preview
-		} else {
-			// LibreOffice names the output file with the same base and a .pdf extension
-			baseName := strings.TrimSuffix(filepath.Base(fr.FileName), filepath.Ext(fr.FileName))
-			convertedPDF := filepath.Join(tempDir, baseName+".pdf")
-			if _, err := os.Stat(convertedPDF); err == nil {
-				finalPath = convertedPDF
+			models.RespondError(w, http.StatusInternalServerError, "Failed to convert file for preview")
+			return
+		}
+
+		// Dynamically find the first PDF in tempDir
+		files, err := ioutil.ReadDir(tempDir)
+		if err != nil {
+			models.RespondError(w, http.StatusInternalServerError, "Could not list converted files")
+			return
+		}
+
+		var convertedPDF string
+		for _, f := range files {
+			if !f.IsDir() && strings.HasSuffix(f.Name(), ".pdf") {
+				convertedPDF = filepath.Join(tempDir, f.Name())
+				break
 			}
 		}
+
+		if convertedPDF == "" {
+			log.Printf("No PDF found in conversion output: %v", files)
+			models.RespondError(w, http.StatusInternalServerError, "Converted PDF not found after conversion")
+			return
+		}
+
+		finalPath = convertedPDF
+		contentType = "application/pdf"
 	}
 
-	// Open the final file (either the original decrypted file or the converted PDF)
 	f, err := os.Open(finalPath)
 	if err != nil {
-		log.Printf("Failed to open file %s: %v", finalPath, err)
+		log.Printf("Failed to open preview file: %v", err)
 		models.RespondError(w, http.StatusInternalServerError, "Error opening file for preview")
 		return
 	}
 	defer f.Close()
 
-	// Update the response headers:
-	// - If conversion occurred, serve as PDF; otherwise, use original content type.
-	contentType := fr.ContentType
-	if needsConversion {
-		contentType = "application/pdf"
-	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", fr.FileName))
 
 	if _, err := io.Copy(w, f); err != nil {
-		log.Printf("Streaming error for %s: %v", relativePath, err)
-		models.RespondError(w, http.StatusInternalServerError, "Error sending file")
+		log.Printf("Preview streaming error: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Error sending preview")
 		return
 	}
 
-	// Audit log
 	fc.App.LogActivity(fmt.Sprintf("User '%s' previewed file '%s' (ID: %d)", user.Username, fr.FileName, fr.ID))
 }
