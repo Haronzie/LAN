@@ -5,7 +5,8 @@ import {
   EditOutlined,
   DeleteOutlined,
   ArrowLeftOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  UserDeleteOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -29,6 +30,7 @@ const UserManagement = () => {
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [firstAdmin, setFirstAdmin] = useState(null);
 
   // Modal state for adding user
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
@@ -40,12 +42,11 @@ const UserManagement = () => {
 
   // Modal state for updating user
   const [isUpdateUserModalOpen, setIsUpdateUserModalOpen] = useState(false);
-
   const [updateForm] = Form.useForm();
 
   const navigate = useNavigate();
 
-  // Logged-in admin’s username from localStorage
+  // Logged-in admin's username from localStorage
   const adminName = localStorage.getItem('username') || 'Admin';
 
   // Fetch users from the backend
@@ -54,6 +55,13 @@ const UserManagement = () => {
     try {
       const res = await axios.get('/users', { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
+
+      // Get the first admin information
+      const firstAdminRes = await axios.get('/admin-exists');
+      if (firstAdminRes.data.exists) {
+        const firstAdminInfo = await axios.get('/get-first-admin', { withCredentials: true });
+        setFirstAdmin(firstAdminInfo.data);
+      }
     } catch (error) {
       const errMsg = error.response?.data?.error || 'Error fetching users';
       message.error(errMsg);
@@ -95,6 +103,27 @@ const UserManagement = () => {
 
     setFilteredUsers(filtered);
   }, [searchTerm, users]);
+
+  // Handler for revoking admin privileges
+  const handleRevokeAdmin = (username) => {
+    Modal.confirm({
+      title: 'Revoke Admin Privileges',
+      content: `Are you sure you want to revoke admin privileges from '${username}'?`,
+      okText: 'Yes',
+      okType: 'danger',
+      cancelText: 'No',
+      onOk: async () => {
+        try {
+          await axios.post('/revoke-admin', { username }, { withCredentials: true });
+          message.success(`Admin privileges revoked from '${username}'`);
+          fetchUsers();
+        } catch (error) {
+          const errMsg = error.response?.data?.error || 'Error revoking admin privileges';
+          message.error(errMsg);
+        }
+      }
+    });
+  };
 
   // Handler for adding a new user
   const handleAddUserOk = async () => {
@@ -141,7 +170,6 @@ const UserManagement = () => {
 
   // Open the update modal and set form fields
   const openUpdateModal = (record) => {
-  
     updateForm.setFieldsValue({
       old_username: record.username,
       new_username: record.username,
@@ -205,6 +233,14 @@ const UserManagement = () => {
         const canDelete = !(record.role === 'admin' || record.username === adminName);
         // 2) Only edit if record.role === 'user' OR record.username === adminName
         const canEdit = record.role === 'user' || record.username === adminName;
+        // 3) Show revoke admin button only if:
+        //    - The current user is the first admin
+        //    - The record is an admin
+        //    - The record is not the first admin themselves
+        const canRevokeAdmin = firstAdmin && 
+                              firstAdmin.username === adminName && 
+                              record.role === 'admin' && 
+                              record.username !== firstAdmin.username;
 
         return (
           <Space>
@@ -236,6 +272,16 @@ const UserManagement = () => {
                 Make Admin
               </Button>
             )}
+            {canRevokeAdmin && (
+              <Button
+                size="small"
+                danger
+                icon={<UserDeleteOutlined />}
+                onClick={() => handleRevokeAdmin(record.username)}
+              >
+                Revoke Admin
+              </Button>
+            )}
           </Space>
         );
       }
@@ -245,13 +291,13 @@ const UserManagement = () => {
   return (
     <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-      <Button 
-  type="primary" 
-  icon={<ArrowLeftOutlined />} 
-  onClick={() => navigate('/admin')}
->
-  Back to Dashboard
-</Button>
+        <Button 
+          type="primary" 
+          icon={<ArrowLeftOutlined />} 
+          onClick={() => navigate('/admin')}
+        >
+          Back to Dashboard
+        </Button>
 
         <h2>User Management</h2>
         <Button
@@ -332,49 +378,49 @@ const UserManagement = () => {
 
       {/* Update User Modal */}
       <Modal
-  open={isUpdateUserModalOpen}
-  title="Update User"
-  onCancel={() => setIsUpdateUserModalOpen(false)}
-  onOk={handleUpdateUser}
-  okText="Update"
-  destroyOnClose
->
-  <Form form={updateForm} layout="vertical">
-    <Form.Item name="old_username" label="Old Username">
-      <Input disabled />
-    </Form.Item>
-    <Form.Item
-      name="new_username"
-      label="New Username"
-      rules={[{ required: true, message: 'Please input the new username!' }]}
-    >
-      <Input placeholder="Enter new username" />
-    </Form.Item>
-    <Form.Item
-      name="new_password"
-      label={
-        <span>
-          New Password&nbsp;
-          <Popover content={passwordPolicyContent} title="Password Requirements">
-            <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'pointer' }} />
-          </Popover>
-        </span>
-      }
-      rules={[
-        { required: true, message: 'Please input the new password!' },
-        {
-          pattern: new RegExp(
-            "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,}$"
-          ),
-          message:
-            'Password must be at least 8 characters long, include uppercase, lowercase, a number, and a special character'
-        }
-      ]}
-    >
-      <Input.Password placeholder="Enter new password" />
-    </Form.Item>
-  </Form>
-</Modal>
+        open={isUpdateUserModalOpen}
+        title="Update User"
+        onCancel={() => setIsUpdateUserModalOpen(false)}
+        onOk={handleUpdateUser}
+        okText="Update"
+        destroyOnClose
+      >
+        <Form form={updateForm} layout="vertical">
+          <Form.Item name="old_username" label="Old Username">
+            <Input disabled />
+          </Form.Item>
+          <Form.Item
+            name="new_username"
+            label="New Username"
+            rules={[{ required: true, message: 'Please input the new username!' }]}
+          >
+            <Input placeholder="Enter new username" />
+          </Form.Item>
+          <Form.Item
+            name="new_password"
+            label={
+              <span>
+                New Password&nbsp;
+                <Popover content={passwordPolicyContent} title="Password Requirements">
+                  <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'pointer' }} />
+                </Popover>
+              </span>
+            }
+            rules={[
+              { required: true, message: 'Please input the new password!' },
+              {
+                pattern: new RegExp(
+                  "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,}$"
+                ),
+                message:
+                  'Password must be at least 8 characters long, include uppercase, lowercase, a number, and a special character'
+              }
+            ]}
+          >
+            <Input.Password placeholder="Enter new password" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

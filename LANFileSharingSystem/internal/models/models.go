@@ -1066,3 +1066,41 @@ func AddFileToArchive(archive *zip.Writer, filePath, nameInZip string) error {
 	_, err = io.Copy(writer, fileToZip)
 	return err
 }
+
+// GetFirstAdmin returns the first admin (oldest by creation time).
+func (app *App) GetFirstAdmin() (User, error) {
+	row := app.DB.QueryRow(`
+        SELECT username, created_at
+        FROM users
+        WHERE role = 'admin'
+        ORDER BY created_at ASC
+        LIMIT 1
+    `)
+	var user User
+	err := row.Scan(&user.Username, &user.CreatedAt)
+	return user, err
+}
+
+// IsUserAdmin checks if a user is an admin.
+func (app *App) IsUserAdmin(username string) (bool, error) {
+	var role string
+	err := app.DB.QueryRow(`
+        SELECT role 
+        FROM users 
+        WHERE username = $1
+    `, username).Scan(&role)
+	if err != nil {
+		return false, err
+	}
+	return role == "admin", nil
+}
+
+// RevokeAdmin sets a user's role to 'user'.
+func (app *App) RevokeAdmin(username string) error {
+	_, err := app.DB.Exec(`
+        UPDATE users 
+        SET role = 'user', updated_at = CURRENT_TIMESTAMP 
+        WHERE username = $1
+    `, username)
+	return err
+}

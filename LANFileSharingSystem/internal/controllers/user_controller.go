@@ -272,3 +272,61 @@ func (uc *UserController) FetchUserList(w http.ResponseWriter, r *http.Request) 
 	// Respond with the filtered list of users
 	models.RespondJSON(w, http.StatusOK, filteredUsers)
 }
+
+// RevokeAdmin allows the first admin to revoke admin privileges from another admin.
+func (uc *UserController) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
+	// Get current user from session
+	currentUser, err := uc.App.GetUserFromSession(r)
+	if err != nil || currentUser.Role != "admin" {
+		models.RespondError(w, http.StatusForbidden, "Forbidden: Only admins can revoke admin roles")
+		return
+	}
+
+	// Check if the current user is the FIRST admin
+	firstAdmin, err := uc.App.GetFirstAdmin()
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving first admin")
+		return
+	}
+
+	if currentUser.Username != firstAdmin.Username {
+		models.RespondError(w, http.StatusForbidden, "Forbidden: Only the first admin can revoke roles")
+		return
+	}
+
+	// Parse request
+	var req models.AssignAdminRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	targetUsername := strings.TrimSpace(req.Username)
+	if targetUsername == "" {
+		models.RespondError(w, http.StatusBadRequest, "Username cannot be empty")
+		return
+	}
+
+	// Prevent revoking the first admin
+	if targetUsername == firstAdmin.Username {
+		models.RespondError(w, http.StatusBadRequest, "Cannot revoke the first admin")
+		return
+	}
+
+	// Check if target user exists and is an admin
+	isAdmin, err := uc.App.IsUserAdmin(targetUsername)
+	if err != nil || !isAdmin {
+		models.RespondError(w, http.StatusBadRequest, "User is not an admin or does not exist")
+		return
+	}
+
+	// Revoke admin role
+	if err := uc.App.RevokeAdmin(targetUsername); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error revoking admin role")
+		return
+	}
+
+	uc.App.LogActivity(fmt.Sprintf("First admin '%s' revoked admin role from user '%s'.", currentUser.Username, targetUsername))
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Admin privileges revoked from '%s'", targetUsername),
+	})
+}
