@@ -178,9 +178,12 @@ const ResearchDashboard = () => {
   // ----------------------------------------
   // Search Filtering
   // ----------------------------------------
-  const filteredItems = items.filter((item) =>
+  const filteredItems = items
+  .filter(checkFileAccess)
+  .filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
 
   // ----------------------------------------
   // Create Folder

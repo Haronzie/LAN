@@ -201,9 +201,12 @@ const handleUserSearch = async (value) => {
   // ----------------------------------
   // Filter
   // ----------------------------------
-  const filteredItems = items.filter((item) =>
+  const filteredItems = items
+  .filter(checkFileAccess) // <-- hide confidential files from unauthorized users
+  .filter((item) =>
     (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
 
   // ----------------------------------
   // Create Folder

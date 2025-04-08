@@ -35,12 +35,10 @@ const UserFileManager = () => {
   const [filteredFiles, setFilteredFiles] = useState([]);
   const [currentUsername, setCurrentUsername] = useState('');
 
-  // Modals
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [copyModalVisible, setCopyModalVisible] = useState(false);
 
-  // Selected file and input states
   const [selectedFile, setSelectedFile] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
   const [moveDestination, setMoveDestination] = useState('');
@@ -49,7 +47,6 @@ const UserFileManager = () => {
 
   const navigate = useNavigate();
 
-  // Fetch files from the API
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
@@ -62,7 +59,6 @@ const UserFileManager = () => {
     }
   };
 
-  // Fetch current user's profile to get username
   const fetchCurrentUser = async () => {
     try {
       const res = await axios.get('/api/user/profile', { withCredentials: true });
@@ -72,18 +68,28 @@ const UserFileManager = () => {
     }
   };
 
+  const checkFileAccess = (file) => {
+    return (
+      !file.confidential ||
+      file.uploader === currentUsername ||
+      (file.permissions && file.permissions.includes(currentUsername))
+    );
+  };
+
   useEffect(() => {
     fetchFiles();
     fetchCurrentUser();
   }, []);
 
-  // Filter the files whenever searchTerm or files change
   useEffect(() => {
     const term = searchTerm.toLowerCase();
-    setFilteredFiles(term ? files.filter(f => f.file_name.toLowerCase().includes(term)) : files);
-  }, [searchTerm, files]);
+    const visibleFiles = files.filter(checkFileAccess);
+    const searched = term
+      ? visibleFiles.filter(f => f.file_name.toLowerCase().includes(term))
+      : visibleFiles;
+    setFilteredFiles(searched);
+  }, [searchTerm, files, currentUsername]);
 
-  // Delete a file
   const handleDeleteFile = async (fileName) => {
     try {
       await axios.delete('/delete-resource', {
@@ -97,7 +103,6 @@ const UserFileManager = () => {
     }
   };
 
-  // Rename a file
   const handleRenameConfirm = async () => {
     try {
       await axios.put(
@@ -117,7 +122,6 @@ const UserFileManager = () => {
     }
   };
 
-  // Move a file
   const handleMoveConfirm = async () => {
     try {
       await axios.put(
@@ -137,15 +141,14 @@ const UserFileManager = () => {
     }
   };
 
-  // Copy a file
   const handleCopyConfirm = async () => {
     try {
       await axios.post(
         '/copy-resource',
         {
           file_name: selectedFile,
-          new_name: copyNewName, // if empty, backend will use original name
-          destination: copyDestination, // required: destination directory for the copy
+          new_name: copyNewName,
+          destination: copyDestination,
         },
         { withCredentials: true }
       );
@@ -157,7 +160,6 @@ const UserFileManager = () => {
     }
   };
 
-  // Custom upload function
   const customUpload = async ({ file, onSuccess, onError }) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -175,7 +177,6 @@ const UserFileManager = () => {
     }
   };
 
-  // Table columns
   const columns = [
     {
       title: 'File Name',
@@ -203,18 +204,12 @@ const UserFileManager = () => {
             <Tooltip title="Download File">
               <Button
                 icon={<DownloadOutlined />}
-                // Use encodeURIComponent to handle spaces and special characters in the file name
                 onClick={() => {
                   const downloadUrl = `${window.location.origin}/download?filename=${encodeURIComponent(record.file_name)}`;
-                  // or, if your backend is on a different port, e.g. http://localhost:8080:
-                  // const downloadUrl = `http://localhost:9090/download?filename=${encodeURIComponent(record.file_name)}`;
-    
                   window.open(downloadUrl, '_blank');
                 }}
               />
             </Tooltip>
-    
-            {/* Copy is visible to all users */}
             <Tooltip title="Copy File">
               <Button
                 icon={<CopyOutlined />}
@@ -226,7 +221,6 @@ const UserFileManager = () => {
                 }}
               />
             </Tooltip>
-    
             {isUploader && (
               <>
                 <Popconfirm
@@ -239,7 +233,6 @@ const UserFileManager = () => {
                     <Button danger icon={<DeleteOutlined />} />
                   </Tooltip>
                 </Popconfirm>
-    
                 <Tooltip title="Rename File">
                   <Button
                     onClick={() => {
@@ -251,7 +244,6 @@ const UserFileManager = () => {
                     Rename
                   </Button>
                 </Tooltip>
-    
                 <Tooltip title="Move File">
                   <Button
                     onClick={() => {
@@ -269,16 +261,10 @@ const UserFileManager = () => {
         );
       }
     }
-    
   ];
 
   return (
     <Content style={{ padding: 24, background: '#fff', minHeight: 360 }}>
-      {/* 
-        =========================
-        HEADER ROW
-        =========================
-      */}
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
         <Col>
           <h2 style={{ margin: 0 }}>File Manager</h2>
@@ -299,11 +285,6 @@ const UserFileManager = () => {
         </Col>
       </Row>
 
-      {/* 
-        =========================
-        SEARCH ROW
-        =========================
-      */}
       <Row style={{ marginBottom: 16 }} justify="start">
         <Col>
           <Input
@@ -316,11 +297,6 @@ const UserFileManager = () => {
         </Col>
       </Row>
 
-      {/* 
-        =========================
-        FILE TABLE
-        =========================
-      */}
       <Table
         columns={columns}
         dataSource={filteredFiles}

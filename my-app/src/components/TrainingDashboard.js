@@ -258,9 +258,12 @@ const TrainingDashboard = () => {
   }, [currentPath]);
 
   // Filter by search term
-  const filteredItems = items.filter((item) =>
-    (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredItems = items
+  .filter(checkFileAccess)
+  .filter((item) =>
+    item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
 
   // ----------------------------------
   // Create Folder
