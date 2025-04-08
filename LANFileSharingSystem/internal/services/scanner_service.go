@@ -15,7 +15,7 @@ type ScanResult struct {
 
 // ScanFile uses ClamAV to scan the file at filePath.
 func ScanFile(filePath string) (ScanResult, error) {
-	clam := clamd.NewClamd("tcp://127.0.0.1:3310")
+	clam := clamd.NewClamd("tcp://clamav:3310")
 
 	// Open the file for scanning.
 	f, err := os.Open(filePath)
