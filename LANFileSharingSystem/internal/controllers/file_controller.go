@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -1033,7 +1035,7 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Confidentiality Check (same as Download)
+	// Confidentiality Check
 	if fr.Confidential {
 		if fr.Uploader != user.Username && user.Role != "admin" {
 			allowed, err := fc.App.HasFileAccess(fr.ID, user.Username)
@@ -1060,18 +1062,63 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusInternalServerError, "Error decrypting file")
 		return
 	}
+	// Ensure cleanup of the decrypted file
 	defer os.Remove(tempDecryptedPath)
 
-	// Stream decrypted content with INLINE disposition
-	f, err := os.Open(tempDecryptedPath)
+	// Determine if conversion is needed
+	ext := strings.ToLower(filepath.Ext(fr.FileName))
+	supportedDirectly := []string{".pdf", ".jpg", ".jpeg", ".png", ".gif"}
+	needsConversion := true
+	for _, s := range supportedDirectly {
+		if ext == s {
+			needsConversion = false
+			break
+		}
+	}
+
+	// If conversion is needed, use LibreOffice to convert to PDF.
+	finalPath := tempDecryptedPath
+	if needsConversion {
+		// Create a temporary directory for conversion
+		tempDir, err := ioutil.TempDir("", "libreoffice_convert")
+		if err != nil {
+			models.RespondError(w, http.StatusInternalServerError, "Error creating temporary directory")
+			return
+		}
+		// Ensure temporary directory cleanup
+		defer os.RemoveAll(tempDir)
+
+		// Run libreoffice in headless mode to convert the file
+		cmd := exec.Command("libreoffice", "--headless", "--convert-to", "pdf", "--outdir", tempDir, tempDecryptedPath)
+		if err := cmd.Run(); err != nil {
+			log.Printf("LibreOffice conversion failed: %v", err)
+			// If conversion fails, fallback to original file preview
+		} else {
+			// LibreOffice names the output file with the same base and a .pdf extension
+			baseName := strings.TrimSuffix(filepath.Base(fr.FileName), filepath.Ext(fr.FileName))
+			convertedPDF := filepath.Join(tempDir, baseName+".pdf")
+			if _, err := os.Stat(convertedPDF); err == nil {
+				finalPath = convertedPDF
+			}
+		}
+	}
+
+	// Open the final file (either the original decrypted file or the converted PDF)
+	f, err := os.Open(finalPath)
 	if err != nil {
-		log.Printf("Failed to open decrypted file %s: %v", tempDecryptedPath, err)
-		models.RespondError(w, http.StatusInternalServerError, "Error opening decrypted file")
+		log.Printf("Failed to open file %s: %v", finalPath, err)
+		models.RespondError(w, http.StatusInternalServerError, "Error opening file for preview")
 		return
 	}
 	defer f.Close()
 
-	w.Header().Set("Content-Type", fr.ContentType)
+	// Update the response headers:
+	// - If conversion occurred, serve as PDF; otherwise, use original content type.
+	contentType := fr.ContentType
+	if needsConversion {
+		contentType = "application/pdf"
+	}
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", fr.FileName))
 
 	if _, err := io.Copy(w, f); err != nil {
