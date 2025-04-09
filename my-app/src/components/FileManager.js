@@ -486,34 +486,34 @@ const FileManager = () => {
   const handleCopy = async (record) => {
     try {
       const targetDir = selectedDestination || currentPath;
-  
       const res = await axios.get(`/files?directory=${encodeURIComponent(targetDir)}`, {
         withCredentials: true
       });
   
-      // ✅ Safely check if res.data is an array
-      const existingNames = Array.isArray(res.data) ? res.data.map((f) => f.name) : [];
+      const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
   
       const name = record.name;
       const ext = record.type === 'file' ? path.extname(name) : '';
-      const base = record.type === 'file' ? path.basename(name, ext) : name;
+      let base = record.type === 'file' ? path.basename(name, ext) : name;
   
-      let suggestedName = name;
+      const baseRegex = /(.*?)(?: \((\d+)\))?$/;
+      const match = base.match(baseRegex);
   
-      if (existingNames.includes(name)) {
-        let attempt = 1;
-        while (existingNames.includes(`${base} (${attempt})${ext}`)) {
-          attempt++;
-        }
-        suggestedName = `${base} (${attempt})${ext}`;
-      }
+      let actualBaseName = match[1];
+      let attempt = match[2] ? parseInt(match[2], 10) : 0;
+  
+      let suggestedName;
+      do {
+        attempt++;
+        suggestedName = `${actualBaseName} (${attempt})${ext}`;
+      } while (existingNames.includes(suggestedName));
   
       setCopyItem(record);
       setCopyNewName(suggestedName);
       setCopyModalVisible(true);
     } catch (err) {
       console.error('Error checking copy conflicts:', err);
-      const errorMsg = err.response?.data?.error || 'Failed to check for file conflict. Target folder might be missing or empty.';
+      const errorMsg = err.response?.data?.error || 'Failed to check for file conflict.';
       message.error(errorMsg);
     }
   };
