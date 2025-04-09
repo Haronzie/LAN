@@ -19,26 +19,25 @@ import {
 } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Column } from '@ant-design/charts'; // Import the chart
+import { Column } from '@ant-design/charts';
 import './AdminDashboard.css';
 
 const { Header, Content, Footer, Sider } = Layout;
 const { Title } = Typography;
 
+const BASE_WS = process.env.REACT_APP_BACKEND_WS;
+
 const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [files, setFiles] = useState([]);
-  const [auditLogs, setAuditLogs] = useState([]);  // Use audit logs instead of activities
+  const [auditLogs, setAuditLogs] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [adminName, setAdminName] = useState('Admin');
   const navigate = useNavigate();
 
-  // ---------------------------------------------------
-  // WebSocket notification integration
-  // ---------------------------------------------------
   useEffect(() => {
-    const client = new WebSocket('ws://localhost:8080/ws');
+    const client = new WebSocket(`${BASE_WS}/ws`);
 
     client.onopen = () => {
       console.log('Connected to notification server');
@@ -68,10 +67,6 @@ const AdminDashboard = () => {
     };
   }, []);
 
-  // ---------------------------------------------------
-  // Existing AdminDashboard logic
-  // ---------------------------------------------------
-
   useEffect(() => {
     const storedName = localStorage.getItem('username');
     if (storedName) {
@@ -79,7 +74,6 @@ const AdminDashboard = () => {
     }
   }, []);
 
-  // Fetch users
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
@@ -92,13 +86,9 @@ const AdminDashboard = () => {
     }
   };
 
-  // ---------------------------------------------------
-  // Fetch all files from the database
-  // ---------------------------------------------------
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      // New endpoint that returns all files stored in the database
       const res = await axios.get('/files/all', { withCredentials: true });
       setFiles(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
@@ -108,7 +98,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Fetch audit logs instead of activities
   const fetchAuditLogs = async () => {
     try {
       const res = await axios.get('/auditlogs', { withCredentials: true });
@@ -121,10 +110,9 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchUsers();
     fetchFiles();
-    fetchAuditLogs();  // Fetch audit logs
+    fetchAuditLogs();
   }, []);
 
-  // Poll for fresh data every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       fetchUsers();
@@ -134,7 +122,6 @@ const AdminDashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Summary statistics
   const totalUsers = users.length;
   const totalFiles = files.length;
 

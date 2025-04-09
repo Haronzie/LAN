@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -348,41 +349,51 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Retrieve the current user from the session
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	// Get file location parameters
-	directory := r.URL.Query().Get("directory")
-	fileName := r.URL.Query().Get("filename")
-	if fileName == "" || directory == "" {
+	dirRaw := r.URL.Query().Get("directory")
+	fileRaw := r.URL.Query().Get("filename")
+
+	if dirRaw == "" || fileRaw == "" {
 		models.RespondError(w, http.StatusBadRequest, "Directory and filename are required")
 		return
 	}
 
-	// Sanitize inputs and build full path
-	cleanDir := filepath.Clean(directory)
-	cleanName := filepath.Clean(fileName)
-	if strings.Contains(cleanDir, "..") || strings.Contains(cleanName, "..") {
+	directory, err := url.QueryUnescape(dirRaw)
+	if err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid directory encoding")
+		return
+	}
+
+	fileName, err := url.QueryUnescape(fileRaw)
+	if err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid filename encoding")
+		return
+	}
+
+	cleanDir := strings.Trim(filepath.Clean(directory), `/\\`)
+	cleanName := strings.Trim(filepath.Clean(fileName), `/\\`)
+
+	if cleanDir == "" || cleanName == "" ||
+		strings.HasPrefix(cleanDir, "..") || strings.HasPrefix(cleanName, "..") ||
+		strings.Contains(cleanDir, "/..") || strings.Contains(cleanName, "/..") {
 		models.RespondError(w, http.StatusBadRequest, "Invalid path components")
 		return
 	}
 
 	relativePath := filepath.Join(cleanDir, cleanName)
 
-	// Fetch the file record by path
 	fr, err := fc.App.GetFileRecordByPath(relativePath)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "File not found")
 		return
 	}
 
-	// Confidentiality Check
 	if fr.Confidential {
-		// Allow uploader/admin or users with explicit permission
 		if fr.Uploader != user.Username && user.Role != "admin" {
 			allowed, err := fc.App.HasFileAccess(fr.ID, user.Username)
 			if err != nil || !allowed {
@@ -392,7 +403,6 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Decryption workflow
 	encryptedFilePath := filepath.Join("uploads", fr.FilePath)
 	tempDecryptedPath := encryptedFilePath + ".dec"
 
@@ -402,47 +412,37 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decrypt to temporary file
 	if err := encryption.DecryptFile(key, encryptedFilePath, tempDecryptedPath); err != nil {
 		os.Remove(tempDecryptedPath)
 		log.Printf("Decryption failed for %s: %v", relativePath, err)
-		models.RespondError(w, http.StatusInternalServerError,
-			"Error decrypting file")
+		models.RespondError(w, http.StatusInternalServerError, "Error decrypting file")
 		return
 	}
 
-	// Ensure cleanup even if errors occur after this point
 	defer func() {
 		if err := os.Remove(tempDecryptedPath); err != nil && !os.IsNotExist(err) {
 			log.Printf("Failed to clean up temp file %s: %v", tempDecryptedPath, err)
 		}
 	}()
 
-	// Stream decrypted content
 	f, err := os.Open(tempDecryptedPath)
 	if err != nil {
 		log.Printf("Failed to open decrypted file %s: %v", tempDecryptedPath, err)
-		models.RespondError(w, http.StatusInternalServerError,
-			"Error opening decrypted file")
+		models.RespondError(w, http.StatusInternalServerError, "Error opening decrypted file")
 		return
 	}
 	defer f.Close()
 
 	w.Header().Set("Content-Type", fr.ContentType)
-	w.Header().Set("Content-Disposition",
-		fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
 
 	if _, err := io.Copy(w, f); err != nil {
 		log.Printf("Streaming error for %s: %v", relativePath, err)
-		models.RespondError(w, http.StatusInternalServerError,
-			"Error sending file")
+		models.RespondError(w, http.StatusInternalServerError, "Error sending file")
 		return
 	}
 
-	// Audit log
-	fc.App.LogActivity(
-		fmt.Sprintf("User '%s' downloaded file '%s' (ID: %d)",
-			user.Username, fr.FileName, fr.ID))
+	fc.App.LogActivity(fmt.Sprintf("User '%s' downloaded file '%s' (ID: %d)", user.Username, fr.FileName, fr.ID))
 }
 
 // CopyFile creates a copy of an existing file in the storage and inserts a new record in the database.
@@ -1009,16 +1009,32 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	directory := r.URL.Query().Get("directory")
-	fileName := r.URL.Query().Get("filename")
-	if fileName == "" || directory == "" {
+	dirRaw := r.URL.Query().Get("directory")
+	fileRaw := r.URL.Query().Get("filename")
+
+	if dirRaw == "" || fileRaw == "" {
 		models.RespondError(w, http.StatusBadRequest, "Directory and filename are required")
 		return
 	}
 
-	cleanDir := filepath.Clean(directory)
-	cleanName := filepath.Clean(fileName)
-	if strings.Contains(cleanDir, "..") || strings.Contains(cleanName, "..") {
+	directory, err := url.QueryUnescape(dirRaw)
+	if err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid directory encoding")
+		return
+	}
+
+	fileName, err := url.QueryUnescape(fileRaw)
+	if err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid filename encoding")
+		return
+	}
+
+	cleanDir := strings.Trim(filepath.Clean(directory), `/\\`)
+	cleanName := strings.Trim(filepath.Clean(fileName), `/\\`)
+
+	if cleanDir == "" || cleanName == "" ||
+		strings.HasPrefix(cleanDir, "..") || strings.HasPrefix(cleanName, "..") ||
+		strings.Contains(cleanDir, "/..") || strings.Contains(cleanName, "/..") {
 		models.RespondError(w, http.StatusBadRequest, "Invalid path components")
 		return
 	}
@@ -1090,7 +1106,6 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Dynamically find the first PDF in tempDir
 		files, err := ioutil.ReadDir(tempDir)
 		if err != nil {
 			models.RespondError(w, http.StatusInternalServerError, "Could not list converted files")

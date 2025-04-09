@@ -39,6 +39,8 @@ import debounce from 'lodash.debounce';
 
 const { Content } = Layout;
 const { Option } = Select;
+const BASE_URL = process.env.REACT_APP_BACKEND_URL;
+
 
 // Professional Searchable Dropdown Component for Grant/Revoke access
 // Professional Searchable Dropdown Component for Grant/Revoke access
@@ -419,22 +421,28 @@ const FileManager = () => {
 
   // Download file or folder
   const handleDownload = (fileName) => {
-    const encodedDir = encodeURIComponent(currentPath);
-    const encodedFile = encodeURIComponent(fileName);
-    const downloadUrl = `http://localhost:8080/download?directory=${encodedDir}&filename=${encodedFile}`;
+    const encodedDir = encodeURIComponent(currentPath || '');
+    const encodedFile = encodeURIComponent(fileName.trim());
+    const downloadUrl = `${BASE_URL}/download?directory=${encodedDir}&filename=${encodedFile}`;
     window.open(downloadUrl, '_blank');
   };
+  
 
   const handleDownloadFolder = (folderName) => {
-    const folderPath = path.join(currentPath, folderName);
-    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
+    const folderPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+    const encodedPath = encodeURIComponent(folderPath.trim());
+    const downloadUrl = `${BASE_URL}/download-folder?directory=${encodedPath}`;
     window.open(downloadUrl, '_blank');
   };
+  
 
   const handleViewFile = (file) => {
-    const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
+    const encodedDir = encodeURIComponent(currentPath || '');
+    const encodedFile = encodeURIComponent(file.name.trim());
+    const previewUrl = `${BASE_URL}/preview?directory=${encodedDir}&filename=${encodedFile}`;
     window.open(previewUrl, '_blank');
   };
+  
 
   // Rename
   const handleRenameConfirm = async () => {
