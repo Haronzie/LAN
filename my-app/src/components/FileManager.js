@@ -854,7 +854,7 @@ const FileManager = () => {
         <Table
           columns={columns}
           dataSource={filteredItems}
-          rowKey={(record) => record.name + record.type}
+          rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
           pagination={{ pageSize: 10 }}
         />
