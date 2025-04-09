@@ -47,7 +47,7 @@ const UserDashboard = () => {
     try {
       await axios.post('/logout', {}, { withCredentials: true });
       message.success('Logged out successfully.');
-      navigate('/login');
+      navigate('/');
     } catch (error) {
       message.error('Logout failed.');
     }

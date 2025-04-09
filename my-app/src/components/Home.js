@@ -11,7 +11,6 @@ const Home = () => {
   const [adminExists, setAdminExists] = useState(false);
   const navigate = useNavigate();
 
-  // Check if an admin exists on component mount.
   useEffect(() => {
     const checkAdmin = async () => {
       try {
@@ -24,7 +23,6 @@ const Home = () => {
     checkAdmin();
   }, []);
 
-  // Handler for Login button click
   const handleLoginClick = () => {
     if (!adminExists) {
       Modal.info({
@@ -48,10 +46,9 @@ const Home = () => {
     <Layout className="home-layout">
       <Header className="home-header">
         <div className="logo">
-          <img src="/cdrrmo.jpg" alt="CDRMO Logo" className="logo-image" />
-          <span className="logo-text">CDRMO Official System</span>
+          <img src="/Resilio-logo-white.png" alt="Resilio Logo" className="logo-image" />
         </div>
-        <Menu theme="dark" mode="horizontal" defaultSelectedKeys={['1']}>
+        <Menu theme="dark" mode="horizontal" defaultSelectedKeys={['1']} className="menu-right">
           <Menu.Item key="1">
             <Link to="/">Home</Link>
           </Menu.Item>
@@ -71,7 +68,7 @@ const Home = () => {
       </Header>
       <Content className="home-content">
         <div className="site-layout-content">
-          <Title level={2}>Welcome to the CDRRMO File Sharing System</Title>
+          <Title level={2}>Welcome to the Resilio File Sharing System</Title>
           <Paragraph className="amazing-paragraph">
             The official secure system for managing and sharing files across your organization.
           </Paragraph>
@@ -97,7 +94,7 @@ const Home = () => {
         </div>
       </Content>
       <Footer style={{ textAlign: 'center' }}>
-        © {new Date().getFullYear()} CDRRMO Official. All rights reserved.
+        © {new Date().getFullYear()} Resilio Official. All rights reserved.
       </Footer>
     </Layout>
   );

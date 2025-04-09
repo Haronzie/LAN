@@ -171,7 +171,7 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     try {
       await axios.post('/logout', {}, { withCredentials: true });
-      navigate('/login');
+      navigate('/');
     } catch (error) {
       message.error('Logout failed.');
     }
