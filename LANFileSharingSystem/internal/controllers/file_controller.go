@@ -461,79 +461,59 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SourceFile        string `json:"source_file"`
 		NewFileName       string `json:"new_file_name"`
-		DestinationFolder string `json:"destination_folder"` // optional
+		DestinationFolder string `json:"destination_folder"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Trim input values
 	req.SourceFile = strings.TrimSpace(req.SourceFile)
 	req.NewFileName = strings.TrimSpace(req.NewFileName)
 	req.DestinationFolder = strings.TrimSpace(req.DestinationFolder)
 
-	// Validate input
 	if req.SourceFile == "" {
 		models.RespondError(w, http.StatusBadRequest, "Source file is required")
 		return
 	}
 	if req.NewFileName == "" {
-		// Fallback to the same name if not provided
 		parts := strings.Split(req.SourceFile, "/")
-		originalName := parts[len(parts)-1]
-		req.NewFileName = originalName
+		req.NewFileName = parts[len(parts)-1]
 	}
 
-	// 1. Retrieve the source file record
 	oldFR, err := fc.App.GetFileRecord(req.SourceFile)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "Source file not found in database")
 		return
 	}
-
-	// 2. Build the disk path for the source
 	srcPath := filepath.Join("uploads", oldFR.FilePath)
 
-	// Decide where the new file goes
-	var newRelativePath string
-	if req.DestinationFolder == "" {
-		// If no destination_folder is given, copy into the same folder
-		newRelativePath = filepath.Join(filepath.Dir(oldFR.FilePath), req.NewFileName)
-	} else {
-		// Paste into the user-specified folder
-		newRelativePath = filepath.Join(req.DestinationFolder, req.NewFileName)
+	destFolder := filepath.Dir(oldFR.FilePath)
+	if req.DestinationFolder != "" {
+		destFolder = req.DestinationFolder
 	}
-
-	// ---------------------
-	// AUTO-RENAME LOGIC
-	// ---------------------
 	uniqueFileName := req.NewFileName
-	// We'll keep adjusting newRelativePath until it doesn't conflict.
-	counter := 1
-	for {
-		// Check if a file record already exists with that path
-		_, err := fc.App.GetFileRecordByPath(newRelativePath)
-		if err != nil {
-			// Not found => we can use this name
-			break
-		}
-		// File with this name already exists => append a counter
-		base := strings.TrimSuffix(uniqueFileName, filepath.Ext(uniqueFileName))
-		ext := filepath.Ext(uniqueFileName)
-		uniqueFileName = fmt.Sprintf("%s_%d%s", base, counter, ext)
+	newRelativePath := filepath.Join(destFolder, uniqueFileName)
 
-		if req.DestinationFolder == "" {
-			newRelativePath = filepath.Join(filepath.Dir(oldFR.FilePath), uniqueFileName)
-		} else {
-			newRelativePath = filepath.Join(req.DestinationFolder, uniqueFileName)
+	// Only apply renaming if the exact target path exists
+	if _, err := fc.App.GetFileRecordByPath(newRelativePath); err == nil {
+		base := strings.TrimSuffix(req.NewFileName, filepath.Ext(req.NewFileName))
+		ext := filepath.Ext(req.NewFileName)
+		counter := 1
+		for {
+			tempName := fmt.Sprintf("%s (%d)%s", base, counter, ext)
+			tempPath := filepath.Join(destFolder, tempName)
+			if _, err := fc.App.GetFileRecordByPath(tempPath); err != nil {
+				uniqueFileName = tempName
+				newRelativePath = tempPath
+				break
+			}
+			counter++
 		}
-		counter++
 	}
-	dstPath := filepath.Join("uploads", newRelativePath)
-	// ---------------------
 
-	// 3. Copy the file on disk
+	dstPath := filepath.Join("uploads", newRelativePath)
+
 	in, err := os.Open(srcPath)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error opening source file on disk")
@@ -541,9 +521,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer in.Close()
 
-	// If the destination file already exists on disk, fail for safety
-	// (We’ve handled the DB side, but just in case something is out of sync)
-	if _, errStat := os.Stat(dstPath); errStat == nil {
+	if _, err := os.Stat(dstPath); err == nil {
 		models.RespondError(w, http.StatusConflict, "Destination file already exists on disk")
 		return
 	}
@@ -560,39 +538,25 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Insert new DB record for the copied file
 	newRecord := models.FileRecord{
-		FileName:    uniqueFileName,  // use the final, possibly renamed, file name
-		FilePath:    newRelativePath, // likewise
+		FileName:    uniqueFileName,
+		FilePath:    newRelativePath,
 		Size:        oldFR.Size,
 		ContentType: oldFR.ContentType,
-		Uploader:    user.Username, // or oldFR.Uploader, depending on your policy
+		Uploader:    user.Username,
 	}
 	if err := fc.App.CreateFileRecord(newRecord); err != nil {
-		// Optionally remove the newly-copied file from disk if DB insert fails
 		os.Remove(dstPath)
 		models.RespondError(w, http.StatusInternalServerError, "Error creating file record in database")
 		return
 	}
 
-	// Retrieve the new file ID
 	newFileID, err := fc.App.GetFileIDByPath(newRelativePath)
 	if err == nil && newFileID > 0 {
-		// Optionally create a version record for the new file
-		if verr := fc.App.CreateFileVersion(newFileID, 1, newRelativePath); verr != nil {
-			log.Println("Warning: failed to create version record:", verr)
-		}
-
-		// ✅ Log the audit event for copying with action "COPY"
-		action := "COPY"
-		details := fmt.Sprintf("File copied from '%s' to '%s'", req.SourceFile, newRelativePath)
-		fc.App.LogAudit(user.Username, newFileID, action, details)
-		log.Println("Audit log added:", details)
-	} else {
-		log.Println("Error: File ID not found for path", newRelativePath)
+		_ = fc.App.CreateFileVersion(newFileID, 1, newRelativePath)
+		fc.App.LogAudit(user.Username, newFileID, "COPY", fmt.Sprintf("File copied from '%s' to '%s'", req.SourceFile, newRelativePath))
 	}
 
-	// Log activity and respond
 	fc.App.LogActivity(fmt.Sprintf("User '%s' copied file from '%s' to '%s'.", user.Username, req.SourceFile, newRelativePath))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("File copied to '%s' successfully", newRelativePath),

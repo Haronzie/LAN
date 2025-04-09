@@ -486,17 +486,20 @@ const FileManager = () => {
   const handleCopy = async (record) => {
     try {
       const targetDir = selectedDestination || currentPath;
+  
+      // Get files in the destination
       const res = await axios.get(`/files?directory=${encodeURIComponent(targetDir)}`, {
         withCredentials: true
       });
+      const existingNames = res.data.map(f => f.name);
   
-      const existingNames = res.data.map((f) => f.name);
       const name = record.name;
       const ext = record.type === 'file' ? path.extname(name) : '';
       const base = record.type === 'file' ? path.basename(name, ext) : name;
   
       let suggestedName = name;
   
+      // If the exact name already exists in destination, apply (1), (2), ...
       if (existingNames.includes(name)) {
         let attempt = 1;
         while (existingNames.includes(`${base} (${attempt})${ext}`)) {
@@ -513,6 +516,7 @@ const FileManager = () => {
       message.error('Failed to check for file conflict');
     }
   };
+  
 
   const handleCopyConfirm = async () => {
     if (!copyNewName.trim()) {

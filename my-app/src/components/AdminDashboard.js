@@ -28,7 +28,7 @@ const { Title, Text } = Typography;
 const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [files, setFiles] = useState([]);
-  const [activities, setActivities] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [adminName, setAdminName] = useState('Admin');
@@ -66,26 +66,26 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchActivities = async () => {
+  const fetchAuditLogs = async () => {
     try {
-      const res = await axios.get('/activities', { withCredentials: true });
-      setActivities(Array.isArray(res.data) ? res.data : []);
+      const res = await axios.get('/auditlogs', { withCredentials: true });
+      setAuditLogs(Array.isArray(res.data) ? res.data : []);
     } catch {
-      message.error('Error fetching activities');
+      message.error('Error fetching audit logs');
     }
   };
 
   useEffect(() => {
     fetchUsers();
     fetchFiles();
-    fetchActivities();
+    fetchAuditLogs();
   }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
       fetchUsers();
       fetchFiles();
-      fetchActivities();
+      fetchAuditLogs();
     }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -264,27 +264,23 @@ const AdminDashboard = () => {
 
           <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
             <Col xs={24} md={12}>
-              <Card title="Recent Activity">
+              <Card title="Audit Logs">
                 <List
                   size="small"
-                  dataSource={activities.slice(0, 5)}
+                  dataSource={auditLogs.slice(0, 5)}
                   renderItem={(item) => (
                     <List.Item>
                       <Text>
-                        <strong>
-                          {item.timestamp
-                            ? new Date(item.timestamp).toLocaleTimeString()
-                            : item.time}
-                        </strong>
-                        : {item.event || item.activity}
+                        <strong>{new Date(item.created_at).toLocaleTimeString()}</strong>: {item.details}
                       </Text>
                     </List.Item>
                   )}
                 />
                 <div style={{ textAlign: 'right', marginTop: 8 }}>
-                  <Button type="link" size="small" onClick={() => navigate('/admin/activities')}>
-                    View All
-                  </Button>
+                <Button type="link" size="small" onClick={() => navigate('/admin/audit-logs')}>
+  View All
+</Button>
+
                 </div>
               </Card>
             </Col>
