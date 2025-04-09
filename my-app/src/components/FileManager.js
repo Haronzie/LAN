@@ -487,11 +487,12 @@ const FileManager = () => {
     try {
       const targetDir = selectedDestination || currentPath;
   
-      // Get files in the destination
       const res = await axios.get(`/files?directory=${encodeURIComponent(targetDir)}`, {
         withCredentials: true
       });
-      const existingNames = res.data.map(f => f.name);
+  
+      // ✅ Safely check if res.data is an array
+      const existingNames = Array.isArray(res.data) ? res.data.map((f) => f.name) : [];
   
       const name = record.name;
       const ext = record.type === 'file' ? path.extname(name) : '';
@@ -499,7 +500,6 @@ const FileManager = () => {
   
       let suggestedName = name;
   
-      // If the exact name already exists in destination, apply (1), (2), ...
       if (existingNames.includes(name)) {
         let attempt = 1;
         while (existingNames.includes(`${base} (${attempt})${ext}`)) {
@@ -513,7 +513,8 @@ const FileManager = () => {
       setCopyModalVisible(true);
     } catch (err) {
       console.error('Error checking copy conflicts:', err);
-      message.error('Failed to check for file conflict');
+      const errorMsg = err.response?.data?.error || 'Failed to check for file conflict. Target folder might be missing or empty.';
+      message.error(errorMsg);
     }
   };
   
