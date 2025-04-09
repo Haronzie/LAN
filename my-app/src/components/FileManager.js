@@ -483,11 +483,35 @@ const FileManager = () => {
   };
 
   // Copy
-  const handleCopy = (record) => {
-    const suggestedName = record.name + '_copy';
-    setCopyItem(record);
-    setCopyNewName(suggestedName);
-    setCopyModalVisible(true);
+  const handleCopy = async (record) => {
+    try {
+      const targetDir = selectedDestination || currentPath;
+      const res = await axios.get(`/files?directory=${encodeURIComponent(targetDir)}`, {
+        withCredentials: true
+      });
+  
+      const existingNames = res.data.map((f) => f.name);
+      const name = record.name;
+      const ext = record.type === 'file' ? path.extname(name) : '';
+      const base = record.type === 'file' ? path.basename(name, ext) : name;
+  
+      let suggestedName = name;
+  
+      if (existingNames.includes(name)) {
+        let attempt = 1;
+        while (existingNames.includes(`${base} (${attempt})${ext}`)) {
+          attempt++;
+        }
+        suggestedName = `${base} (${attempt})${ext}`;
+      }
+  
+      setCopyItem(record);
+      setCopyNewName(suggestedName);
+      setCopyModalVisible(true);
+    } catch (err) {
+      console.error('Error checking copy conflicts:', err);
+      message.error('Failed to check for file conflict');
+    }
   };
 
   const handleCopyConfirm = async () => {
@@ -501,51 +525,103 @@ const FileManager = () => {
     }
     try {
       if (copyItem.type === 'directory') {
-        await axios.post(
-          '/directory/copy',
-          {
-            source_name: copyItem.name,
-            source_parent: currentPath,
-            new_name: copyNewName,
-            destination_parent: selectedDestination || currentPath
-          },
-          { withCredentials: true }
-        );
+        await axios.post('/directory/copy', {
+          source_name: copyItem.name,
+          source_parent: currentPath,
+          new_name: copyNewName,
+          destination_parent: selectedDestination || currentPath
+        }, { withCredentials: true });
       } else {
-        await axios.post(
-          '/copy-file',
-          {
-            source_file: copyItem.name,
-            new_file_name: copyNewName,
-            destination_folder: selectedDestination || currentPath
-          },
-          { withCredentials: true }
-        );
+        await axios.post('/copy-file', {
+          source_file: copyItem.name,
+          new_file_name: copyNewName,
+          destination_folder: selectedDestination || currentPath
+        }, { withCredentials: true });
       }
       message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
       setCopyModalVisible(false);
-      setCopyNewName('');
       setCopyItem(null);
-      setSelectedDestination('');
+      setCopyNewName('');
       fetchItems();
-      if (copyItem.type === 'directory') {
-        fetchFolderTree();
-      }
-    } catch (error) {
-      console.error('Copy error:', error);
-      message.error(error.response?.data?.error || 'Error copying item');
+      if (copyItem.type === 'directory') fetchFolderTree();
+    } catch (err) {
+      console.error('Copy error:', err);
+      message.error(err.response?.data?.error || 'Error copying file');
     }
   };
 
-  // Move
-  const handleMove = (record) => {
-    setMoveItem(record);
-    setMoveDestination(currentPath);
-    if (record.type === 'file' && record.confidential !== undefined) {
-      setMoveConfidential(record.confidential);
+
+  const handleMove = async (record) => {
+    const destination = currentPath;
+    const filename = record.name;
+  
+    try {
+      const res = await axios.get(`/files?directory=${encodeURIComponent(destination)}`, {
+        withCredentials: true
+      });
+  
+      const existingNames = res.data.map(f => f.name);
+      const nameExists = existingNames.includes(filename);
+  
+      if (nameExists) {
+        Modal.confirm({
+          title: `A file named '${filename}' already exists.`,
+          content: 'Do you want to overwrite the existing file or keep both?',
+          okText: 'Keep Both',
+          cancelText: 'Cancel',
+          onOk: () => {
+            setMoveItem(record);
+            setMoveDestination(destination);
+            setMoveModalVisible(true); // Let backend rename it with (1)
+          },
+          onCancel: () => {
+            message.info('Move cancelled.');
+          },
+          okButtonProps: { type: 'primary' },
+          cancelButtonProps: { danger: true }
+        });
+  
+        Modal.info({
+          title: 'Overwrite Option',
+          content: (
+            <div>
+              <p>Or click below to force overwrite the file instead of keeping both.</p>
+              <Button
+                type="danger"
+                onClick={async () => {
+                  try {
+                    await axios.post('/move-file', {
+                      filename,
+                      old_parent: currentPath,
+                      new_parent: destination,
+                      overwrite: true
+                    }, { withCredentials: true });
+                    message.success(`File '${filename}' overwritten.`);
+                    fetchItems();
+                  } catch (err) {
+                    console.error('Overwrite error:', err);
+                    message.error('Failed to overwrite file.');
+                  }
+                }}
+              >
+                Overwrite Anyway
+              </Button>
+            </div>
+          ),
+          okText: 'Close',
+        });
+  
+      } else {
+        setMoveItem(record);
+        setMoveDestination(destination);
+        setMoveModalVisible(true);
+      }
+    } catch (err) {
+      console.error('Move check error:', err);
+      message.error('Error checking file conflict');
     }
-    setMoveModalVisible(true);
   };
+  
 
   const handleMoveConfirm = async () => {
     if (!moveDestination.trim()) {
@@ -556,6 +632,7 @@ const FileManager = () => {
       message.error('No item selected to move');
       return;
     }
+  
     try {
       if (moveItem.type === 'directory') {
         await axios.post(
@@ -574,11 +651,13 @@ const FileManager = () => {
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
+            overwrite: false, // default: do not overwrite, use Windows-style rename
             confidential: moveConfidential
           },
           { withCredentials: true }
         );
       }
+  
       message.success(`Moved '${moveItem.name}' successfully`);
       setMoveModalVisible(false);
       setMoveDestination('');
@@ -592,6 +671,7 @@ const FileManager = () => {
       message.error(error.response?.data?.error || 'Error moving item');
     }
   };
+  
 
   // Table columns
   const columns = [
