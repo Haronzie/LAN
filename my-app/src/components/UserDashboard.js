@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Button, message } from 'antd';
+import { Layout, Menu, Button, message, Typography } from 'antd';
+import { MenuOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import UserDashboardHome from './UserDashboardHome';
 import TrainingDashboard from './TrainingDashboard';
@@ -10,27 +11,30 @@ import InventoryDashboard from './InventoryDashboard';
 import UserSettings from './UserSettings';
 
 const { Header, Content, Sider } = Layout;
+const { Title } = Typography;
 
 const UserDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [userRole, setUserRole] = useState(null);
+  const [username, setUsername] = useState('');
+  const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const siderRef = useRef(null);
 
   useEffect(() => {
     const checkUserRole = async () => {
       try {
         const res = await axios.get('/user-role', { withCredentials: true });
-        
-        // If the role is admin, redirect to the admin dashboard:
         if (res.data.role === 'admin') {
           navigate('/admin');
-        }
-        // If the role is user, set the userRole state:
-        else if (res.data.role === 'user') {
+        } else if (res.data.role === 'user') {
           setUserRole('user');
-        }
-        // Otherwise, show error and redirect to login:
-        else {
+          const storedUsername = localStorage.getItem('username');
+          if (storedUsername) {
+            setUsername(storedUsername);
+          }
+        } else {
           message.error('Access Denied. Redirecting to login.');
           navigate('/login');
         }
@@ -39,7 +43,6 @@ const UserDashboard = () => {
         navigate('/login');
       }
     };
-
     checkUserRole();
   }, [navigate]);
 
@@ -53,19 +56,73 @@ const UserDashboard = () => {
     }
   };
 
-  // Show a loading indicator or message until we know the user’s role
+  const toggleSidebar = () => setCollapsed(!collapsed);
+
+  const handleBreakpoint = (broken) => {
+    setIsMobile(broken);
+    setCollapsed(broken);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isMobile && !collapsed && siderRef.current && !siderRef.current.contains(event.target)) {
+        setCollapsed(true);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMobile, collapsed]);
+
   if (!userRole) {
-    return <p>Loading...</p>;
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        width: '100vw',
+        overflow: 'hidden'
+      }}>Loading...</div>
+    );
   }
 
-  // Determine which menu item should be highlighted based on the current path
   const pathParts = location.pathname.split('/');
-  const currentRoute = pathParts[2] || 'home'; // e.g. "/user/home" => pathParts[2] is "home"
+  const currentRoute = pathParts[2] || 'home';
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider breakpoint="lg" collapsedWidth="0">
-        <div style={{ padding: '16px', color: '#fff', fontSize: '24px', textAlign: 'center' }}>
+    <Layout style={{ minHeight: '100vh', overflow: 'hidden' }}>
+      {isMobile && !collapsed && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 1,
+          }}
+        />
+      )}
+
+      <Sider
+        ref={siderRef}
+        breakpoint="lg"
+        collapsedWidth="0"
+        collapsible
+        collapsed={collapsed}
+        onBreakpoint={handleBreakpoint}
+        onCollapse={setCollapsed}
+        style={{
+          position: isMobile ? 'fixed' : 'relative',
+          zIndex: 2,
+          height: '100vh',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ padding: '16px', color: '#fff', fontSize: '20px', textAlign: 'center' }}>
           User Dashboard
         </div>
         <Menu
@@ -73,6 +130,7 @@ const UserDashboard = () => {
           mode="inline"
           selectedKeys={[currentRoute]}
           defaultSelectedKeys={['home']}
+          style={{ height: 'calc(100vh - 64px)', overflowY: 'auto' }}
         >
           <Menu.Item key="home">
             <Link to="/user/home">Home</Link>
@@ -96,14 +154,39 @@ const UserDashboard = () => {
       </Sider>
 
       <Layout>
-        <Header style={{ background: '#fff', padding: '0 20px', textAlign: 'right' }}>
+        <Header style={{
+          background: '#fff',
+          padding: '0 20px',
+          display: 'flex',
+          alignItems: 'center',
+          height: 64,
+          flexShrink: 0,
+          boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
+        }}>
+          {isMobile && (
+            <Button
+              type="text"
+              icon={<MenuOutlined />}
+              onClick={toggleSidebar}
+              style={{ marginRight: 16 }}
+            />
+          )}
+          <Title level={4} style={{ margin: 0 }}>
+            Welcome, <strong>{username || 'Guest'}</strong>!
+          </Title>
+          <div style={{ flex: 1 }} />
           <Button type="primary" onClick={handleLogout}>
             Logout
           </Button>
         </Header>
 
-        <Content style={{ margin: '24px 16px 0' }}>
-          <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
+        <Content style={{ margin: 0, padding: 0, overflow: 'hidden' }}>
+          <div style={{
+            padding: 24,
+            background: '#fff',
+            minHeight: 'calc(100vh - 64px)',
+            overflow: 'auto'
+          }}>
             <Routes>
               <Route path="home" element={<UserDashboardHome />} />
               <Route path="operation" element={<OperationDashboard />} />
