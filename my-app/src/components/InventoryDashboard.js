@@ -79,13 +79,6 @@ const InventoryDashboard = () => {
         {/* Back Button */}
         <Row style={{ marginBottom: 16 }}>
         <Col>
-  <Button
-    type="primary"
-    icon={<ArrowLeftOutlined />}
-    onClick={() => navigate('/user')}
-  >
-    Back to Dashboard
-  </Button>
 </Col>
 
         </Row>

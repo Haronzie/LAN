@@ -754,15 +754,10 @@ const TrainingDashboard = () => {
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-      <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
+    <Layout style={{ minHeight: '84vh', background: '#f0f2f5' }}>
+      <Content style={{ margin: '5px', padding: '10px', background: '#fff' }}>
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-          <Col>
-            <Button type="primary" icon={<ArrowLeftOutlined />} onClick={() => navigate('/user')}>
-              Back to Dashboard
-            </Button>
-          </Col>
           <Col>
             <h2 style={{ margin: 0 }}>Training Dashboard</h2>
           </Col>

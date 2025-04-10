@@ -40,19 +40,8 @@ const UserSettings = () => {
   };
 
   return (
-    <Layout style={{ padding: '24px', background: '#f0f2f5', minHeight: '100vh' }}>
+    <Layout style={{ padding: '84px', background: '#f0f2f5', minHeight: '100vh' }}>
       <Content style={{ maxWidth: 600, margin: '0 auto' }}>
-        {/* Back to Dashboard button */}
-        <Button
-  type="primary"
-  icon={<ArrowLeftOutlined />}
-  onClick={() => navigate('/user/home')}
-  style={{ marginBottom: '16px', fontSize: '16px' }}
->
-  Back to Dashboard
-</Button>
-
-
         <Card
           title="User Settings"
           bordered={false}
