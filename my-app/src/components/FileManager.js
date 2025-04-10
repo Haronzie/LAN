@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback,useMemo } from 'react';
 import {
   Layout,
   Table,
@@ -359,6 +359,21 @@ const FileManager = () => {
     const newPath = isRoot ? folderName : path.join(currentPath, folderName);
     setCurrentPath(newPath);
   };
+  
+  const filteredTreeData = useMemo(() => {
+    const disableCurrent = (nodes) => {
+      return nodes.map((node) => ({
+        ...node,
+        disabled: node.value === currentPath,
+        children: node.children ? disableCurrent(node.children) : []
+      }));
+    };
+    return disableCurrent(folderTreeData);
+  }, [folderTreeData, currentPath]);
+  
+  
+
+  
 
   const handleGoUp = () => {
     if (isRoot) return;
@@ -716,16 +731,24 @@ const FileManager = () => {
       }
   
       message.success(`Moved '${moveItem.name}' successfully`);
+      
       setMoveModalVisible(false);
-      setMoveDestination('');
-      setMoveItem(null);
-      fetchItems();
-      if (moveItem.type === 'directory') fetchFolderTree();
+setMoveDestination('');
+setMoveItem(null);
+
+// If we just moved something out of the current folder, and it's now empty, redirect
+if (moveDestination !== currentPath) {
+  setCurrentPath(moveDestination); // 👈 Automatically go to the folder we moved into
+} else {
+  fetchItems(); // 👈 fallback
+}
+fetchFolderTree(); // Always refresh tree
     } catch (err) {
       console.error('Move error:', err);
       message.error(err.response?.data?.error || 'Error moving item');
     }
-  };  
+  };
+  
   
 
   // Table columns
@@ -1024,11 +1047,13 @@ const FileManager = () => {
           onCancel={() => setMoveModalVisible(false)}
           okText="Move"
         >
+
+          
           <Form layout="vertical">
             <Form.Item label="Destination Folder" required>
               <TreeSelect
                 style={{ width: '100%' }}
-                treeData={folderTreeData}
+                treeData={filteredTreeData}
                 placeholder="Select destination folder"
                 value={moveDestination}
                 onChange={(val) => setMoveDestination(val)}
