@@ -380,8 +380,8 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cleanDir := strings.Trim(filepath.Clean(directory), `/\\`)
-	cleanName := strings.Trim(filepath.Clean(fileName), `/\\`)
+	cleanDir := strings.Trim(filepath.Clean(directory), `/\`)
+	cleanName := strings.Trim(filepath.Clean(fileName), `/\`)
 
 	if cleanDir == "" || cleanName == "" ||
 		strings.HasPrefix(cleanDir, "..") || strings.HasPrefix(cleanName, "..") ||
@@ -1042,8 +1042,8 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cleanDir := strings.Trim(filepath.Clean(directory), `/\\`)
-	cleanName := strings.Trim(filepath.Clean(fileName), `/\\`)
+	cleanDir := strings.Trim(filepath.Clean(directory), `/\`)
+	cleanName := strings.Trim(filepath.Clean(fileName), `/\`)
 
 	if cleanDir == "" || cleanName == "" ||
 		strings.HasPrefix(cleanDir, "..") || strings.HasPrefix(cleanName, "..") ||
