@@ -609,9 +609,10 @@ const FileManager = () => {
         const nameExists = existingNames.includes(moveItem.name);
   
         if (nameExists) {
-          Modal.confirm({
+          const conflictModal = Modal.info({
             title: `A file named '${moveItem.name}' already exists in '${moveDestination}'`,
             icon: <ExclamationCircleOutlined />,
+            closable: true,
             width: 600,
             content: (
               <div>
@@ -627,32 +628,46 @@ const FileManager = () => {
                     danger
                     style={{ flex: 1 }}
                     onClick={async () => {
-                      await finalizeMove(true);
-                      Modal.destroyAll();
+                      try {
+                        await finalizeMove(true);
+                        setMoveModalVisible(false); 
+
+                        conflictModal.destroy();
+                      } catch (err) {
+                        console.error('Replace failed:', err);
+                        message.error('Failed to replace file.');
+                      }
                     }}
                   >
-                    Replace the file in the destination
+                    Replace
                   </Button>
-          
+  
                   <Button
                     style={{ flex: 1 }}
                     onClick={() => {
                       message.info('Skipped this file.');
-                      Modal.destroyAll();
+                      setMoveModalVisible(false);
+                      conflictModal.destroy();
                     }}
                   >
-                    Skip this file
+                    Skip
                   </Button>
-          
+  
                   <Button
                     type="default"
                     style={{ flex: 1 }}
                     onClick={async () => {
-                      await finalizeMove(false);
-                      Modal.destroyAll();
+                      try {
+                        await finalizeMove(false);
+                        setMoveModalVisible(false); 
+                        conflictModal.destroy();
+                      } catch (err) {
+                        console.error('Keep both failed:', err);
+                        message.error('Failed to keep both.');
+                      }
                     }}
                   >
-                    Keep both files
+                    Keep Both
                   </Button>
                 </div>
               </div>
@@ -660,19 +675,19 @@ const FileManager = () => {
             okButtonProps: { style: { display: 'none' } },
             cancelButtonProps: { style: { display: 'none' } },
           });
-          
   
-          return; // Pause execution until modal resolves
+          return; // Wait for user interaction in modal
         }
       }
   
-      // Proceed to move (no name conflict or it's a folder)
+      // If no conflict or moving a folder
       await finalizeMove(false);
     } catch (err) {
       console.error('Move error:', err);
       message.error('Error checking for conflict or moving file');
     }
   };
+  
   
   const finalizeMove = async (overwrite) => {
     try {
