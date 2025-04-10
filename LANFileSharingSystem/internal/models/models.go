@@ -357,18 +357,17 @@ func (app *App) ListActivities() ([]map[string]interface{}, error) {
 //  File & Directory Operations
 // -------------------------------------
 
-func (app *App) CreateFileRecord(fr FileRecord) error {
+func (app *App) CreateFileRecord(record FileRecord) error {
 	_, err := app.DB.Exec(`
-		INSERT INTO files (file_name, directory, file_path, size, content_type, uploader, confidential)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`,
-		fr.FileName,
-		fr.Directory, // must match your new schema
-		fr.FilePath,
-		fr.Size,
-		fr.ContentType,
-		fr.Uploader,
-		fr.Confidential,
+		INSERT INTO files (file_name, file_path, directory, size, content_type, uploader, confidential)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		record.FileName,
+		record.FilePath,
+		record.Directory, // ✅ must be passed here
+		record.Size,
+		record.ContentType,
+		record.Uploader,
+		record.Confidential,
 	)
 	return err
 }
@@ -1103,4 +1102,20 @@ func (app *App) RevokeAdmin(username string) error {
         WHERE username = $1
     `, username)
 	return err
+}
+func (app *App) DeleteFileRecordByPath(filePath string) (int, error) {
+	var fileID int
+	err := app.DB.QueryRow("SELECT id FROM files WHERE file_path = $1", filePath).Scan(&fileID)
+	if err != nil {
+		log.Printf("Error retrieving file ID for path '%s': %v", filePath, err)
+		return 0, err
+	}
+
+	_, err = app.DB.Exec("DELETE FROM files WHERE file_path = $1", filePath)
+	if err != nil {
+		log.Printf("Error deleting file with path '%s': %v", filePath, err)
+		return 0, err
+	}
+
+	return fileID, nil
 }

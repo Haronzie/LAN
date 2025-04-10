@@ -118,6 +118,27 @@ const FileManager = () => {
   const [currentPath, setCurrentPath] = useState(''); // "" = root
   const [searchTerm, setSearchTerm] = useState('');
 
+  const generateSuggestedName = async (baseName, extension, destinationPath) => {
+    try {
+      const res = await axios.get(`/files?directory=${encodeURIComponent(destinationPath)}`, {
+        withCredentials: true
+      });
+      const existingNames = res.data.map(f => f.name);
+      let attempt = 0;
+      let suggested;
+      do {
+        suggested = attempt === 0
+          ? `${baseName}${extension}`
+          : `${baseName} (${attempt})${extension}`;
+        attempt++;
+      } while (existingNames.includes(suggested));
+      return suggested;
+    } catch (err) {
+      console.error('Error generating suggested name:', err);
+      return `${baseName}${extension}`;
+    }
+  };
+
   // Create folder modal
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -290,6 +311,19 @@ const FileManager = () => {
     const interval = setInterval(fetchItems, 10000);
     return () => clearInterval(interval);
   }, [currentPath]);
+  useEffect(() => {
+    const updateSuggestedName = async () => {
+      if (copyItem && copyItem.type === 'file') {
+        const name = copyItem.name;
+        const ext = path.extname(name);
+        const base = path.basename(name, ext);
+        const targetDir = selectedDestination || currentPath;
+        const suggested = await generateSuggestedName(base, ext, targetDir);
+        setCopyNewName(suggested);
+      }
+    };
+    updateSuggestedName();
+  }, [selectedDestination]);
 
   // Filter items by search term
   const filteredItems = items.filter((item) =>
@@ -404,7 +438,10 @@ const FileManager = () => {
         });
       } else {
         await axios.delete('/delete-file', {
-          data: { filename: record.name },
+          data: {
+            filename: record.name,
+            directory: currentPath
+          },
           withCredentials: true
         });
       }
@@ -484,38 +521,14 @@ const FileManager = () => {
 
   // Copy
   const handleCopy = async (record) => {
-    try {
-      const targetDir = selectedDestination || currentPath;
-      const res = await axios.get(`/files?directory=${encodeURIComponent(targetDir)}`, {
-        withCredentials: true
-      });
-  
-      const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
-  
-      const name = record.name;
-      const ext = record.type === 'file' ? path.extname(name) : '';
-      let base = record.type === 'file' ? path.basename(name, ext) : name;
-  
-      const baseRegex = /(.*?)(?: \((\d+)\))?$/;
-      const match = base.match(baseRegex);
-  
-      let actualBaseName = match[1];
-      let attempt = match[2] ? parseInt(match[2], 10) : 0;
-  
-      let suggestedName;
-      do {
-        attempt++;
-        suggestedName = `${actualBaseName} (${attempt})${ext}`;
-      } while (existingNames.includes(suggestedName));
-  
-      setCopyItem(record);
-      setCopyNewName(suggestedName);
-      setCopyModalVisible(true);
-    } catch (err) {
-      console.error('Error checking copy conflicts:', err);
-      const errorMsg = err.response?.data?.error || 'Failed to check for file conflict.';
-      message.error(errorMsg);
-    }
+    const name = record.name;
+    const ext = path.extname(name);
+    const base = path.basename(name, ext);
+    const targetDir = selectedDestination || currentPath;
+    const suggested = await generateSuggestedName(base, ext, targetDir);
+    setCopyItem(record);
+    setCopyNewName(suggested);
+    setCopyModalVisible(true);
   };
   
 
@@ -528,33 +541,43 @@ const FileManager = () => {
       message.error('No item selected to copy');
       return;
     }
+  
     try {
+      const targetDir = selectedDestination || currentPath;
+  
       if (copyItem.type === 'directory') {
         await axios.post('/directory/copy', {
           source_name: copyItem.name,
           source_parent: currentPath,
           new_name: copyNewName,
-          destination_parent: selectedDestination || currentPath
+          destination_parent: targetDir
         }, { withCredentials: true });
+  
+        message.success(`Directory '${copyItem.name}' copied as '${copyNewName}'`);
+        fetchFolderTree();
+  
       } else {
-        await axios.post('/copy-file', {
+        const res = await axios.post('/copy-file', {
           source_file: copyItem.name,
           new_file_name: copyNewName,
-          destination_folder: selectedDestination || currentPath
+          destination_folder: targetDir
         }, { withCredentials: true });
+  
+        const finalName = res.data.final_name || copyNewName;
+  
+        message.success(`File '${copyItem.name}' copied as '${finalName}'`);
       }
-      message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
+  
       setCopyModalVisible(false);
       setCopyItem(null);
       setCopyNewName('');
       fetchItems();
-      if (copyItem.type === 'directory') fetchFolderTree();
     } catch (err) {
       console.error('Copy error:', err);
-      message.error(err.response?.data?.error || 'Error copying file');
+      message.error(err.response?.data?.error || 'Error copying item');
     }
   };
-
+  
 
   const handleMove = async (record) => {
     const destination = currentPath;
