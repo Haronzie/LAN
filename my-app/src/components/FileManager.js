@@ -30,7 +30,8 @@ import {
   CopyOutlined,
   SwapOutlined,
   ArrowLeftOutlined,
-  FileOutlined
+  FileOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -609,55 +610,57 @@ const FileManager = () => {
   
         if (nameExists) {
           Modal.confirm({
-            title: `A file named '${moveItem.name}' already exists in '${moveDestination}'.`,
-            content: 'What do you want to do?',
+            title: `A file named '${moveItem.name}' already exists in '${moveDestination}'`,
+            icon: <ExclamationCircleOutlined />,
+            width: 600,
+            content: (
+              <div>
+                <p>Choose an action for this file:</p>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  marginTop: '16px'
+                }}>
+                  <Button
+                    type="primary"
+                    danger
+                    style={{ flex: 1 }}
+                    onClick={async () => {
+                      await finalizeMove(true);
+                      Modal.destroyAll();
+                    }}
+                  >
+                    Replace the file in the destination
+                  </Button>
+          
+                  <Button
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      message.info('Skipped this file.');
+                      Modal.destroyAll();
+                    }}
+                  >
+                    Skip this file
+                  </Button>
+          
+                  <Button
+                    type="default"
+                    style={{ flex: 1 }}
+                    onClick={async () => {
+                      await finalizeMove(false);
+                      Modal.destroyAll();
+                    }}
+                  >
+                    Keep both files
+                  </Button>
+                </div>
+              </div>
+            ),
             okButtonProps: { style: { display: 'none' } },
             cancelButtonProps: { style: { display: 'none' } },
-            footer: [
-              <Button
-                key="keep"
-                type="default"
-                onClick={async () => {
-                  try {
-                    await finalizeMove(false);
-                    Modal.destroyAll();
-                  } catch (err) {
-                    console.error('Move failed:', err);
-                    message.error('Failed to keep both.');
-                  }
-                }}
-              >
-                Keep Both
-              </Button>,
-  
-              <Button
-                key="overwrite"
-                type="primary"
-                danger
-                onClick={async () => {
-                  try {
-                    await finalizeMove(true);
-                    Modal.destroyAll();
-                  } catch (err) {
-                    console.error('Overwrite failed:', err);
-                    message.error('Failed to overwrite.');
-                  }
-                }}
-              >
-                Overwrite
-              </Button>,
-  
-              <Button
-                key="cancel"
-                onClick={() => {
-                  message.info('Move cancelled.');
-                  Modal.destroyAll();
-                }}
-              >
-                Cancel
-              </Button>
-            ]
           });
+          
   
           return; // Pause execution until modal resolves
         }
