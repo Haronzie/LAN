@@ -1,0 +1,32 @@
+# === ENVIRONMENT VARIABLES ===
+.env
+
+# === LOG FILES ===
+*.log
+error.log
+
+# === OS FILES ===
+.DS_Store
+Thumbs.db
+
+# === DEPENDENCIES ===
+vendor/
+node_modules/
+
+# === BUILD OUTPUT ===
+bin/
+dist/
+build/
+
+# === IDE / EDITOR SETTINGS ===
+.vscode/
+*.code-workspace
+
+# === COVERAGE / TEST OUTPUT ===
+coverage/
+*.out
+
+# === FRONTEND REACT (if you include it in the same repo) ===
+**/node_modules/
+**/build/
+**/dist/
