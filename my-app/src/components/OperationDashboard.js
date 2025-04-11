@@ -107,20 +107,24 @@ const OperationDashboard = () => {
 
   const markAsDone = async (messageId, fileId) => {
     try {
-      await axios.post(
-        '/file/message/done',
-        { message_id: messageId },
+      await axios.put(
+        `/file/messages/${messageId}/done`,
+        {},
         { withCredentials: true }
       );
-      
+  
       message.success('Marked as done');
-      const res = await axios.get(`/file/messages?file_id=${fileId}`, { withCredentials: true });
+  
+      const res = await axios.get(`/file/messages?file_id=${fileId}`, {
+        withCredentials: true,
+      });
       setFileMessages(prev => ({ ...prev, [fileId]: res.data }));
     } catch (err) {
       console.error('Error marking message as done:', err);
       message.error('Failed to mark as done');
     }
   };
+  
   
 
 
