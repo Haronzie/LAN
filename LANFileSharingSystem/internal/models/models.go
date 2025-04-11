@@ -818,9 +818,8 @@ func (app *App) UpdateFileMetadata(fileID int, newSize int64, newContentType str
 	_, err := app.DB.Exec(`
         UPDATE files
         SET size = $1,
-            content_type = $2,
-            confidential = $3
-        WHERE id = $4
+            content_type = $2
+        WHERE id = $3
     `, newSize, newContentType, fileID)
 	return err
 }
