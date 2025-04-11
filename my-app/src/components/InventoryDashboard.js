@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Layout, Row, Col, Card, Statistic, List, Button, Modal, Form, Input, message, Divider,
+  Row, Col, Card, Statistic, List, Button, Modal, Form, Input, message, Divider,
 } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Bar, Pie } from '@ant-design/charts';
-
-const { Content } = Layout;
 
 const InventoryDashboard = () => {
   const [items, setItems] = useState([]);
@@ -73,15 +71,17 @@ const InventoryDashboard = () => {
   };
 
   return (
-    <Content style={{ padding: '24px', background: '#f0f2f5' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-
-        {/* Back Button */}
-        <Row style={{ marginBottom: 16 }}>
-        <Col>
-</Col>
-
-        </Row>
+    <div style={{
+      height: 'calc(93vh - 64px)',
+      overflowY: 'auto',
+      padding: '24px',
+      backgroundColor: '#f0f2f5'
+    }}>
+      <div style={{ 
+        maxWidth: 1200, 
+        margin: '0 auto',
+        width: '100%'
+      }}>
 
         {/* Statistics & Add Item Button */}
         <Row gutter={[16, 16]} justify="space-between">
@@ -91,9 +91,19 @@ const InventoryDashboard = () => {
             </Card>
           </Col>
           <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>
-              Add New Item
-            </Button>
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={() => setModalVisible(true)}
+            size="large"
+            style={{
+              height: '40px',
+              padding: '0 24px',
+              fontSize: '16px'
+            }}
+          >
+            Add New Item
+          </Button>
           </Col>
         </Row>
 
@@ -164,7 +174,7 @@ const InventoryDashboard = () => {
         </Modal>
 
       </div>
-    </Content>
+    </div>
   );
 };
 
