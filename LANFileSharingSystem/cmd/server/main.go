@@ -228,7 +228,7 @@ func main() {
 			Error("Folder creation error")
 		logrus.Exit(1)
 	}
-	for _, folder := range []string{"operation", "research", "training"} {
+	for _, folder := range []string{"Operation", "Research", "Training"} {
 		fullPath := path.Join("Cdrrmo", folder)
 		if err := os.MkdirAll(fullPath, 0755); err != nil {
 			wrappedErr := fmt.Errorf("error creating subfolder: %s - %w", fullPath, err)
@@ -266,9 +266,7 @@ func main() {
 	router.HandleFunc("/move-file", fileController.MoveFile).Methods("POST")
 	router.HandleFunc("/download", fileController.Download).Methods("GET")
 	router.HandleFunc("/files", fileController.ListFiles).Methods("GET")
-	router.HandleFunc("/share", fileController.ShareFile).Methods("POST")
 	router.HandleFunc("/file/rename", fileController.RenameFile).Methods("PUT")
-	router.HandleFunc("/download-share", fileController.DownloadShare).Methods("GET")
 	router.HandleFunc("/users/fetch", userController.FetchUserList).Methods("GET")
 	router.HandleFunc("/users", userController.ListUsers).Methods("GET")
 	router.HandleFunc("/user/add", userController.AddUser).Methods("POST")
@@ -280,8 +278,6 @@ func main() {
 	router.HandleFunc("/user-role", userController.GetUserRole).Methods("GET")
 	router.HandleFunc("/get-user-role", authController.GetUserRole).Methods("GET")
 	router.HandleFunc("/files/all", fileController.ListAllFiles).Methods("GET")
-	router.HandleFunc("/grant-access", fileController.GrantFileAccess).Methods("POST")
-	router.HandleFunc("/revoke-access", fileController.RevokeFileAccess).Methods("POST")
 	router.HandleFunc("/preview", fileController.Preview).Methods("GET")
 	router.HandleFunc("/revoke-admin", userController.RevokeAdmin).Methods("POST")
 	router.HandleFunc("/get-first-admin", userController.GetFirstAdmin).Methods("GET")
