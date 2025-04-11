@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 
--- Files Table
+-- Files Table (confidential removed)
 CREATE TABLE IF NOT EXISTS files (
     id SERIAL PRIMARY KEY,
     file_name VARCHAR(255) NOT NULL,
@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS files (
     size BIGINT,
     content_type VARCHAR(255),
     uploader VARCHAR(50),
-    confidential BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (directory, file_name)
 );
@@ -36,7 +35,7 @@ CREATE TABLE IF NOT EXISTS directories (
 );
 CREATE INDEX IF NOT EXISTS idx_directories_parent ON directories (parent_directory);
 
--- Activity Log Table (Legacy)
+-- Activity Log Table
 CREATE TABLE IF NOT EXISTS activity_log (
     id SERIAL PRIMARY KEY,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -76,22 +75,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     CONSTRAINT fk_user FOREIGN KEY (user_username) REFERENCES users (username) ON DELETE SET NULL,
     CONSTRAINT fk_file FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE SET NULL
 );
-
-
-
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_username);
 CREATE INDEX IF NOT EXISTS idx_audit_file ON audit_logs(file_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
-
-
-CREATE TABLE IF NOT EXISTS file_permissions (
-    id SERIAL PRIMARY KEY,
-    file_id INTEGER NOT NULL,
-    username VARCHAR(255) NOT NULL,
-    granted_by VARCHAR(255) NOT NULL,
-    granted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_file
-        FOREIGN KEY(file_id)
-            REFERENCES files(id)
-            ON DELETE CASCADE
-);

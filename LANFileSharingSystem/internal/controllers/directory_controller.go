@@ -703,20 +703,17 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 
 // DownloadFolder handles zipping and downloading a folder.
 func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Request) {
-	// Only allow GET requests.
 	if r.Method != http.MethodGet {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
 
-	// Authenticate the user.
 	user, err := dc.App.GetUserFromSession(r)
 	if err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	// Retrieve and validate the 'directory' query parameter.
 	folder := strings.TrimSpace(r.URL.Query().Get("directory"))
 	if folder == "" {
 		models.RespondError(w, http.StatusBadRequest, "Missing directory parameter")
@@ -730,7 +727,6 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Create a temporary file for the ZIP archive.
 	zipFile, err := os.CreateTemp("", "folder-*.zip")
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Could not create temporary file")
@@ -741,103 +737,63 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 
 	zipWriter := zip.NewWriter(zipFile)
 
-	// Keep track of how many files were allowed vs. filtered.
-	var allowedCount, filteredCount int
-
-	// Walk through the folder recursively.
+	// Walk and zip all files and subfolders
 	err = filepath.Walk(absFolder, func(filePath string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-
-		// Compute the relative path within the folder.
 		relPath, err := filepath.Rel(absFolder, filePath)
 		if err != nil {
 			return err
 		}
 		relPath = filepath.ToSlash(relPath)
 
-		// Create a ZIP header.
 		header, err := zip.FileInfoHeader(info)
 		if err != nil {
 			return err
 		}
 		header.Name = relPath
 		if info.IsDir() {
-			// Ensure directory names end with "/".
 			header.Name += "/"
 		} else {
 			header.Method = zip.Deflate
 		}
 
-		// Only apply confidential checks if it's a file (not a directory).
-		if !info.IsDir() {
-			includeFile := true
-			// Build the file record path as stored in the DB.
-			fileRecordPath := filepath.ToSlash(filepath.Join(folder, relPath))
-			fr, err := dc.App.GetFileRecordByPath(fileRecordPath)
-			if err == nil {
-				// If the file is confidential, check if the user is permitted.
-				if fr.Confidential {
-					if fr.Uploader != user.Username && user.Role != "admin" {
-						allowed, perr := dc.App.HasFileAccess(fr.ID, user.Username)
-						if perr != nil || !allowed {
-							includeFile = false
-						}
-					}
-				}
-			}
-			if includeFile {
-				allowedCount++
-				// Use a helper function (models.AddFileToArchive) or inline logic:
-				if err := models.AddFileToArchive(zipWriter, filePath, relPath); err != nil {
-					log.Printf("Error adding file %s to archive: %v", filePath, err)
-					return err
-				}
-			} else {
-				filteredCount++
-				// Add a placeholder file indicating restricted access.
-				placeholderName := relPath + ".restricted.txt"
-				placeholderContent := "This file is confidential and you are not authorized to download it."
-				writer, err := zipWriter.Create(placeholderName)
-				if err != nil {
-					log.Printf("Error creating placeholder for %s: %v", relPath, err)
-					return err
-				}
-				if _, err := writer.Write([]byte(placeholderContent)); err != nil {
-					log.Printf("Error writing placeholder content for %s: %v", relPath, err)
-					return err
-				}
-			}
-			return nil
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return err
 		}
 
-		// For directories, just create the header (no file copy).
-		_, err = zipWriter.CreateHeader(header)
-		return err
+		if !info.IsDir() {
+			file, err := os.Open(filePath)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+
+			if _, err := io.Copy(writer, file); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error zipping folder: "+err.Error())
+		models.RespondError(w, http.StatusInternalServerError, "Error creating ZIP archive: "+err.Error())
 		return
 	}
 
-	// Finalize the ZIP archive.
 	if err := zipWriter.Close(); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error finalizing zip archive")
 		return
 	}
 
-	// ===== Audit Log: record the folder download event =====
-	// Adjust to match your existing LogAudit or LogActivity signature.
 	dc.App.LogAudit(
 		user.Username,
-		0, // fileID can be nil if this is a folder-level action
+		0,
 		"DOWNLOAD_FOLDER",
-		fmt.Sprintf("User '%s' downloaded folder '%s'. Allowed files: %d, filtered: %d",
-			user.Username, folder, allowedCount, filteredCount),
+		fmt.Sprintf("User '%s' downloaded folder '%s'.", user.Username, folder),
 	)
 
-	// Open the ZIP file for reading.
 	zipFileForRead, err := os.Open(zipFile.Name())
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error opening zipped folder")
@@ -845,12 +801,9 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 	}
 	defer zipFileForRead.Close()
 
-	// Set response headers and stream the ZIP archive.
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", info.Name()))
-	if _, err := io.Copy(w, zipFileForRead); err != nil {
-		log.Println("Error sending zip file:", err)
-	}
+	io.Copy(w, zipFileForRead)
 }
 
 // generateUniqueFolderName & generateCopyName remain the same...

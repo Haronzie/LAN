@@ -43,7 +43,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1) Retrieve the uploaded file from the form
 	file, handler, err := r.FormFile("file")
 	if err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Error retrieving the file")
@@ -63,7 +62,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	uploadBase := "Cdrrmo"
 	rawFileName := handler.Filename
 
-	// --- Auto-renaming logic to ensure a unique file name ---
 	uniqueFileName := rawFileName
 	relativePath := filepath.Join(targetDir, uniqueFileName)
 	finalDiskPath := filepath.Join(uploadBase, relativePath)
@@ -79,15 +77,12 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		finalDiskPath = filepath.Join(uploadBase, relativePath)
 		counter++
 	}
-	// --- End of auto-renaming logic ---
 
-	// 2) Ensure the target directory exists on disk
 	if err := os.MkdirAll(filepath.Dir(finalDiskPath), 0755); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error creating target directory")
 		return
 	}
 
-	// 3) Save the uploaded file to a temp path (plaintext) before encryption
 	tempFilePath := finalDiskPath + ".tmp"
 	tempFile, err := os.Create(tempFilePath)
 	if err != nil {
@@ -102,7 +97,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	tempFile.Close()
 
-	// 4) Virus scan (if integrated)
 	scanResult, err := services.ScanFile(tempFilePath)
 	if err != nil || !scanResult.Clean {
 		os.Remove(tempFilePath)
@@ -110,7 +104,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5) Load the encryption key (must be 32 bytes for AES-256).
 	key := []byte(os.Getenv("ENCRYPTION_KEY"))
 	if len(key) != 32 {
 		os.Remove(tempFilePath)
@@ -118,7 +111,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 6) Encrypt the file into finalDiskPath
 	if err := encryption.EncryptFile(key, tempFilePath, finalDiskPath); err != nil {
 		os.Remove(tempFilePath)
 		models.RespondError(w, http.StatusInternalServerError, "Error encrypting file")
@@ -126,18 +118,11 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	os.Remove(tempFilePath)
 
-	// 7) Read the confidential flag from the form.
-	// If the value is "true", then isConfidential will be true; otherwise, it is false.
-	confidentialStr := r.FormValue("confidential")
-	isConfidential := (confidentialStr == "true")
-
-	// Check for an existing record (i.e. re-upload)
 	existingFR, getErr := fc.App.GetFileRecordByPath(relativePath)
 	if getErr == nil {
 		fileID := existingFR.ID
 
-		// Update existing file's metadata
-		updateErr := fc.App.UpdateFileMetadata(fileID, handler.Size, handler.Header.Get("Content-Type"), isConfidential)
+		updateErr := fc.App.UpdateFileMetadata(fileID, handler.Size, handler.Header.Get("Content-Type"))
 		if updateErr != nil {
 			models.RespondError(w, http.StatusInternalServerError, "Error updating file record")
 			return
@@ -165,15 +150,13 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// New file flow: create a new file record.
 	fr := models.FileRecord{
-		FileName:     uniqueFileName,
-		Directory:    targetDir,
-		FilePath:     relativePath,
-		Size:         handler.Size,
-		ContentType:  handler.Header.Get("Content-Type"),
-		Uploader:     user.Username,
-		Confidential: isConfidential, // This sets the confidential flag based on form input.
+		FileName:    uniqueFileName,
+		Directory:   targetDir,
+		FilePath:    relativePath,
+		Size:        handler.Size,
+		ContentType: handler.Header.Get("Content-Type"),
+		Uploader:    user.Username,
 	}
 
 	if err := fc.App.CreateFileRecord(fr); err != nil {
@@ -398,16 +381,6 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if fr.Confidential {
-		if fr.Uploader != user.Username && user.Role != "admin" {
-			allowed, err := fc.App.HasFileAccess(fr.ID, user.Username)
-			if err != nil || !allowed {
-				models.RespondError(w, http.StatusForbidden, "Access denied to confidential file")
-				return
-			}
-		}
-	}
-
 	encryptedFilePath := filepath.Join("Cdrrmo", fr.FilePath)
 	tempDecryptedPath := encryptedFilePath + ".dec"
 
@@ -423,7 +396,6 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusInternalServerError, "Error decrypting file")
 		return
 	}
-
 	defer func() {
 		if err := os.Remove(tempDecryptedPath); err != nil && !os.IsNotExist(err) {
 			log.Printf("Failed to clean up temp file %s: %v", tempDecryptedPath, err)
@@ -490,7 +462,6 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 
 	srcPath := filepath.Join("Cdrrmo", oldFR.FilePath)
 
-	// Use the name from request or fallback to original
 	finalName := req.NewFileName
 	if finalName == "" {
 		finalName = filepath.Base(req.SourceFile)
@@ -501,7 +472,6 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		destFolder = filepath.Dir(oldFR.FilePath)
 	}
 
-	// Generate unique name in the destination folder
 	base := strings.TrimSuffix(finalName, filepath.Ext(finalName))
 	ext := filepath.Ext(finalName)
 	counter := 0
@@ -516,7 +486,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		newRelativePath = filepath.Join(destFolder, finalName)
 
 		if _, err := fc.App.GetFileRecordByPath(newRelativePath); err != nil {
-			break // unique path found
+			break
 		}
 		counter++
 	}
@@ -547,15 +517,13 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Completely new and independent record
 	newRecord := models.FileRecord{
-		FileName:     finalName,
-		FilePath:     newRelativePath,
-		Directory:    destFolder,
-		Size:         oldFR.Size,
-		ContentType:  oldFR.ContentType,
-		Uploader:     user.Username,
-		Confidential: false,
+		FileName:    finalName,
+		FilePath:    newRelativePath,
+		Directory:   destFolder,
+		Size:        oldFR.Size,
+		ContentType: oldFR.ContentType,
+		Uploader:    user.Username,
 	}
 
 	if err := fc.App.CreateFileRecord(newRecord); err != nil {
@@ -585,48 +553,31 @@ func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user is authenticated
 	if _, err := fc.App.GetUserFromSession(r); err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	// Read the 'directory' query param, e.g. ?directory=Tata
 	dir := r.URL.Query().Get("directory")
 
-	// Query only files that belong to this folder (or root if dir == "")
 	files, err := fc.App.ListFilesInDirectory(dir)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error retrieving files")
 		return
 	}
 
-	// Convert FileRecord objects into JSON-friendly maps
 	var output []map[string]interface{}
 	for _, f := range files {
-		permissions, err := fc.App.ListFilePermissions(f.ID)
-		if err != nil {
-			log.Printf("Warning: could not fetch permissions for file ID %d: %v\n", f.ID, err)
-			// not fatal, just continue
-		}
-		// Build an array of permission objects with a "username" property
-		var permissionObjects []map[string]string
-		for _, p := range permissions {
-			permissionObjects = append(permissionObjects, map[string]string{"username": p.Username})
-		}
 		output = append(output, map[string]interface{}{
-			"name":         f.FileName,
-			"type":         "file",        // for your frontend to distinguish
-			"size":         f.Size,        // in bytes
-			"contentType":  f.ContentType, // renamed from content_type
-			"uploader":     f.Uploader,
-			"id":           f.ID,
-			"confidential": f.Confidential,
-			"permissions":  permissionObjects,
+			"name":        f.FileName,
+			"type":        "file",
+			"size":        f.Size,
+			"contentType": f.ContentType,
+			"uploader":    f.Uploader,
+			"id":          f.ID,
 		})
 	}
 
-	// Respond with the JSON array.
 	models.RespondJSON(w, http.StatusOK, output)
 }
 
@@ -637,119 +588,30 @@ func (fc *FileController) ListAllFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user is authenticated
 	if _, err := fc.App.GetUserFromSession(r); err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	// Query all file records from the database.
 	files, err := fc.App.ListAllFiles()
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error retrieving files")
 		return
 	}
 
-	// Convert FileRecord objects into JSON-friendly maps.
 	var output []map[string]interface{}
 	for _, f := range files {
 		output = append(output, map[string]interface{}{
-			"name":         f.FileName,
-			"type":         "file",
-			"size":         f.Size,
-			"contentType":  f.ContentType,
-			"uploader":     f.Uploader,
-			"id":           f.ID,
-			"confidential": f.Confidential,
+			"name":        f.FileName,
+			"type":        "file",
+			"size":        f.Size,
+			"contentType": f.ContentType,
+			"uploader":    f.Uploader,
+			"id":          f.ID,
 		})
 	}
 
-	// Respond with the JSON array.
 	models.RespondJSON(w, http.StatusOK, output)
-}
-
-// ShareFile generates a shareable URL for a file.
-func (fc *FileController) ShareFile(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
-		return
-	}
-
-	user, err := fc.App.GetUserFromSession(r)
-	if err != nil {
-		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
-		return
-	}
-
-	var req struct {
-		FileName string `json:"file_name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-	req.FileName = strings.TrimSpace(req.FileName)
-	if req.FileName == "" {
-		models.RespondError(w, http.StatusBadRequest, "File name cannot be empty")
-		return
-	}
-
-	// 1. Check if the file record exists and if the user can share it.
-	fr, err := fc.App.GetFileRecord(req.FileName)
-	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "File does not exist")
-		return
-	}
-	if user.Role != "admin" && fr.Uploader != user.Username {
-		models.RespondError(w, http.StatusForbidden, "Forbidden: You can only share files you uploaded")
-		return
-	}
-
-	// 2. Generate a token for sharing.
-	token, err := fc.App.GenerateToken()
-	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error generating share token")
-		return
-	}
-	fc.App.FileShareTokens[token] = req.FileName
-
-	shareURL := fmt.Sprintf("http://%s/download-share?token=%s", r.Host, token)
-	models.RespondJSON(w, http.StatusOK, map[string]string{"share_url": shareURL})
-}
-
-// DownloadShare handles downloads via share tokens.
-func (fc *FileController) DownloadShare(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		models.RespondError(w, http.StatusBadRequest, "Missing token")
-		return
-	}
-
-	fileName, exists := fc.App.FileShareTokens[token]
-	if !exists {
-		models.RespondError(w, http.StatusBadRequest, "Invalid or expired token")
-		return
-	}
-
-	// 1. Retrieve the file record from DB to get its relative path.
-	fr, err := fc.App.GetFileRecord(fileName)
-	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "File not found")
-		return
-	}
-
-	// 2. Open the file from disk.
-	filePath := filepath.Join("Cdrrmo", fr.FilePath)
-	f, err := os.Open(filePath)
-	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error opening file")
-		return
-	}
-	defer f.Close()
-
-	w.Header().Set("Content-Type", fr.ContentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
-	io.Copy(w, f)
 }
 
 // MoveFile handles moving a file from one folder to another.
@@ -851,13 +713,12 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	_, _ = fc.App.DeleteFileRecordByPath(oldRelativePath)
 
 	newRecord := models.FileRecord{
-		FileName:     finalName,
-		FilePath:     newRelativePath,
-		Directory:    req.NewParent,
-		Size:         fr.Size,
-		ContentType:  fr.ContentType,
-		Uploader:     user.Username,
-		Confidential: fr.Confidential,
+		FileName:    finalName,
+		FilePath:    newRelativePath,
+		Directory:   req.NewParent,
+		Size:        fr.Size,
+		ContentType: fr.ContentType,
+		Uploader:    user.Username,
 	}
 
 	if err := fc.App.CreateFileRecord(newRecord); err != nil {
@@ -876,137 +737,6 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 		"message":    fmt.Sprintf("Moved '%s' to folder '%s'", finalName, req.NewParent),
 		"final_name": finalName,
 	})
-}
-
-// RevokeFileAccess handles revoking access to a confidential file.
-func (fc *FileController) RevokeFileAccess(w http.ResponseWriter, r *http.Request) {
-	// Ensure the user is authenticated.
-	user, err := fc.App.GetUserFromSession(r)
-	if err != nil {
-		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
-		return
-	}
-
-	// Parse JSON input.
-	var req struct {
-		FileID     int    `json:"file_id"`
-		TargetUser string `json:"target_user"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	// Validate input.
-	if strings.TrimSpace(req.TargetUser) == "" {
-		models.RespondError(w, http.StatusBadRequest, "Target username cannot be empty")
-		return
-	}
-
-	// ✅ Check if target user exists (optional but recommended).
-	if _, err := fc.App.GetUserByUsername(req.TargetUser); err != nil {
-		models.RespondError(w, http.StatusNotFound, "Target user not found")
-		return
-	}
-
-	// Retrieve the file record.
-	fileRecord, err := fc.App.GetFileRecordByID(req.FileID)
-	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "File not found")
-		return
-	}
-
-	// Validate file confidentiality.
-	if !fileRecord.Confidential {
-		models.RespondError(w, http.StatusBadRequest, "File is not confidential")
-		return
-	}
-
-	// Authorization check.
-	if fileRecord.Uploader != user.Username && user.Role != "admin" {
-		models.RespondError(w, http.StatusForbidden, "Not authorized to revoke access")
-		return
-	}
-
-	// Check if the user has access (optional but improves feedback).
-	hasAccess, err := fc.App.HasFileAccess(req.FileID, req.TargetUser)
-	if err != nil || !hasAccess {
-		models.RespondError(w, http.StatusBadRequest, "User does not have access to this file")
-		return
-	}
-
-	// Revoke access.
-	if err := fc.App.RevokeFileAccess(req.FileID, req.TargetUser); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error revoking access")
-		return
-	}
-	fc.App.LogAudit(user.Username, req.FileID, "REVOKE_ACCESS", fmt.Sprintf("Access revoked for user '%s' for file '%d'", req.TargetUser, req.FileID))
-
-	// Log and respond.
-	fc.App.LogActivity(fmt.Sprintf("User '%s' revoked access to file '%d' for user '%s'.", user.Username, req.FileID, req.TargetUser))
-	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Access revoked"})
-}
-
-// GrantFileAccess handles granting access to a confidential file.
-func (fc *FileController) GrantFileAccess(w http.ResponseWriter, r *http.Request) {
-	// Ensure the user is authenticated.
-	user, err := fc.App.GetUserFromSession(r)
-	if err != nil {
-		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
-		return
-	}
-
-	// Parse JSON input.
-	var req struct {
-		FileID     int    `json:"file_id"`
-		TargetUser string `json:"target_user"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	// Optional: Check that the target username is not empty.
-	if strings.TrimSpace(req.TargetUser) == "" {
-		models.RespondError(w, http.StatusBadRequest, "Target username cannot be empty")
-		return
-	}
-	if _, err := fc.App.GetUserByUsername(req.TargetUser); err != nil {
-		models.RespondError(w, http.StatusNotFound, "Target user not found")
-		return
-	}
-
-	log.Printf("GrantFileAccess called with fileID: %d", req.FileID)
-
-	// Retrieve the file record by its ID.
-	fileRecord, err := fc.App.GetFileRecordByID(req.FileID)
-	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "File not found")
-		return
-	}
-
-	// Ensure the file is marked confidential.
-	if !fileRecord.Confidential {
-		models.RespondError(w, http.StatusBadRequest, "File is not confidential")
-		return
-	}
-
-	// Allow only the uploader or an admin to grant permission.
-	if fileRecord.Uploader != user.Username && user.Role != "admin" {
-		models.RespondError(w, http.StatusForbidden, "Not authorized to grant access to this file")
-		return
-	}
-
-	// Grant access.
-	if err := fc.App.GrantFileAccess(req.FileID, req.TargetUser, user.Username); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error granting access")
-		return
-	}
-	fc.App.LogAudit(user.Username, req.FileID, "GRANT_ACCESS", fmt.Sprintf("Access granted to user '%s' for file '%d'", req.TargetUser, req.FileID))
-
-	// Log activity and return success.
-	fc.App.LogActivity(fmt.Sprintf("User '%s' granted access to file '%d' for user '%s'.", user.Username, req.FileID, req.TargetUser))
-	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Access granted"})
 }
 
 // Preview handles file preview requests by decrypting files and sending them with inline disposition.
@@ -1058,14 +788,6 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "File not found")
 		return
-	}
-
-	if fr.Confidential && fr.Uploader != user.Username && user.Role != "admin" {
-		allowed, err := fc.App.HasFileAccess(fr.ID, user.Username)
-		if err != nil || !allowed {
-			models.RespondError(w, http.StatusForbidden, "Access denied to confidential file")
-			return
-		}
 	}
 
 	encryptedFilePath := filepath.Join("Cdrrmo", fr.FilePath)
