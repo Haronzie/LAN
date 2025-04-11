@@ -73,7 +73,7 @@ const ResearchDashboard = () => {
   // ----------------------------------------
   // States: path, items, loading, search
   // ----------------------------------------
-  const [currentPath, setCurrentPath] = useState('');
+  const [currentPath, setCurrentPath] = useState('Research');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -214,35 +214,33 @@ const ResearchDashboard = () => {
   // ----------------------------------------
   const handleFolderClick = (folderName) => {
     const newPath = path.join(currentPath, folderName);
+    if (!newPath.startsWith('Research')) return;
     setCurrentPath(newPath);
   };
+  
 
   const handleGoUp = () => {
-    if (!currentPath) return;
-    if (currentPath === 'Research') {
-      setCurrentPath('');
-      return;
-    }
+    if (currentPath === 'Research') return;
     const parent = path.dirname(currentPath);
-    setCurrentPath(parent === '.' ? '' : parent);
+    setCurrentPath(parent === '.' ? 'Research' : parent);
   };
+  
 
-  const getPathSegments = (p) => (p ? p.split('/').filter(Boolean) : []);
+  const getPathSegments = (p) => p.split('/').filter(Boolean);
   const segments = getPathSegments(currentPath);
-  const breadcrumbItems = [
-    <Breadcrumb.Item key="root">
-      {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
-    </Breadcrumb.Item>
-  ];
-  segments.forEach((seg, index) => {
+  
+  const breadcrumbItems = segments.map((seg, index) => {
     const partialPath = segments.slice(0, index + 1).join('/');
     const isLast = index === segments.length - 1;
-    breadcrumbItems.push(
+  
+    return (
       <Breadcrumb.Item key={index}>
         {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
       </Breadcrumb.Item>
     );
   });
+  
+  
 
   // ----------------------------------------
   // Modal-Based Upload
@@ -800,15 +798,16 @@ const ResearchDashboard = () => {
 
         {/* Breadcrumb */}
         <Breadcrumb style={{ marginBottom: 16 }}>
-          <Breadcrumb.Item key="root">
-            {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
-          </Breadcrumb.Item>
-          {segments.map((seg, index) => (
-            <Breadcrumb.Item key={index}>
-              {index === segments.length - 1 ? seg : <a onClick={() => setCurrentPath(segments.slice(0, index + 1).join('/'))}>{seg}</a>}
-            </Breadcrumb.Item>
-          ))}
-        </Breadcrumb>
+  {segments.map((seg, index) => {
+    const partialPath = segments.slice(0, index + 1).join('/');
+    const isLast = index === segments.length - 1;
+    return (
+      <Breadcrumb.Item key={index}>
+        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
+      </Breadcrumb.Item>
+    );
+  })}
+</Breadcrumb>
 
         {/* Table of Items */}
         <Table
