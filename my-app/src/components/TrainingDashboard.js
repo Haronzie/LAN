@@ -71,7 +71,7 @@ const TrainingDashboard = () => {
   // ----------------------------------
   // States: path, items, loading, search, etc.
   // ----------------------------------
-  const [currentPath, setCurrentPath] = useState('');
+  const [currentPath, setCurrentPath] = useState('Training');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -294,35 +294,38 @@ const TrainingDashboard = () => {
   // ----------------------------------
   const handleFolderClick = (folderName) => {
     const newPath = path.join(currentPath, folderName);
+    if (!newPath.startsWith('Training')) return;
     setCurrentPath(newPath);
   };
+  
 
   const handleGoUp = () => {
-    if (!currentPath) return;
-    if (currentPath === 'Training') {
-      setCurrentPath('');
-      return;
-    }
+    if (currentPath === 'Training') return;
     const parent = path.dirname(currentPath);
-    setCurrentPath(parent === '.' ? '' : parent);
+    setCurrentPath(parent === '.' ? 'Training' : parent);
   };
+  
 
   const getPathSegments = (p) => (p ? p.split('/').filter(Boolean) : []);
-  const segments = getPathSegments(currentPath);
-  const breadcrumbItems = [
-    <Breadcrumb.Item key="root">
-      {currentPath === '' ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
+const segments = getPathSegments(currentPath);
+const breadcrumbItems = [
+  <Breadcrumb.Item key="root">
+    {currentPath === 'Training' ? 'Training' : <a onClick={() => setCurrentPath('Training')}>Training</a>}
+  </Breadcrumb.Item>,
+];
+
+segments.slice(1).forEach((seg, index) => {
+  const partialPath = segments.slice(0, index + 2).join('/');
+  const validPartial = partialPath.startsWith('Training') ? partialPath : path.join('Training', partialPath);
+  const isLast = index === segments.length - 2;
+
+  breadcrumbItems.push(
+    <Breadcrumb.Item key={index}>
+      {isLast ? seg : <a onClick={() => setCurrentPath(validPartial)}>{seg}</a>}
     </Breadcrumb.Item>
-  ];
-  segments.forEach((seg, index) => {
-    const partialPath = segments.slice(0, index + 1).join('/');
-    const isLast = index === segments.length - 1;
-    breadcrumbItems.push(
-      <Breadcrumb.Item key={index}>
-        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
-      </Breadcrumb.Item>
-    );
-  });
+  );
+});
+
 
   // ----------------------------------
   // Upload Modal
