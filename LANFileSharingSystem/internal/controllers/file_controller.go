@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -896,4 +897,125 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fc.App.LogActivity(fmt.Sprintf("User '%s' previewed file '%s' (ID: %d)", user.Username, fr.FileName, fr.ID))
+}
+
+func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request) {
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// ⛔ Only allow admins to send instructions
+	if user.Role != "admin" {
+		models.RespondError(w, http.StatusForbidden, "Only admins can send file instructions")
+		return
+	}
+
+	var msg models.FileMessage
+	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid message format")
+		return
+	}
+
+	// ✅ Optional: Check required fields
+	if msg.FileID == 0 || msg.Receiver == "" || msg.Message == "" {
+		models.RespondError(w, http.StatusBadRequest, "Missing file ID, receiver, or message content")
+		return
+	}
+
+	// 🛡️ Enforce sender identity from session
+	msg.Sender = user.Username
+
+	_, err = fc.App.DB.Exec(
+		`INSERT INTO file_messages (file_id, sender, receiver, message) VALUES ($1, $2, $3, $4)`,
+		msg.FileID, msg.Sender, msg.Receiver, msg.Message,
+	)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Failed to send message")
+		return
+	}
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Instruction sent"})
+}
+
+func (fc *FileController) MarkFileMessageDone(w http.ResponseWriter, r *http.Request) {
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	var payload struct {
+		MessageID int `json:"message_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+
+	var receiver string
+	err = fc.App.DB.QueryRow(`SELECT receiver FROM file_messages WHERE id = $1`, payload.MessageID).Scan(&receiver)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "Message not found")
+		return
+	}
+
+	if user.Username != receiver && user.Role != "admin" {
+		models.RespondError(w, http.StatusForbidden, "You are not authorized to update this message")
+		return
+	}
+
+	_, err = fc.App.DB.Exec(`UPDATE file_messages SET is_done = TRUE WHERE id = $1`, payload.MessageID)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Failed to update status")
+		return
+	}
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Marked as done"})
+}
+
+func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request) {
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	fileIDStr := r.URL.Query().Get("file_id")
+	fileID, err := strconv.Atoi(fileIDStr)
+	if err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid file ID")
+		return
+	}
+
+	// ✅ Restrict access: Only admin or users who are receivers of at least one message for this file
+	var count int
+	err = fc.App.DB.QueryRow(`
+		SELECT COUNT(*) FROM file_messages
+		WHERE file_id = $1 AND (receiver = $2 OR $2 = ANY (SELECT 'admin'))
+	`, fileID, user.Username).Scan(&count)
+
+	if err != nil || (count == 0 && user.Role != "admin") {
+		models.RespondError(w, http.StatusForbidden, "You are not authorized to view these messages")
+		return
+	}
+
+	rows, err := fc.App.DB.Query(`SELECT id, file_id, sender, receiver, message, is_done, created_at FROM file_messages WHERE file_id = $1 ORDER BY created_at DESC`, fileID)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Failed to fetch messages")
+		return
+	}
+	defer rows.Close()
+
+	var messages []models.FileMessage
+	for rows.Next() {
+		var msg models.FileMessage
+		if err := rows.Scan(&msg.ID, &msg.FileID, &msg.Sender, &msg.Receiver, &msg.Message, &msg.IsDone, &msg.CreatedAt); err != nil {
+			continue
+		}
+		messages = append(messages, msg)
+	}
+
+	models.RespondJSON(w, http.StatusOK, messages)
 }

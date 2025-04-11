@@ -50,6 +50,17 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+type FileMessage struct {
+	ID        int       `json:"id"`
+	FileID    int       `json:"file_id"`
+	Sender    string    `json:"sender"`
+	Receiver  string    `json:"receiver"`
+	Message   string    `json:"message"`
+	IsDone    bool      `json:"is_done"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type AuditLog struct {
 	ID               int       `json:"id"`
 	UserUsername     *string   `json:"user_username"`
