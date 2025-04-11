@@ -11,11 +11,9 @@ import {
   Space,
   Tooltip,
   Form,
-  Card,
   Breadcrumb,
   Upload,
   TreeSelect,
-  Checkbox,
   Select,
   Spin
 } from 'antd';
@@ -147,6 +145,8 @@ const FileManager = () => {
   // Upload modal states
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
+  const [fileUploadMessage, setFileUploadMessage] = useState('');
+
 
   // Rename modal
   const [renameModalVisible, setRenameModalVisible] = useState(false);
@@ -162,99 +162,15 @@ const FileManager = () => {
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveDestination, setMoveDestination] = useState('');
   const [moveItem, setMoveItem] = useState(null);
-  const [moveConfidential, setMoveConfidential] = useState(false);
 
   // Folder tree for optional destination selection
   const [folderTreeData, setFolderTreeData] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState('');
 
-  // Grant/Revoke state
-  const [grantModalVisible, setGrantModalVisible] = useState(false);
-  const [revokeModalVisible, setRevokeModalVisible] = useState(false);
-  const [accessFile, setAccessFile] = useState(null);
   const [targetUsername, setTargetUsername] = useState('');
-
-  // Track current user & admin status
-  const [currentUser, setCurrentUser] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  // On mount, read username & role from localStorage
-  useEffect(() => {
-    const storedUsername = localStorage.getItem('username');
-    const storedRole = localStorage.getItem('role');
-    if (storedUsername) setCurrentUser(storedUsername);
-    if (storedRole === 'admin') setIsAdmin(true)
-  }, []);
 
   const navigate = useNavigate();
   const isRoot = currentPath === '';
-
-  // Grant / Revoke Handlers
-  const openGrantModal = (file) => {
-    setAccessFile(file);
-    setTargetUsername('');
-    setGrantModalVisible(true);
-  };
-
-  const openRevokeModal = (file) => {
-    setAccessFile(file);
-    setTargetUsername('');
-    setRevokeModalVisible(true);
-  };
-
-  const handleGrantAccess = async () => {
-    if (!targetUsername) {
-      message.error('Please select a user to grant access.');
-      return;
-    }
-    if (!accessFile || !accessFile.id) {
-      message.error('No file selected.');
-      return;
-    }
-    try {
-      await axios.post(
-        '/grant-access',
-        { file_id: accessFile.id, target_user: targetUsername },
-        { withCredentials: true }
-      );
-      message.success(`Access granted to '${targetUsername}'`);
-      setGrantModalVisible(false);
-      setTargetUsername(''); // Reset targetUsername
-      fetchItems();
-    } catch (error) {
-      console.error('Grant Access error:', error);
-      message.error(error.response?.data?.error || 'Error granting access');
-    } finally {
-      setTargetUsername(''); // Ensure the input is cleared
-    }
-  };
-
-  const handleRevokeAccess = async () => {
-    if (!targetUsername) {
-      message.error('Please select a user to revoke access.');
-      return;
-    }
-    if (!accessFile || !accessFile.id) {
-      message.error('No file selected.');
-      return;
-    }
-    try {
-      await axios.post(
-        '/revoke-access',
-        { file_id: accessFile.id, target_user: targetUsername },
-        { withCredentials: true }
-      );
-      message.success(`Access revoked from '${targetUsername}'`);
-      setRevokeModalVisible(false);
-      setTargetUsername(''); // Reset targetUsername
-      fetchItems();
-    } catch (error) {
-      console.error('Revoke Access error:', error);
-      message.error(error.response?.data?.error || 'Error revoking access');
-    } finally {
-      setTargetUsername(''); // Ensure the input is cleared
-    }
-  };
 
   // Fetch items for the current folder
   const fetchItems = async () => {
@@ -273,7 +189,6 @@ const FileManager = () => {
         formattedSize: formatFileSize(f.size),
         contentType: f.contentType,
         uploader: f.uploader,
-        confidential: f.confidential,
         id: f.id
       }));
   
@@ -413,80 +328,92 @@ const FileManager = () => {
     setUploadingFile(null);
     setUploadModalVisible(true);
   };
-
-  const doUpload = async (isConfidential) => {
-    const formData = new FormData();
-    if (!uploadingFile) {
-      message.error('Please select a file first');
-      return;
-    }
-    formData.append('file', uploadingFile);
-    formData.append('directory', currentPath);
-    formData.append('confidential', isConfidential ? 'true' : 'false');
-
-    try {
-      const res = await axios.post('/upload', formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      message.success(res.data.message || 'File uploaded successfully');
-      setUploadModalVisible(false);
-      setUploadingFile(null);
-      const handleUpload = async () => {
-        if (!uploadingFile) {
-          message.error('Please select a file first');
-          return;
-        }
-      
-        const formData = new FormData();
-        formData.append('file', uploadingFile);
-        formData.append('directory', currentPath);
-      
-        try {
-          const res = await axios.post('/upload', formData, {
-            withCredentials: true,
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
-          message.success(res.data.message || 'File uploaded successfully');
-          setUploadModalVisible(false);
-          setUploadingFile(null);
-          fetchItems();
-        } catch (error) {
-          console.error('Upload error:', error);
-          message.error(error.response?.data?.error || 'Error uploading file');
-        }
-      };
-            fetchItems();
-    } catch (error) {
-      console.error('Upload error:', error);
-      message.error(error.response?.data?.error || 'Error uploading file');
-    }
-  };
-
   const handleUpload = async () => {
     if (!uploadingFile) {
       message.error('Please select a file first');
       return;
     }
+    if (!targetUsername) {
+      message.error('Please select a valid user to send the file to.');
+      return;
+    }
   
+    const filename = uploadingFile.name;
     const formData = new FormData();
     formData.append('file', uploadingFile);
     formData.append('directory', currentPath);
   
     try {
+      const res = await axios.get(`/files?directory=${encodeURIComponent(currentPath)}`, {
+        withCredentials: true
+      });
+      const existingFiles = res.data || [];
+      const fileExists = existingFiles.some(f => f.name === filename);
+  
+      if (fileExists) {
+        Modal.confirm({
+          title: `A file named '${filename}' already exists in this folder.`,
+          icon: <ExclamationCircleOutlined />,
+          content: 'Do you want to overwrite or keep both?',
+          okText: 'Overwrite',
+          cancelText: 'Keep Both',
+          okButtonProps: { danger: true },
+          onOk: async () => {
+            formData.append('overwrite', 'true');
+            await uploadFile(formData, true);
+          },
+          onCancel: async () => {
+            await uploadFile(formData, false);
+          }
+        });
+      } else {
+        await uploadFile(formData, false);
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      message.error(err.response?.data?.error || 'Error checking file conflict');
+    }
+  };
+  
+  const uploadFile = async (formData, isOverwrite) => {
+    try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      message.success(res.data.message || 'File uploaded successfully');
+  
+      const { message: uploadMsg, file_id } = res.data;
+  
+      if (!file_id) {
+        message.warning('Upload succeeded but file ID not returned — message not sent.');
+      } else if (fileUploadMessage.trim() && targetUsername.trim()) {
+        try {
+          await axios.post('/file/message', {
+            file_id,
+            receiver: targetUsername.trim(),
+            message: fileUploadMessage.trim()
+          }, { withCredentials: true });
+  
+          message.success(`Message sent to ${targetUsername}`);
+        } catch (msgErr) {
+          console.error('Message upload failed:', msgErr);
+          message.error('Failed to send message to user');
+        }
+      }
+  
+      message.success(uploadMsg || 'File uploaded');
       setUploadModalVisible(false);
       setUploadingFile(null);
+      setFileUploadMessage('');
+      setTargetUsername('');
       fetchItems();
     } catch (error) {
-      console.error('Upload error:', error);
-      message.error(error.response?.data?.error || 'Error uploading file');
+      console.error('Upload failed:', error);
+      message.error(error.response?.data?.error || 'Upload error');
     }
   };
+  
+  
   
   // Delete file or folder
   const handleDelete = async (record) => {
@@ -643,7 +570,6 @@ const FileManager = () => {
     setMoveItem(record);
     setMoveDestination(''); // clear previous
     setMoveModalVisible(true); // show modal to let user pick folder first
-    setMoveConfidential(record.confidential); // keep confidential flag
   };
 
   const handleMoveConfirm = async () => {
@@ -768,7 +694,6 @@ const FileManager = () => {
             old_parent: currentPath,
             new_parent: moveDestination,
             overwrite,
-            confidential: moveConfidential
           },
           { withCredentials: true }
         );
@@ -829,13 +754,6 @@ fetchFolderTree(); // Always refresh tree
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        const isOwner = record.uploader === currentUser;
-
-        const canManageAccess =
-          record.type === 'file' &&
-          record.confidential &&
-          (isOwner || isAdmin);
-
         return (
           <Space>
             {/* View File */}
@@ -883,20 +801,7 @@ fetchFolderTree(); // Always refresh tree
             <Tooltip title="Delete">
               <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
             </Tooltip>
-
-            {/* Grant Access */}
-            {canManageAccess && (
-              <Tooltip title="Grant Access">
-                <Button onClick={() => openGrantModal(record)}>Grant</Button>
-              </Tooltip>
-            )}
-
-            {/* Revoke Access */}
-            {canManageAccess && (
-              <Tooltip title="Revoke Access">
-                <Button onClick={() => openRevokeModal(record)}>Revoke</Button>
-              </Tooltip>
-            )}
+            
           </Space>
         );
       }
@@ -1016,34 +921,49 @@ fetchFolderTree(); // Always refresh tree
 
         {/* Upload Modal */}
         <Modal
-          title="Upload File"
-          visible={uploadModalVisible}
-          onOk={handleUpload}
-          onCancel={() => {
-            setUploadModalVisible(false);
-            setUploadingFile(null);
-          }}
-          okText="Upload"
-        >
-          <p>Target Folder: {currentPath || 'None (Please create a folder first)'}</p>
-          <Upload
-            beforeUpload={(file) => {
-              setUploadingFile(file);
-              return false;
-            }}
-            maxCount={1}
-          >
-            <Button icon={<UploadOutlined />}>Select File</Button>
-          </Upload>
-          {uploadingFile && (
-            <Card size="small" style={{ marginTop: 16 }}>
-              <strong>Selected File:</strong> {uploadingFile.name}
-            </Card>
-          )}
-          <Form layout="vertical" style={{ marginTop: 16 }}>
-          
-          </Form>
-        </Modal>
+  title="Upload File"
+  visible={uploadModalVisible}
+  onCancel={() => setUploadModalVisible(false)}
+  onOk={handleUpload}
+>
+  <Upload
+    beforeUpload={(file) => {
+      setUploadingFile(file);
+      return false;
+    }}
+    showUploadList={false}
+  >
+    <Button icon={<UploadOutlined />}>Select File</Button>
+  </Upload>
+  <div style={{ marginTop: 8 }}>
+    {uploadingFile && <p>Selected: {uploadingFile.name}</p>}
+  </div>
+
+  <Form.Item label="Instruction (optional)">
+    <Input.TextArea
+      value={fileUploadMessage}
+      onChange={(e) => setFileUploadMessage(e.target.value)}
+      rows={3}
+      placeholder="Add a message or instruction to this file (optional)"
+    />
+  </Form.Item>
+
+  {/* ✅ Add this below the instruction */}
+  <Form.Item
+  label="Send to User"
+  required
+  tooltip="Begin typing to search for a registered user"
+  validateStatus={!targetUsername ? 'error' : ''}
+  help={!targetUsername ? 'Please select a user before uploading.' : ''}
+>
+  <UserSearchSelect 
+    value={targetUsername}
+    onUserSelect={(value) => setTargetUsername(value)} 
+  />
+</Form.Item>
+
+</Modal>
+
 
         {/* Copy Modal */}
         <Modal
@@ -1097,61 +1017,8 @@ fetchFolderTree(); // Always refresh tree
                 allowClear
               />
             </Form.Item>
-            {moveItem && moveItem.type === 'file' && (
-              <Form.Item label="Confidential">
-                <Checkbox
-                  checked={moveConfidential}
-                  onChange={(e) => setMoveConfidential(e.target.checked)}
-                />
-              </Form.Item>
-            )}
           </Form>
         </Modal>
-
-        {/* Grant Access Modal with Professional Searchable Dropdown */}
-        <Modal
-  title="Grant Access"
-  visible={grantModalVisible}
-  onOk={handleGrantAccess}
-  onCancel={() => setGrantModalVisible(false)}
-  okText="Grant Access"
->
-  <Form layout="vertical">
-    <Form.Item
-      label="Select User to Grant Access"
-      required
-      tooltip="Begin typing to search for a username"
-    >
-      <UserSearchSelect 
-        value={targetUsername}
-        onUserSelect={(value) => setTargetUsername(value)} 
-      />
-    </Form.Item>
-  </Form>
-</Modal>
-
-
-        {/* Revoke Access Modal with Professional Searchable Dropdown */}
-        <Modal
-  title="Revoke Access"
-  visible={revokeModalVisible}
-  onOk={handleRevokeAccess}
-  onCancel={() => setRevokeModalVisible(false)}
-  okText="Revoke Access"
->
-  <Form layout="vertical">
-    <Form.Item
-      label="Select User to Revoke Access"
-      required
-      tooltip="Begin typing to search for a username"
-    >
-      <UserSearchSelect 
-        value={targetUsername}
-        onUserSelect={(value) => setTargetUsername(value)} 
-      />
-    </Form.Item>
-  </Form>
-</Modal>
 
       </Content>
     </Layout>
