@@ -824,23 +824,18 @@ fetchFolderTree(); // Always refresh tree
   });
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+    <Layout style={{ minHeight: '91vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
-        <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-          <Col xs={8} style={{ textAlign: 'left' }}>
-            <Button type="primary" icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin')}>
-              Back to Dashboard
-            </Button>
-          </Col>
-          <Col xs={8} style={{ textAlign: 'center' }}>
-            <h2 style={{ margin: 0 }}>File Manager</h2>
-          </Col>
-          <Col xs={8} style={{ textAlign: 'right' }}>
-            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
-              Upload File
-            </Button>
-          </Col>
-        </Row>
+      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+        <Col flex="auto" style={{ textAlign: 'center' }}>
+          <h2 style={{ margin: 0 }}>File Manager</h2>
+        </Col>
+        <Col>
+          <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+            Upload File
+          </Button>
+        </Col>
+      </Row>
 
         {segments.length > 0 && (
           <Row style={{ marginBottom: 16 }}>
