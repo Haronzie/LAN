@@ -58,8 +58,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 			models.RespondError(w, http.StatusBadRequest, "Invalid directory path")
 			return
 		}
-
-		// NEW: Enforce upload only to valid top-level folders
 		topFolder := strings.ToLower(strings.Split(targetDir, "/")[0])
 		validTopFolders := map[string]bool{
 			"operation": true,
@@ -70,26 +68,32 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 			models.RespondError(w, http.StatusBadRequest, "Invalid top-level folder")
 			return
 		}
-
 	}
+
+	overwrite := r.FormValue("overwrite") == "true"
 
 	uploadBase := "Cdrrmo"
 	rawFileName := handler.Filename
-
-	uniqueFileName := rawFileName
-	relativePath := filepath.Join(targetDir, uniqueFileName)
+	relativePath := filepath.Join(targetDir, rawFileName)
 	finalDiskPath := filepath.Join(uploadBase, relativePath)
-	counter := 1
-	for {
-		if _, err := fc.App.GetFileRecordByPath(relativePath); err != nil {
-			break
-		}
+
+	existingFR, getErr := fc.App.GetFileRecordByPath(relativePath)
+
+	if getErr == nil && !overwrite {
+		// File exists and overwrite not allowed → keep both
 		baseName := strings.TrimSuffix(rawFileName, filepath.Ext(rawFileName))
 		ext := filepath.Ext(rawFileName)
-		uniqueFileName = fmt.Sprintf("%s_%d%s", baseName, counter, ext)
-		relativePath = filepath.Join(targetDir, uniqueFileName)
-		finalDiskPath = filepath.Join(uploadBase, relativePath)
-		counter++
+		counter := 1
+		for {
+			uniqueFileName := fmt.Sprintf("%s_%d%s", baseName, counter, ext)
+			rel := filepath.Join(targetDir, uniqueFileName)
+			if _, err := fc.App.GetFileRecordByPath(rel); err != nil {
+				relativePath = rel
+				finalDiskPath = filepath.Join(uploadBase, rel)
+				break
+			}
+			counter++
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(finalDiskPath), 0755); err != nil {
@@ -132,10 +136,10 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	os.Remove(tempFilePath)
 
-	existingFR, getErr := fc.App.GetFileRecordByPath(relativePath)
-	if getErr == nil {
+	// Recheck if the original path was used (overwrite) or renamed (keep both)
+	existingFR, getErr = fc.App.GetFileRecordByPath(relativePath)
+	if getErr == nil && overwrite {
 		fileID := existingFR.ID
-
 		updateErr := fc.App.UpdateFileMetadata(fileID, handler.Size, handler.Header.Get("Content-Type"))
 		if updateErr != nil {
 			models.RespondError(w, http.StatusInternalServerError, "Error updating file record")
@@ -149,12 +153,10 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fc.App.LogActivity(fmt.Sprintf("User '%s' re-uploaded file '%s' (version %d).", user.Username, rawFileName, newVer))
-		action := "REUPLOAD"
-		details := fmt.Sprintf("File '%s' re-uploaded as version %d", rawFileName, newVer)
-		fc.App.LogAudit(user.Username, fileID, action, details)
+		fc.App.LogAudit(user.Username, fileID, "REUPLOAD", fmt.Sprintf("File '%s' re-uploaded as version %d", rawFileName, newVer))
 
-		notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, newVer))
 		if fc.App.NotificationHub != nil {
+			notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, newVer))
 			fc.App.NotificationHub.Broadcast(notification)
 		}
 
@@ -165,7 +167,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fr := models.FileRecord{
-		FileName:    uniqueFileName,
+		FileName:    filepath.Base(relativePath),
 		Directory:   targetDir,
 		FilePath:    relativePath,
 		Size:        handler.Size,
@@ -186,13 +188,11 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	action := "UPLOAD"
-	details := fmt.Sprintf("File '%s' uploaded (version 1)", rawFileName)
-	fc.App.LogAudit(user.Username, fileID, action, details)
+	fc.App.LogAudit(user.Username, fileID, "UPLOAD", fmt.Sprintf("File '%s' uploaded (version 1)", rawFileName))
 	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded new file '%s' (version 1).", user.Username, rawFileName))
 
-	notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, 1))
 	if fc.App.NotificationHub != nil {
+		notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": 1}`, rawFileName))
 		fc.App.NotificationHub.Broadcast(notification)
 	}
 
