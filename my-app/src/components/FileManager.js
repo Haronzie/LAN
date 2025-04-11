@@ -266,7 +266,7 @@ const FileManager = () => {
         axios.get(`/files?directory=${directoryParam}`, { withCredentials: true }),
         axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true })
       ]);
-
+  
       const files = (filesRes.data || []).map((f) => ({
         name: f.name,
         type: 'file',
@@ -277,8 +277,25 @@ const FileManager = () => {
         confidential: f.confidential,
         id: f.id
       }));
-
-      const directories = dirsRes.data || [];
+  
+      let directories = dirsRes.data || [];
+  
+      if (currentPath === '') {
+        const fixedFolders = ['operation', 'research', 'training'].map((folder) => ({
+          name: folder,
+          type: 'directory',
+          parent: '',
+        }));
+  
+        // Merge while avoiding duplicates
+        const dirNames = directories.map((d) => d.name);
+        fixedFolders.forEach((folder) => {
+          if (!dirNames.includes(folder.name)) {
+            directories.push(folder);
+          }
+        });
+      }
+  
       setItems([...directories, ...files]);
     } catch (error) {
       console.error('Error fetching items:', error);
@@ -287,6 +304,7 @@ const FileManager = () => {
       setLoading(false);
     }
   };
+  
 
   // Fetch entire folder tree on mount
   const fetchFolderTree = async () => {
@@ -738,9 +756,9 @@ setMoveItem(null);
 
 // If we just moved something out of the current folder, and it's now empty, redirect
 if (moveDestination !== currentPath) {
-  setCurrentPath(moveDestination); // 👈 Automatically go to the folder we moved into
+  setCurrentPath(moveDestination);
 } else {
-  fetchItems(); // 👈 fallback
+  fetchItems(); 
 }
 fetchFolderTree(); // Always refresh tree
     } catch (err) {
