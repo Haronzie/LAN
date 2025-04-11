@@ -196,8 +196,9 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		fc.App.NotificationHub.Broadcast(notification)
 	}
 
-	models.RespondJSON(w, http.StatusOK, map[string]string{
+	models.RespondJSON(w, http.StatusOK, map[string]interface{}{
 		"message": fmt.Sprintf("File '%s' uploaded (version 1) successfully", rawFileName),
+		"file_id": fileID,
 	})
 }
 
