@@ -59,7 +59,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// NEW: Enforce upload only to valid top-level folders
-		topFolder := strings.Split(targetDir, "/")[0]
+		topFolder := strings.ToLower(strings.Split(targetDir, "/")[0])
 		validTopFolders := map[string]bool{
 			"operation": true,
 			"research":  true,
@@ -69,6 +69,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 			models.RespondError(w, http.StatusBadRequest, "Invalid top-level folder")
 			return
 		}
+
 	}
 
 	uploadBase := "Cdrrmo"

@@ -352,10 +352,11 @@ func (app *App) ListActivities() ([]map[string]interface{}, error) {
 func (app *App) CreateFileRecord(record FileRecord) error {
 	_, err := app.DB.Exec(`
 		INSERT INTO files (file_name, file_path, directory, size, content_type, uploader)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`,
 		record.FileName,
 		record.FilePath,
-		record.Directory, // ✅ must be passed here
+		record.Directory,
 		record.Size,
 		record.ContentType,
 		record.Uploader,

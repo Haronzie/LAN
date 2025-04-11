@@ -147,7 +147,6 @@ const FileManager = () => {
   // Upload modal states
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
-  const [uploadConfidential, setUploadConfidential] = useState(false);
 
   // Rename modal
   const [renameModalVisible, setRenameModalVisible] = useState(false);
@@ -281,7 +280,7 @@ const FileManager = () => {
       let directories = dirsRes.data || [];
   
       if (currentPath === '') {
-        const fixedFolders = ['operation', 'research', 'training'].map((folder) => ({
+        const fixedFolders = ['Operation', 'Research', 'Training'].map((folder) => ({
           name: folder,
           type: 'directory',
           parent: '',
@@ -412,7 +411,6 @@ const FileManager = () => {
       return;
     }
     setUploadingFile(null);
-    setUploadConfidential(false);
     setUploadModalVisible(true);
   };
 
@@ -434,8 +432,31 @@ const FileManager = () => {
       message.success(res.data.message || 'File uploaded successfully');
       setUploadModalVisible(false);
       setUploadingFile(null);
-      setUploadConfidential(false);
-      fetchItems();
+      const handleUpload = async () => {
+        if (!uploadingFile) {
+          message.error('Please select a file first');
+          return;
+        }
+      
+        const formData = new FormData();
+        formData.append('file', uploadingFile);
+        formData.append('directory', currentPath);
+      
+        try {
+          const res = await axios.post('/upload', formData, {
+            withCredentials: true,
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          message.success(res.data.message || 'File uploaded successfully');
+          setUploadModalVisible(false);
+          setUploadingFile(null);
+          fetchItems();
+        } catch (error) {
+          console.error('Upload error:', error);
+          message.error(error.response?.data?.error || 'Error uploading file');
+        }
+      };
+            fetchItems();
     } catch (error) {
       console.error('Upload error:', error);
       message.error(error.response?.data?.error || 'Error uploading file');
@@ -447,21 +468,26 @@ const FileManager = () => {
       message.error('Please select a file first');
       return;
     }
-    if (!currentPath) {
-      message.error('Please select a folder first');
-      return;
-    }
-    if (!uploadConfidential) {
-      Modal.confirm({
-        title: 'Upload as non-confidential?',
-        content: 'Are you sure you want to upload this file without marking it as confidential?',
-        onOk: () => doUpload(false)
+  
+    const formData = new FormData();
+    formData.append('file', uploadingFile);
+    formData.append('directory', currentPath);
+  
+    try {
+      const res = await axios.post('/upload', formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
-    } else {
-      doUpload(true);
+      message.success(res.data.message || 'File uploaded successfully');
+      setUploadModalVisible(false);
+      setUploadingFile(null);
+      fetchItems();
+    } catch (error) {
+      console.error('Upload error:', error);
+      message.error(error.response?.data?.error || 'Error uploading file');
     }
   };
-
+  
   // Delete file or folder
   const handleDelete = async (record) => {
     try {
@@ -996,7 +1022,6 @@ fetchFolderTree(); // Always refresh tree
           onCancel={() => {
             setUploadModalVisible(false);
             setUploadingFile(null);
-            setUploadConfidential(false);
           }}
           okText="Upload"
         >
@@ -1016,14 +1041,7 @@ fetchFolderTree(); // Always refresh tree
             </Card>
           )}
           <Form layout="vertical" style={{ marginTop: 16 }}>
-            <Form.Item label="Mark as Confidential?">
-              <Checkbox
-                checked={uploadConfidential}
-                onChange={(e) => setUploadConfidential(e.target.checked)}
-              >
-                Confidential
-              </Checkbox>
-            </Form.Item>
+          
           </Form>
         </Modal>
 
