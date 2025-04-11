@@ -126,11 +126,12 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     try {
       await axios.post('/logout', {}, { withCredentials: true });
-      navigate('/');
+      navigate('/login');
     } catch {
       message.error('Logout failed.');
     }
   };
+  
 
   const toggleSidebar = () => setCollapsed(!collapsed);
 
