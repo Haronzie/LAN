@@ -60,7 +60,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	uploadBase := "uploads"
+	uploadBase := "Cdrrmo"
 	rawFileName := handler.Filename
 
 	// --- Auto-renaming logic to ensure a unique file name ---
@@ -240,9 +240,9 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2) Build the new relative path (keep the same folder, just change the file name)
-	oldFullPath := filepath.Join("uploads", oldFR.FilePath)
+	oldFullPath := filepath.Join("Cdrrmo", oldFR.FilePath)
 	newRelativePath := filepath.Join(filepath.Dir(oldFR.FilePath), req.NewFilename)
-	newFullPath := filepath.Join("uploads", newRelativePath)
+	newFullPath := filepath.Join("Cdrrmo", newRelativePath)
 
 	// 3) Rename on disk
 	if err := os.Rename(oldFullPath, newFullPath); err != nil {
@@ -325,7 +325,7 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	// Log the audit before deletion
 	fc.App.LogAudit(user.Username, fr.ID, "DELETE", fmt.Sprintf("File '%s' deleted", fr.FileName))
 
-	fullPath := filepath.Join("uploads", fr.FilePath)
+	fullPath := filepath.Join("Cdrrmo", fr.FilePath)
 	if removeErr := os.Remove(fullPath); removeErr != nil && !os.IsNotExist(removeErr) {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file from local storage")
 		return
@@ -408,7 +408,7 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	encryptedFilePath := filepath.Join("uploads", fr.FilePath)
+	encryptedFilePath := filepath.Join("Cdrrmo", fr.FilePath)
 	tempDecryptedPath := encryptedFilePath + ".dec"
 
 	key := []byte(os.Getenv("ENCRYPTION_KEY"))
@@ -488,7 +488,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	srcPath := filepath.Join("uploads", oldFR.FilePath)
+	srcPath := filepath.Join("Cdrrmo", oldFR.FilePath)
 
 	// Use the name from request or fallback to original
 	finalName := req.NewFileName
@@ -521,7 +521,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		counter++
 	}
 
-	dstPath := filepath.Join("uploads", newRelativePath)
+	dstPath := filepath.Join("Cdrrmo", newRelativePath)
 
 	in, err := os.Open(srcPath)
 	if err != nil {
@@ -739,7 +739,7 @@ func (fc *FileController) DownloadShare(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// 2. Open the file from disk.
-	filePath := filepath.Join("uploads", fr.FilePath)
+	filePath := filepath.Join("Cdrrmo", fr.FilePath)
 	f, err := os.Open(filePath)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error opening file")
@@ -788,7 +788,7 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 
 	// Build full relative and disk paths
 	oldRelativePath := filepath.Join(req.OldParent, req.Filename)
-	oldFullPath := filepath.Join("uploads", oldRelativePath)
+	oldFullPath := filepath.Join("Cdrrmo", oldRelativePath)
 
 	fr, err := fc.App.GetFileRecordByPath(oldRelativePath)
 	if err != nil {
@@ -800,12 +800,12 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	ext := filepath.Ext(fr.FileName)
 	finalName := fr.FileName
 	newRelativePath := filepath.Join(req.NewParent, finalName)
-	newFullPath := filepath.Join("uploads", newRelativePath)
+	newFullPath := filepath.Join("Cdrrmo", newRelativePath)
 
 	existingFR, err := fc.App.GetFileRecordByPath(newRelativePath)
 	if err == nil {
 		if req.Overwrite {
-			_ = os.Remove(filepath.Join("uploads", existingFR.FilePath))
+			_ = os.Remove(filepath.Join("Cdrrmo", existingFR.FilePath))
 			_ = fc.App.DeleteFileVersions(existingFR.ID)
 
 			_, deleteErr := fc.App.DeleteFileRecordByPath(existingFR.FilePath)
@@ -819,7 +819,7 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 			for {
 				tempName := fmt.Sprintf("%s (%d)%s", base, attempt, ext)
 				tempRelPath := filepath.Join(req.NewParent, tempName)
-				full := filepath.Join("uploads", tempRelPath)
+				full := filepath.Join("Cdrrmo", tempRelPath)
 				if _, err := os.Stat(full); os.IsNotExist(err) {
 					finalName = tempName
 					newRelativePath = tempRelPath
@@ -1068,7 +1068,7 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	encryptedFilePath := filepath.Join("uploads", fr.FilePath)
+	encryptedFilePath := filepath.Join("Cdrrmo", fr.FilePath)
 	tempDecryptedPath := encryptedFilePath + ".dec"
 
 	key := []byte(os.Getenv("ENCRYPTION_KEY"))

@@ -217,16 +217,28 @@ func main() {
 	app.NotificationHub = hub
 
 	// Ensure the 'uploads' folder exists.
-	logger.WithField("function", "main").Debug("Ensuring 'uploads' folder exists...")
-	if err := os.MkdirAll("uploads", 0755); err != nil {
-		// FOLDER_CREATE_ERR: File system folder creation errors.
-		wrappedErr := fmt.Errorf("error creating 'uploads' folder: %w", err)
+	// Ensure the 'Cdrrmo' folder and fixed subfolders exist.
+	logger.WithField("function", "main").Debug("Ensuring 'Cdrrmo' base folders exist...")
+	if err := os.MkdirAll("Cdrrmo", 0755); err != nil {
+		wrappedErr := fmt.Errorf("error creating 'Cdrrmo' folder: %w", err)
 		logger.WithField("function", "main").
 			WithField("errorCode", "FOLDER_CREATE_ERR").
-			WithField("folder", "uploads").
+			WithField("folder", "Cdrrmo").
 			WithError(wrappedErr).
 			Error("Folder creation error")
 		logrus.Exit(1)
+	}
+	for _, folder := range []string{"operation", "research", "training"} {
+		fullPath := path.Join("Cdrrmo", folder)
+		if err := os.MkdirAll(fullPath, 0755); err != nil {
+			wrappedErr := fmt.Errorf("error creating subfolder: %s - %w", fullPath, err)
+			logger.WithField("function", "main").
+				WithField("errorCode", "FOLDER_CREATE_ERR").
+				WithField("folder", fullPath).
+				WithError(wrappedErr).
+				Error("Subfolder creation error")
+			logrus.Exit(1)
+		}
 	}
 
 	// Create a new router.
