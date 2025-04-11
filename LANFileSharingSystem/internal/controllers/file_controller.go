@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 type FileController struct {
@@ -1066,4 +1068,20 @@ func (fc *FileController) GetFileVersions(w http.ResponseWriter, r *http.Request
 	fc.App.LogActivity(fmt.Sprintf("User '%s' viewed version history for file ID %d.", user.Username, fileID))
 
 	models.RespondJSON(w, http.StatusOK, versions)
+}
+func (fc *FileController) MarkFileMessageAsDone(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	messageID := vars["id"]
+	if messageID == "" {
+		models.RespondError(w, http.StatusBadRequest, "Missing message ID")
+		return
+	}
+
+	_, err := fc.App.DB.Exec(`UPDATE file_messages SET is_done = true WHERE id = $1`, messageID)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Failed to update message status")
+		return
+	}
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Marked as done"})
 }
