@@ -25,9 +25,8 @@ func NewDirectoryController(app *models.App) *DirectoryController {
 }
 
 // getResourcePath constructs the full path for a directory based on its name and parent.
-// If parent is empty, the directory is assumed to be directly under "uploads".
 func getResourcePath(name, parent string) string {
-	basePath := "uploads"
+	basePath := "Cdrrmo"
 	if parent != "" {
 		return filepath.Join(basePath, parent, name)
 	}
@@ -210,8 +209,8 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build the old and new absolute disk paths
-	oldPath := filepath.Join("uploads", req.Parent, req.OldName)
-	newPath := filepath.Join("uploads", req.Parent, req.NewName)
+	oldPath := filepath.Join("Cdrrmo", req.Parent, req.OldName)
+	newPath := filepath.Join("Cdrrmo", req.Parent, req.NewName)
 
 	// Rename on disk
 	if err := os.Rename(oldPath, newPath); err != nil {
@@ -462,7 +461,7 @@ func duplicateRecordsWithRenames(
 	}
 
 	// 2) Look for subdirectories in the source directory
-	srcFullPath := filepath.Join("uploads", srcRelPath)
+	srcFullPath := filepath.Join("Cdrrmo", srcRelPath)
 	entries, err := os.ReadDir(srcFullPath)
 	if err != nil {
 		return err
@@ -476,7 +475,7 @@ func duplicateRecordsWithRenames(
 			// Check if we renamed this subfolder on disk
 			// The original full path on disk was: "dst + / + entry.Name()"
 			// But we only have the *relative* "destRelPath/entry.Name()"
-			oldFullDst := filepath.Join("uploads", destRelPath, entry.Name())
+			oldFullDst := filepath.Join("Cdrrmo", destRelPath, entry.Name())
 
 			newSubfolderName := entry.Name() // default
 			if renameVal, found := renames[oldFullDst]; found {
@@ -674,8 +673,8 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	oldPath := filepath.Join("uploads", req.OldParent, req.Name)
-	newPath := filepath.Join("uploads", req.NewParent, req.Name)
+	oldPath := filepath.Join("Cdrrmo", req.OldParent, req.Name)
+	newPath := filepath.Join("Cdrrmo", req.NewParent, req.Name)
 
 	if _, err := os.Stat(newPath); err == nil {
 		models.RespondError(w, http.StatusConflict, "A folder with that name already exists in the destination")
@@ -724,7 +723,7 @@ func (dc *DirectoryController) DownloadFolder(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	absFolder := filepath.Join("uploads", folder)
+	absFolder := filepath.Join("Cdrrmo", folder)
 	info, err := os.Stat(absFolder)
 	if err != nil || !info.IsDir() {
 		models.RespondError(w, http.StatusNotFound, "Folder not found")
