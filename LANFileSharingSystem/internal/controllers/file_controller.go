@@ -57,6 +57,18 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 			models.RespondError(w, http.StatusBadRequest, "Invalid directory path")
 			return
 		}
+
+		// NEW: Enforce upload only to valid top-level folders
+		topFolder := strings.Split(targetDir, "/")[0]
+		validTopFolders := map[string]bool{
+			"operation": true,
+			"research":  true,
+			"training":  true,
+		}
+		if !validTopFolders[topFolder] {
+			models.RespondError(w, http.StatusBadRequest, "Invalid top-level folder")
+			return
+		}
 	}
 
 	uploadBase := "Cdrrmo"
