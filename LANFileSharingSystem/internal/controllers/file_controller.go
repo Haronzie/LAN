@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type FileController struct {
@@ -1019,4 +1020,50 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 	}
 
 	models.RespondJSON(w, http.StatusOK, messages)
+}
+func (fc *FileController) GetFileVersions(w http.ResponseWriter, r *http.Request) {
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	fileIDStr := r.URL.Query().Get("file_id")
+	fileID, err := strconv.Atoi(fileIDStr)
+	if err != nil || fileID <= 0 {
+		models.RespondError(w, http.StatusBadRequest, "Invalid file ID")
+		return
+	}
+
+	rows, err := fc.App.DB.Query(`
+		SELECT version_number, file_path, created_at
+		FROM file_versions
+		WHERE file_id = $1
+		ORDER BY version_number ASC
+	`, fileID)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving file versions")
+		return
+	}
+	defer rows.Close()
+
+	type VersionInfo struct {
+		Version   int       `json:"version"`
+		Path      string    `json:"file_path"`
+		Timestamp time.Time `json:"timestamp"`
+	}
+
+	var versions []VersionInfo
+	for rows.Next() {
+		var v VersionInfo
+		if err := rows.Scan(&v.Version, &v.Path, &v.Timestamp); err != nil {
+			continue
+		}
+		versions = append(versions, v)
+	}
+
+	// Optional: log the access
+	fc.App.LogActivity(fmt.Sprintf("User '%s' viewed version history for file ID %d.", user.Username, fileID))
+
+	models.RespondJSON(w, http.StatusOK, versions)
 }

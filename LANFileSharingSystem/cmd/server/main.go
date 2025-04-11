@@ -284,6 +284,7 @@ func main() {
 	router.HandleFunc("/file/message", fileController.SendFileMessage).Methods("POST")
 	router.HandleFunc("/file/message/done", fileController.MarkFileMessageDone).Methods("POST")
 	router.HandleFunc("/file/messages", fileController.GetFileMessages).Methods("GET")
+	router.HandleFunc("/file/versions", fileController.GetFileVersions).Methods("GET")
 
 	// Directory routes
 	router.HandleFunc("/directory/create", directoryController.Create).Methods("POST")
