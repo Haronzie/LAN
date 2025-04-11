@@ -85,14 +85,7 @@ const OperationDashboard = () => {
   // Upload
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
-  const [uploadConfidential, setUploadConfidential] = useState(false);
 
-  // ----------------------------------
-  // NEW: Grant/Revoke State
-  // ----------------------------------
-  const [grantModalVisible, setGrantModalVisible] = useState(false);
-  const [revokeModalVisible, setRevokeModalVisible] = useState(false);
-  const [accessFile, setAccessFile] = useState(null);
   const [targetUsername, setTargetUsername] = useState('');
 
   const [userOptions, setUserOptions] = useState([]); // Store fetched user options
@@ -116,15 +109,7 @@ const handleUserSearch = async (value) => {
   }
 };
 
-  const checkFileAccess = (record) => {
-    if (record.type !== 'file') return true;
-    return (
-      !record.confidential ||
-      record.uploader === currentUser ||
-      isAdmin ||
-      (record.authorizedUsers && record.authorizedUsers.includes(currentUser))
-    );
-  };
+
 
   // Check if current user is admin
   const [isAdmin, setIsAdmin] = useState(false);
@@ -132,7 +117,40 @@ const handleUserSearch = async (value) => {
   // ----------------------------------
   // On Mount
   // ----------------------------------
+  
+  const [receivedMessages, setReceivedMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+
+  const fetchMessages = async () => {
+    try {
+      setLoadingMessages(true);
+      const res = await axios.get('/file/messages/received', { withCredentials: true });
+      setReceivedMessages(res.data || []);
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+      message.error('Could not fetch file messages');
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
   useEffect(() => {
+    fetchMessages();
+  }, []);
+
+  const markAsDone = async (messageId) => {
+    try {
+      await axios.put(`/file/message/done/${messageId}`, {}, { withCredentials: true });
+      message.success('Marked as done');
+      fetchMessages();
+    } catch (err) {
+      console.error('Error marking message as done:', err);
+      message.error('Failed to mark as done');
+    }
+  };
+
+
+useEffect(() => {
     const storedUsername = localStorage.getItem('username');
     const storedRole = localStorage.getItem('role');
     if (storedUsername) {
@@ -179,10 +197,8 @@ const handleUserSearch = async (value) => {
         size: f.size,
         formattedSize: formatFileSize(f.size),
         uploader: f.uploader,
-        confidential: f.confidential,
-        authorizedUsers: f.permissions?.map(p => p.username) || [], // NEW: Get authorized users
       }));
-
+      
       setItems([...fetchedDirs, ...fetchedFiles]);
     } catch (error) {
       console.error('Error fetching items:', error);
@@ -198,19 +214,10 @@ const handleUserSearch = async (value) => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // ----------------------------------
-  // Filter
-  // ----------------------------------
-  const filteredItems = items
-  .filter(checkFileAccess) // <-- hide confidential files from unauthorized users
-  .filter((item) =>
+  const filteredItems = items.filter((item) =>
     (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-
-  // ----------------------------------
-  // Create Folder
-  // ----------------------------------
+  
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -287,7 +294,6 @@ const handleUserSearch = async (value) => {
       return;
     }
     setUploadingFile(null);
-    setUploadConfidential(false);
     setUploadModalVisible(true);
   };
 
@@ -304,7 +310,6 @@ const handleUserSearch = async (value) => {
     const formData = new FormData();
     formData.append('file', uploadingFile);
     formData.append('directory', currentPath);
-    formData.append('confidential', isConfidential ? 'true' : 'false');
     formData.append('container', 'operation');
 
     try {
@@ -315,8 +320,6 @@ const handleUserSearch = async (value) => {
       message.success(res.data.message || 'File uploaded successfully');
       setUploadModalVisible(false);
       setUploadingFile(null);
-      setUploadConfidential(false);
-      fetchItems();
     } catch (error) {
       console.error('Modal-based upload error:', error);
       message.error(error.response?.data?.error || 'Error uploading file');
@@ -324,15 +327,7 @@ const handleUserSearch = async (value) => {
   };
 
   const handleModalUpload = () => {
-    if (!uploadConfidential) {
-      Modal.confirm({
-        title: 'Upload as non-confidential?',
-        content: 'Are you sure you want to upload this file without marking it as confidential?',
-        onOk: () => doModalUpload(false),
-      });
-    } else {
-      doModalUpload(true);
-    }
+    doModalUpload();
   };
 
   // ----------------------------------
@@ -554,67 +549,6 @@ const handleUserSearch = async (value) => {
     }
   };
 
-  // ----------------------------------
-  // GRANT & REVOKE Access
-  // ----------------------------------
-  const handleGrantAccess = async () => {
-    if (!targetUsername.trim()) {
-      message.error('Username cannot be empty');
-      return;
-    }
-    if (!accessFile || !accessFile.id) {
-      message.error('No file selected');
-      return;
-    }
-    try {
-      await axios.post(
-        '/grant-access',
-        {
-          file_id: accessFile.id,
-          target_user: targetUsername,
-        },
-        { withCredentials: true }
-      );
-      message.success(`Access granted to '${targetUsername}'`);
-      setGrantModalVisible(false);
-      setTargetUsername('');
-      // Refresh the list so that the updated permissions are reflected.
-      fetchItems();
-    } catch (error) {
-      console.error('Grant Access error:', error);
-      message.error(error.response?.data?.error || 'Error granting access');
-    }
-  };
-  
-
-  const handleRevokeAccess = async () => {
-    if (!targetUsername.trim()) {
-      message.error('Username cannot be empty');
-      return;
-    }
-    if (!accessFile || !accessFile.id) {
-      message.error('No file selected');
-      return;
-    }
-    try {
-      await axios.post(
-        '/revoke-access',
-        {
-          file_id: accessFile.id,
-          target_user: targetUsername,
-        },
-        { withCredentials: true }
-      );
-      message.success(`Access revoked from '${targetUsername}'`);
-      setRevokeModalVisible(false);
-      setTargetUsername('');
-    } catch (error) {
-      console.error('Revoke Access error:', error);
-      message.error(error.response?.data?.error || 'Error revoking access');
-    }
-  };
-
-  // ----------------------------------
   // Add the handleViewFile function
   const handleViewFile = (file) => {
     const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
@@ -639,15 +573,6 @@ const handleUserSearch = async (value) => {
           );
         }
         if (record.type === 'file') {
-          const hasAccess = checkFileAccess(record);
-          if (!hasAccess) {
-            return (
-              <Space>
-                <LockOutlined style={{ color: 'red' }} />
-                <span>{name} (Locked)</span>
-              </Space>
-            );
-          }
           return name;
         }
       },
@@ -673,37 +598,21 @@ const handleUserSearch = async (value) => {
             ? record.created_by === currentUser
             : record.uploader === currentUser;
 
-        const canManageAccess =
-          record.type === 'file' &&
-          record.confidential &&
-          (isOwner || isAdmin); // Include admin in the condition
-
-        const hasAccess = checkFileAccess(record);
-
         return (
           <Space>
             {/* View File */}
-            {record.type === 'file' && hasAccess && (
-              <Tooltip title="View File">
-                <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
-              </Tooltip>
-            )}
+            {record.type === 'file' && (
+  <Tooltip title="View File">
+    <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
+  </Tooltip>
+)}
 
             {/* Download for files */}
             {record.type === 'file' && (
-              hasAccess ? (
-                <Tooltip title="Download">
-                   <Button
-                   icon={<DownloadOutlined />}
-                   onClick={() => handleDownload(record.name)}
-                   />
-                </Tooltip>
-                 ) : (
-                  <Tooltip title="Access Denied">
-                     <Button icon={<LockOutlined />} disabled />
-                     </Tooltip>
-                 )
-                )}
+  <Tooltip title="Download">
+    <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
+  </Tooltip>
+)}
                  {/* Download for folders */}
         {record.type === 'directory' && (
           <Tooltip title="Download Folder">
@@ -740,35 +649,7 @@ const handleUserSearch = async (value) => {
               </Tooltip>
             )}
 
-            {/* Grant Access */}
-            {canManageAccess && (
-              <Tooltip title="Grant Access">
-                <Button
-                  onClick={() => {
-                    setAccessFile(record);
-                    setTargetUsername('');
-                    setGrantModalVisible(true);
-                  }}
-                >
-                  Grant
-                </Button>
-              </Tooltip>
-            )}
 
-            {/* Revoke Access */}
-            {canManageAccess && (
-              <Tooltip title="Revoke Access">
-                <Button
-                  onClick={() => {
-                    setAccessFile(record);
-                    setTargetUsername('');
-                    setRevokeModalVisible(true);
-                  }}
-                >
-                  Revoke
-                </Button>
-              </Tooltip>
-            )}
           </Space>
         );
       },
@@ -778,6 +659,26 @@ const handleUserSearch = async (value) => {
   return (
     <Layout style={{ minHeight: '84vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '5px', padding: '10px', background: '#fff' }}>
+
+      {receivedMessages.length > 0 && (
+        <div style={{ marginBottom: '24px' }}>
+          <h3>ðŸ“© File Instructions for You</h3>
+          {receivedMessages.map(msg => (
+            <Card key={msg.id} style={{ marginBottom: 12 }}>
+              <p><strong>ðŸ“ File:</strong> {msg.file_path}</p>
+              <p><strong>ðŸ“ Instruction:</strong> {msg.message}</p>
+              <p><strong>Status:</strong> {msg.status === 'done' ? 'âœ… Done' : 'ðŸ•’ Pending'}</p>
+              {msg.status !== 'done' && (
+                <Button type="primary" onClick={() => markAsDone(msg.id)}>
+                  Mark as Done
+                </Button>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
 
@@ -934,7 +835,6 @@ const handleUserSearch = async (value) => {
           onCancel={() => {
             setUploadModalVisible(false);
             setUploadingFile(null);
-            setUploadConfidential(false);
           }}
           okText="Upload"
         >
@@ -965,120 +865,8 @@ const handleUserSearch = async (value) => {
               </Card>
             )}
 
-            <Form.Item label="Mark as Confidential?" style={{ marginTop: 16 }}>
-              <Checkbox
-                checked={uploadConfidential}
-                onChange={(e) => setUploadConfidential(e.target.checked)}
-              >
-                Confidential
-              </Checkbox>
-            </Form.Item>
           </Form>
         </Modal>
-
-        {/* Grant Access Modal */}
-<Modal
-  title="Grant Access"
-  visible={grantModalVisible}
-  onOk={handleGrantAccess}
-  onCancel={() => setGrantModalVisible(false)}
-  okText="Grant"
->
-  <Form layout="vertical">
-    <Form.Item
-      label="Select User to Grant Access"
-      required
-      tooltip="Begin typing to search for a username"
-    >
-      <Select
-        showSearch
-        placeholder="Type to search for a user"
-        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
-        onSearch={handleUserSearch}
-        onChange={(value) => setTargetUsername(value)}
-        filterOption={false} // rely on API search
-        style={{ width: '100%' }}
-        allowClear
-        value={targetUsername} 
-      >
-        {userOptions.map((user) => (
-          <Select.Option key={user.username} value={user.username}>
-            {user.username}
-          </Select.Option>
-        ))}
-      </Select>
-    </Form.Item>
-  </Form>
-</Modal>
-
-{/* Revoke Access Modal */}
-<Modal
-  title="Revoke Access"
-  visible={revokeModalVisible}
-  onOk={handleRevokeAccess}
-  onCancel={() => setRevokeModalVisible(false)}
-  okText="Revoke"
->
-  <Form layout="vertical">
-    <Form.Item
-      label="Select User to Revoke Access"
-      required
-      tooltip="Begin typing to search for a username"
-    >
-      <Select
-        showSearch
-        placeholder="Type to search for a user"
-        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
-        onSearch={handleUserSearch}
-        onChange={(value) => setTargetUsername(value)}
-        filterOption={false} // rely on API search
-        style={{ width: '100%' }}
-        allowClear
-        value={targetUsername}
-      >
-        {userOptions.map((user) => (
-          <Select.Option key={user.username} value={user.username}>
-            {user.username}
-          </Select.Option>
-        ))}
-      </Select>
-    </Form.Item>
-  </Form>
-</Modal>
-        {/* Revoke Access Modal */}
-        <Modal
-  title="Revoke Access"
-  visible={revokeModalVisible}
-  onOk={handleRevokeAccess}
-  onCancel={() => setRevokeModalVisible(false)}
-  okText="Revoke"
->
-  <Form layout="vertical">
-    <Form.Item
-      label="Select User to Revoke Access"
-      required
-      tooltip="Begin typing to search for a username"
-    >
-      <Select
-        showSearch
-        placeholder="Type to search for a user"
-        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
-        onSearch={handleUserSearch}
-        onChange={(value) => setTargetUsername(value)}
-        filterOption={false} // rely on API search
-        style={{ width: '100%' }}
-        allowClear
-        value={targetUsername}
-      >
-        {userOptions.map((user) => (
-          <Select.Option key={user.username} value={user.username}>
-            {user.username}
-          </Select.Option>
-        ))}
-      </Select>
-    </Form.Item>
-  </Form>
-</Modal>
       </Content>
     </Layout>
   );
