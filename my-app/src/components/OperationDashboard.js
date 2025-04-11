@@ -86,40 +86,10 @@ const OperationDashboard = () => {
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
 
-  const [targetUsername, setTargetUsername] = useState('');
-
-  const [userOptions, setUserOptions] = useState([]); // Store fetched user options
-const [fetchingUsers, setFetchingUsers] = useState(false); // Loading state for user search
-
-// Function to handle user search
-const handleUserSearch = async (value) => {
-  if (!value) {
-    setUserOptions([]);
-    return;
-  }
-  setFetchingUsers(true);
-  try {
-    const response = await axios.get(`/users/fetch?search=${value}`, { withCredentials: true }); // Updated endpoint
-    setUserOptions(response.data || []); // Assuming API returns an array of users
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    message.error('Failed to fetch users');
-  } finally {
-    setFetchingUsers(false);
-  }
-};
-
-
-
-  // Check if current user is admin
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  // ----------------------------------
-  // On Mount
-  // ----------------------------------
-  
   const [receivedMessages, setReceivedMessages] = useState([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  
 
   const fetchMessages = async () => {
     try {
@@ -160,7 +130,7 @@ useEffect(() => {
       setIsAdmin(true);
     }
     fetchDirectories();
-    // eslint-disable-next-line
+   
   }, []);
 
   const fetchDirectories = async () => {

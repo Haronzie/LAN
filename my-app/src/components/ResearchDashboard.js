@@ -14,9 +14,7 @@ import {
   Select,
   Card,
   Breadcrumb,
-  Checkbox,
-  TreeSelect,
-  Spin
+  TreeSelect
 } from 'antd';
 import {
   UploadOutlined,
@@ -28,8 +26,6 @@ import {
   EditOutlined,
   CopyOutlined,
   SwapOutlined,
-  ArrowLeftOutlined,
-  LockOutlined,
   FileOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -39,7 +35,7 @@ import path from 'path-browserify';
 const { Content } = Layout;
 const { Option } = Select;
 
-/**
+/** 
  * Helper to format file sizes in human-readable form.
  */
 function formatFileSize(size) {
@@ -52,76 +48,43 @@ function formatFileSize(size) {
 const ResearchDashboard = () => {
   const navigate = useNavigate();
 
-  // ----------------------------------------
-  // Current user and admin status from localStorage
-  // ----------------------------------------
+  // ----------------------------------
+  // State Hooks
+  // ----------------------------------
   const [currentUser, setCurrentUser] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
-  useEffect(() => {
-    const storedUsername = localStorage.getItem('username');
-    const storedRole = localStorage.getItem('role');
-    if (storedUsername) {
-      setCurrentUser(storedUsername);
-    }
-    if (storedRole === 'admin') {
-      setIsAdmin(true);
-    }
-    // Fetch folder tree for the research container
-    fetchDirectories();
-  }, []);
-
-  // ----------------------------------------
-  // States: path, items, loading, search
-  // ----------------------------------------
   const [currentPath, setCurrentPath] = useState('Research');
   const [items, setItems] = useState([]);
+  const [directories, setDirectories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-
-  // Create Folder
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
-
-  // Rename
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
-
-  // Copy
   const [copyModalVisible, setCopyModalVisible] = useState(false);
   const [copyItem, setCopyItem] = useState(null);
   const [copyNewName, setCopyNewName] = useState('');
   const [selectedDestination, setSelectedDestination] = useState('');
-
-  // Move
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
-  const [directories, setDirectories] = useState([]);
-
-  // ----------------------------------------
-  // Modal-Based Upload States
-  // ----------------------------------------
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
-  const [uploadConfidential, setUploadConfidential] = useState(false);
 
-  // ----------------------------------------
-  // Confidential File Access Check
-  // ----------------------------------------
-  const checkFileAccess = (record) => {
-    if (record.type !== 'file') return true;
-    return (
-      !record.confidential ||
-      record.uploader === currentUser ||
-      isAdmin ||
-      (record.authorizedUsers && record.authorizedUsers.includes(currentUser))
-    );
-  };
+  // ----------------------------------
+  // Initial Load: set user and fetch directories
+  // ----------------------------------
+  useEffect(() => {
+    const storedUsername = localStorage.getItem('username');
+    const storedRole = localStorage.getItem('role');
+    if (storedUsername) setCurrentUser(storedUsername);
+    if (storedRole === 'admin') setIsAdmin(true);
+    fetchDirectories();
+    // eslint-disable-next-line
+  }, []);
 
-  // ----------------------------------------
-  // Fetch Directory Tree for Move Destination
-  // ----------------------------------------
   const fetchDirectories = async () => {
     try {
       const res = await axios.get('/directory/tree?container=research', { withCredentials: true });
@@ -131,35 +94,26 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ----------------------------------------
-  // Fetch Directories + Files (with confidential info)
-  // ----------------------------------------
+  // ----------------------------------
+  // Fetch items (directories + files)
+  // ----------------------------------
   const fetchItems = async () => {
     setLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
-
       // 1) Fetch directories
-      const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
-        withCredentials: true
-      });
+      const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true });
       const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
-
-      // 2) Fetch files and include confidential and permission info
-      const fileRes = await axios.get(`/files?directory=${dirParam}`, {
-        withCredentials: true
-      });
+      // 2) Fetch files
+      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
       const fetchedFiles = (fileRes.data || []).map((f) => ({
         id: f.id,
         name: f.name,
         type: 'file',
         size: f.size,
         formattedSize: formatFileSize(f.size),
-        uploader: f.uploader,
-        confidential: f.confidential,
-        authorizedUsers: f.permissions ? f.permissions.map(p => p.username) : []
+        uploader: f.uploader
       }));
-
       setItems([...fetchedDirs, ...fetchedFiles]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
@@ -175,19 +129,50 @@ const ResearchDashboard = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // ----------------------------------------
-  // Search Filtering
-  // ----------------------------------------
-  const filteredItems = items
-  .filter(checkFileAccess)
-  .filter((item) =>
+  // Filter items by search term
+  const filteredItems = items.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // ----------------------------------
+  // Navigation & Breadcrumb
+  // ----------------------------------
+  const handleFolderClick = (folderName) => {
+    const newPath = path.join(currentPath, folderName);
+    if (!newPath.startsWith('Research')) return;
+    setCurrentPath(newPath);
+  };
 
-  // ----------------------------------------
+  const handleGoUp = () => {
+    if (currentPath === 'Research') return;
+    const parentPath = path.dirname(currentPath);
+    setCurrentPath(parentPath === '.' ? 'Research' : parentPath);
+  };
+
+  const getPathSegments = (p) => {
+    const parts = p.split('/').filter(Boolean);
+    return parts.slice(1); // remove the first 'Research' part
+  };
+
+  const segments = getPathSegments(currentPath);
+  const breadcrumbItems = [
+    <Breadcrumb.Item key="research">
+      <a onClick={() => setCurrentPath('Research')}>Research</a>
+    </Breadcrumb.Item>
+  ];
+  segments.forEach((seg, index) => {
+    const partialPath = ['Research', ...segments.slice(0, index + 1)].join('/');
+    const isLast = index === segments.length - 1;
+    breadcrumbItems.push(
+      <Breadcrumb.Item key={index}>
+        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
+      </Breadcrumb.Item>
+    );
+  });
+
+  // ----------------------------------
   // Create Folder
-  // ----------------------------------------
+  // ----------------------------------
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -209,53 +194,19 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ----------------------------------------
-  // Navigation & Breadcrumbs
-  // ----------------------------------------
-  const handleFolderClick = (folderName) => {
-    const newPath = path.join(currentPath, folderName);
-    if (!newPath.startsWith('Research')) return;
-    setCurrentPath(newPath);
-  };
-  
-
-  const handleGoUp = () => {
-    if (currentPath === 'Research') return;
-    const parent = path.dirname(currentPath);
-    setCurrentPath(parent === '.' ? 'Research' : parent);
-  };
-  
-
-  const getPathSegments = (p) => p.split('/').filter(Boolean);
-  const segments = getPathSegments(currentPath);
-  
-  const breadcrumbItems = segments.map((seg, index) => {
-    const partialPath = segments.slice(0, index + 1).join('/');
-    const isLast = index === segments.length - 1;
-  
-    return (
-      <Breadcrumb.Item key={index}>
-        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
-      </Breadcrumb.Item>
-    );
-  });
-  
-  
-
-  // ----------------------------------------
-  // Modal-Based Upload
-  // ----------------------------------------
+  // ----------------------------------
+  // Upload Modal
+  // ----------------------------------
   const handleOpenUploadModal = () => {
     if (!currentPath) {
       message.error('Please select or create a folder before uploading.');
       return;
     }
     setUploadingFile(null);
-    setUploadConfidential(false);
     setUploadModalVisible(true);
   };
 
-  const doModalUpload = async (isConfidential) => {
+  const doModalUpload = async () => {
     if (!uploadingFile) {
       message.error('Please select a file first');
       return;
@@ -264,13 +215,10 @@ const ResearchDashboard = () => {
       message.error('Please select or create a folder first');
       return;
     }
-
     const formData = new FormData();
     formData.append('file', uploadingFile);
     formData.append('directory', currentPath);
-    formData.append('confidential', isConfidential ? 'true' : 'false');
     formData.append('container', 'research');
-
     try {
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
@@ -279,7 +227,6 @@ const ResearchDashboard = () => {
       message.success(res.data.message || 'File uploaded successfully');
       setUploadModalVisible(false);
       setUploadingFile(null);
-      setUploadConfidential(false);
       fetchItems();
     } catch (error) {
       console.error('Modal-based upload error:', error);
@@ -288,20 +235,12 @@ const ResearchDashboard = () => {
   };
 
   const handleModalUpload = () => {
-    if (!uploadConfidential) {
-      Modal.confirm({
-        title: 'Upload as non-confidential?',
-        content: 'Are you sure you want to upload this file without marking it as confidential?',
-        onOk: () => doModalUpload(false)
-      });
-    } else {
-      doModalUpload(true);
-    }
+    doModalUpload();
   };
 
-  // ----------------------------------------
+  // ----------------------------------
   // Delete
-  // ----------------------------------------
+  // ----------------------------------
   const handleDelete = async (record) => {
     const isOwner =
       record.type === 'directory'
@@ -331,23 +270,9 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ----------------------------------------
-  // Download
-  // ----------------------------------------
-  const handleDownload = (fileName) => {
-    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
-    window.open(downloadUrl, '_blank');
-  };
-
-  const handleDownloadFolder = (folderName) => {
-    const folderPath = path.join(currentPath, folderName);
-    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
-    window.open(downloadUrl, '_blank');
-  };
-
-  // ----------------------------------------
+  // ----------------------------------
   // Rename
-  // ----------------------------------------
+  // ----------------------------------
   const handleRename = (record) => {
     const isOwner =
       record.type === 'directory'
@@ -401,9 +326,9 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ----------------------------------------
+  // ----------------------------------
   // Copy
-  // ----------------------------------------
+  // ----------------------------------
   const handleCopy = (record) => {
     const suggestedName = record.name + '_copy';
     setCopyItem(record);
@@ -447,8 +372,8 @@ const ResearchDashboard = () => {
       }
       message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
       setCopyModalVisible(false);
-      setCopyNewName('');
       setCopyItem(null);
+      setCopyNewName('');
       setSelectedDestination('');
       fetchItems();
     } catch (error) {
@@ -457,9 +382,9 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ----------------------------------------
+  // ----------------------------------
   // Move
-  // ----------------------------------------
+  // ----------------------------------
   const handleMove = (record) => {
     const isOwner =
       record.type === 'directory'
@@ -509,8 +434,8 @@ const ResearchDashboard = () => {
       }
       message.success(`Moved '${moveItem.name}' successfully`);
       setMoveModalVisible(false);
-      setMoveDestination('');
       setMoveItem(null);
+      setMoveDestination('');
       fetchItems();
     } catch (error) {
       console.error('Move error:', error);
@@ -518,103 +443,19 @@ const ResearchDashboard = () => {
     }
   };
 
-  // ----------------------------------------
-  // Grant/Revoke State
-  // ----------------------------------------
-  const [grantModalVisible, setGrantModalVisible] = useState(false);
-  const [revokeModalVisible, setRevokeModalVisible] = useState(false);
-  const [accessFile, setAccessFile] = useState(null);
-  const [targetUsername, setTargetUsername] = useState('');
-  const [userOptions, setUserOptions] = useState([]); // Store fetched user options
-  const [fetchingUsers, setFetchingUsers] = useState(false); // Loading state for user search
-
-  // Function to handle user search
-  const handleUserSearch = async (value) => {
-    if (!value) {
-      setUserOptions([]);
-      return;
-    }
-    setFetchingUsers(true);
-    try {
-      const response = await axios.get(`/users/fetch?search=${value}`, { withCredentials: true });
-      setUserOptions(response.data || []); // Assuming API returns an array of users
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      message.error('Failed to fetch users');
-    } finally {
-      setFetchingUsers(false);
-    }
-  };
-
-  // Grant Access
-  const handleGrantAccess = async () => {
-    if (!targetUsername.trim()) {
-      message.error('Username cannot be empty');
-      return;
-    }
-    if (!accessFile || !accessFile.id) {
-      message.error('No file selected');
-      return;
-    }
-    try {
-      await axios.post(
-        '/grant-access',
-        {
-          file_id: accessFile.id,
-          target_user: targetUsername,
-        },
-        { withCredentials: true }
-      );
-      message.success(`Access granted to '${targetUsername}'`);
-      setGrantModalVisible(false);
-      setTargetUsername('');
-      fetchItems(); // Refresh the list to reflect updated permissions
-    } catch (error) {
-      console.error('Grant Access error:', error);
-      message.error(error.response?.data?.error || 'Error granting access');
-    }
-  };
-
-  // Revoke Access
-  const handleRevokeAccess = async () => {
-    if (!targetUsername.trim()) {
-      message.error('Username cannot be empty');
-      return;
-    }
-    if (!accessFile || !accessFile.id) {
-      message.error('No file selected');
-      return;
-    }
-    try {
-      await axios.post(
-        '/revoke-access',
-        {
-          file_id: accessFile.id,
-          target_user: targetUsername,
-        },
-        { withCredentials: true }
-      );
-      message.success(`Access revoked from '${targetUsername}'`);
-      setRevokeModalVisible(false);
-      setTargetUsername('');
-      fetchItems(); // Refresh the list to reflect updated permissions
-    } catch (error) {
-      console.error('Revoke Access error:', error);
-      message.error(error.response?.data?.error || 'Error revoking access');
-    }
-  };
-
-  // ----------------------------------------
-  // Add the handleViewFile function
-  // ----------------------------------------
-  const handleViewFile = (file) => {
-    const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
+  // ----------------------------------
+  // View File
+  // ----------------------------------
+  const handleViewFile = (record) => {
+    const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(
+      currentPath
+    )}&filename=${encodeURIComponent(record.name)}`;
     window.open(previewUrl, '_blank');
   };
 
-  // ----------------------------------------
-  // Table Columns with Confidential File Check
-  // ----------------------------------------
+  // ----------------------------------
+  // Table columns
+  // ----------------------------------
   const columns = [
     {
       title: 'Name',
@@ -628,17 +469,6 @@ const ResearchDashboard = () => {
               <a onClick={() => handleFolderClick(name)}>{name}</a>
             </Space>
           );
-        }
-        if (record.type === 'file') {
-          const hasAccess = checkFileAccess(record);
-          if (!hasAccess) {
-            return (
-              <Space>
-                <LockOutlined style={{ color: 'red' }} />
-                <span>{name} (Locked)</span>
-              </Space>
-            );
-          }
         }
         return name;
       }
@@ -663,94 +493,39 @@ const ResearchDashboard = () => {
           record.type === 'directory'
             ? record.created_by === currentUser
             : record.uploader === currentUser;
-
-        const canManageAccess =
-          record.type === 'file' &&
-          record.confidential &&
-          (isOwner || isAdmin);
-
-        const hasAccess = checkFileAccess(record);
-
         return (
           <Space>
-            {/* View File */}
-            {record.type === 'file' && hasAccess && (
+            {record.type === 'file' && (
               <Tooltip title="View File">
                 <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
               </Tooltip>
             )}
-
-            {/* Download */}
             {record.type === 'file' && (
-              hasAccess ? (
-                <Tooltip title="Download">
-                  <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
-                </Tooltip>
-              ) : (
-                <Tooltip title="Access Denied">
-                  <Button icon={<LockOutlined />} disabled />
-                </Tooltip>
-              )
+              <Tooltip title="Download">
+                <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
+              </Tooltip>
             )}
             {record.type === 'directory' && (
               <Tooltip title="Download Folder">
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
-
-            {/* Rename */}
             {isOwner && (
               <Tooltip title="Rename">
                 <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
               </Tooltip>
             )}
-
-            {/* Copy */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
-
-            {/* Move */}
             {isOwner && (
               <Tooltip title="Move">
                 <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
               </Tooltip>
             )}
-
-            {/* Delete */}
             {isOwner && (
               <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
                 <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
-              </Tooltip>
-            )}
-
-            {/* Grant Access */}
-            {canManageAccess && (
-              <Tooltip title="Grant Access">
-                <Button
-                  onClick={() => {
-                    setAccessFile(record);
-                    setTargetUsername('');
-                    setGrantModalVisible(true);
-                  }}
-                >
-                  Grant
-                </Button>
-              </Tooltip>
-            )}
-
-            {/* Revoke Access */}
-            {canManageAccess && (
-              <Tooltip title="Revoke Access">
-                <Button
-                  onClick={() => {
-                    setAccessFile(record);
-                    setTargetUsername('');
-                    setRevokeModalVisible(true);
-                  }}
-                >
-                  Revoke
-                </Button>
               </Tooltip>
             )}
           </Space>
@@ -758,6 +533,20 @@ const ResearchDashboard = () => {
       }
     }
   ];
+
+  // ----------------------------------
+  // Download Helpers (open in new tab)
+  // ----------------------------------
+  const handleDownload = (fileName) => {
+    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+    window.open(downloadUrl, '_blank');
+  };
+
+  const handleDownloadFolder = (folderName) => {
+    const folderPath = path.join(currentPath, folderName);
+    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
+    window.open(downloadUrl, '_blank');
+  };
 
   return (
     <Layout style={{ minHeight: '84vh', background: '#f0f2f5' }}>
@@ -773,11 +562,10 @@ const ResearchDashboard = () => {
             </Button>
           </Col>
         </Row>
-
         {/* Navigation Row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
-            <Button icon={<ArrowUpOutlined />} onClick={handleGoUp} disabled={!currentPath}>
+            <Button icon={<ArrowUpOutlined />} onClick={handleGoUp}>
               Go Up
             </Button>
           </Col>
@@ -795,27 +583,12 @@ const ResearchDashboard = () => {
             />
           </Col>
         </Row>
-
-        {/* Breadcrumb */}
-        <Breadcrumb style={{ marginBottom: 16 }}>
-  {segments.map((seg, index) => {
-    const partialPath = segments.slice(0, index + 1).join('/');
-    const isLast = index === segments.length - 1;
-    return (
-      <Breadcrumb.Item key={index}>
-        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
-      </Breadcrumb.Item>
-    );
-  })}
-</Breadcrumb>
-
-        {/* Table of Items */}
+        <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
         <Table
           columns={columns}
           dataSource={filteredItems}
-          rowKey={(record) => record.id ? record.id : record.name + record.type}
+          rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
-          pagination={{ pageSize: 10 }}
         />
 
         {/* Create Folder Modal */}
@@ -831,7 +604,7 @@ const ResearchDashboard = () => {
               <Input
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="e.g. Experiments"
+                placeholder="e.g. ProjectX"
               />
             </Form.Item>
           </Form>
@@ -875,7 +648,7 @@ const ResearchDashboard = () => {
             <Form.Item label="Destination Folder (Optional)">
               <Select
                 style={{ width: '100%' }}
-                placeholder="Select folder or leave blank"
+                placeholder="Select a folder or leave blank"
                 value={selectedDestination}
                 onChange={(val) => setSelectedDestination(val)}
                 allowClear
@@ -904,7 +677,7 @@ const ResearchDashboard = () => {
           okText="Move"
         >
           <Form layout="vertical">
-            <Form.Item label="Destination Folder">
+            <Form.Item label="Destination Folder" required>
               <TreeSelect
                 style={{ width: '100%' }}
                 treeData={directories}
@@ -918,7 +691,7 @@ const ResearchDashboard = () => {
           </Form>
         </Modal>
 
-        {/* Modal-Based Upload */}
+        {/* Upload Modal */}
         <Modal
           title="Upload File"
           visible={uploadModalVisible}
@@ -926,11 +699,10 @@ const ResearchDashboard = () => {
           onCancel={() => {
             setUploadModalVisible(false);
             setUploadingFile(null);
-            setUploadConfidential(false);
           }}
           okText="Upload"
         >
-          <p>Target Folder: {currentPath || '(none)'}</p>
+          <p>Target Folder: {currentPath}</p>
           <Form layout="vertical">
             <Form.Item>
               <Button
@@ -950,93 +722,13 @@ const ResearchDashboard = () => {
                 Select File
               </Button>
             </Form.Item>
-
             {uploadingFile && (
               <Card size="small" style={{ marginTop: 16 }}>
                 <strong>Selected File:</strong> {uploadingFile.name}
               </Card>
             )}
-
-            <Form.Item label="Mark as Confidential?" style={{ marginTop: 16 }}>
-              <Checkbox
-                checked={uploadConfidential}
-                onChange={(e) => setUploadConfidential(e.target.checked)}
-              >
-                Confidential
-              </Checkbox>
-            </Form.Item>
           </Form>
         </Modal>
-
-        {/* Grant Access Modal */}
-        <Modal
-  title="Grant Access"
-  visible={grantModalVisible}
-  onOk={handleGrantAccess}
-  onCancel={() => setGrantModalVisible(false)}
-  okText="Grant"
->
-  <Form layout="vertical">
-    <Form.Item
-      label="Select User to Grant Access"
-      required
-      tooltip="Begin typing to search for a username"
-    >
-      <Select
-        showSearch
-        placeholder="Type to search for a user"
-        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
-        onSearch={handleUserSearch}
-        onChange={(value) => setTargetUsername(value)}
-        filterOption={false} // rely on API search results
-        style={{ width: '100%' }}
-        allowClear
-        value={targetUsername}  // Controlled value
-      >
-        {userOptions.map((user) => (
-          <Select.Option key={user.username} value={user.username}>
-            {user.username}
-          </Select.Option>
-        ))}
-      </Select>
-    </Form.Item>
-  </Form>
-</Modal>
-
-        {/* Revoke Access Modal */}
-        <Modal
-  title="Revoke Access"
-  visible={revokeModalVisible}
-  onOk={handleRevokeAccess}
-  onCancel={() => setRevokeModalVisible(false)}
-  okText="Revoke"
->
-  <Form layout="vertical">
-    <Form.Item
-      label="Select User to Revoke Access"
-      required
-      tooltip="Begin typing to search for a username"
-    >
-      <Select
-        showSearch
-        placeholder="Type to search for a user"
-        notFoundContent={fetchingUsers ? <Spin size="small" /> : null}
-        onSearch={handleUserSearch}
-        onChange={(value) => setTargetUsername(value)}
-        filterOption={false}
-        style={{ width: '100%' }}
-        allowClear
-        value={targetUsername}  // Controlled value
-      >
-        {userOptions.map((user) => (
-          <Select.Option key={user.username} value={user.username}>
-            {user.username}
-          </Select.Option>
-        ))}
-      </Select>
-    </Form.Item>
-  </Form>
-</Modal>
       </Content>
     </Layout>
   );
