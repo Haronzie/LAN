@@ -290,25 +290,17 @@ const UserManagement = () => {
 
   return (
     <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Button 
-          type="primary" 
-          icon={<ArrowLeftOutlined />} 
-          onClick={() => navigate('/admin')}
-        >
-          Back to Dashboard
-        </Button>
-
-        <h2>User Management</h2>
+      <div style={{ position: 'relative', marginBottom: 16 }}>
+        <h2 style={{ textAlign: 'center' }}>User Management</h2>
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => setIsAddUserModalOpen(true)}
+          style={{ position: 'absolute', right: 0, top: 0 }}
         >
           Add User
         </Button>
       </div>
-
       <Input
         placeholder="Search by username"
         value={searchTerm}
