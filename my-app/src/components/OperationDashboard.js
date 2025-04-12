@@ -16,7 +16,7 @@ import {
   Breadcrumb,
   Checkbox,
   TreeSelect,
-  Spin
+  Badge
 } from 'antd';
 import {
   UploadOutlined,
@@ -28,9 +28,9 @@ import {
   EditOutlined,
   CopyOutlined,
   SwapOutlined,
-  ArrowLeftOutlined,
-  LockOutlined,
-  FileOutlined
+  FileOutlined,
+  FileTextOutlined,
+  FolderOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -39,9 +39,6 @@ import path from 'path-browserify';
 const { Content } = Layout;
 const { Option } = Select;
 
-/**d
- * Helper to format file sizes in human-readable form.
- */
 function formatFileSize(size) {
   if (size === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -50,45 +47,40 @@ function formatFileSize(size) {
 }
 
 const OperationDashboard = () => {
-
-  
   const [currentPath, setCurrentPath] = useState('Operation');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
-
-  // Rename
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
-
-  // Copy
   const [copyModalVisible, setCopyModalVisible] = useState(false);
   const [copyItem, setCopyItem] = useState(null);
   const [copyNewName, setCopyNewName] = useState('');
   const [selectedDestination, setSelectedDestination] = useState('');
-
-  // Move
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
-
-  // User & directories
   const [currentUser, setCurrentUser] = useState('');
   const [directories, setDirectories] = useState([]);
-
-  // Upload
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
-
   const [fileMessages, setFileMessages] = useState({});
-
   const [isAdmin, setIsAdmin] = useState(false);
   const [hideDone, setHideDone] = useState(false);
+  const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
 
-  
+  const fetchAllFilesWithMessages = async () => {
+    try {
+      const res = await axios.get('/files-with-messages', { withCredentials: true });
+      setAllFilesWithMessages(res.data || []);
+    } catch (error) {
+      console.error('Error fetching files with messages:', error);
+      message.error('Failed to load files with instructions');
+    }
+  };
 
   const fetchMessagesForFiles = async (files) => {
     const newMessageMap = {};
@@ -114,35 +106,25 @@ const OperationDashboard = () => {
         {},
         { withCredentials: true }
       );
-  
       message.success('Marked as done');
-  
       const res = await axios.get(`/file/messages?file_id=${fileId}`, {
         withCredentials: true,
       });
       setFileMessages(prev => ({ ...prev, [fileId]: res.data }));
+      fetchAllFilesWithMessages();
     } catch (err) {
       console.error('Error marking message as done:', err);
       message.error('Failed to mark as done');
     }
   };
-  
-  
-  
-  
 
-
-useEffect(() => {
+  useEffect(() => {
     const storedUsername = localStorage.getItem('username');
     const storedRole = localStorage.getItem('role');
-    if (storedUsername) {
-      setCurrentUser(storedUsername);
-    }
-    if (storedRole === 'admin') {
-      setIsAdmin(true);
-    }
+    if (storedUsername) setCurrentUser(storedUsername);
+    if (storedRole === 'admin') setIsAdmin(true);
     fetchDirectories();
-   
+    fetchAllFilesWithMessages();
   }, []);
 
   const fetchDirectories = async () => {
@@ -154,36 +136,28 @@ useEffect(() => {
     }
   };
 
-  // ----------------------------------
-  // Fetch items (directories + files)
-  // ----------------------------------
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const dirParam = encodeURIComponent(currentPath); // ← dynamic, not hardcoded
-  
-      // 1) Fetch directories
-      const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
-        withCredentials: true,
-      });
+      const dirParam = encodeURIComponent(currentPath);
+      const [dirRes, fileRes] = await Promise.all([
+        axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true }),
+        axios.get(`/files?directory=${dirParam}`, { withCredentials: true })
+      ]);
+      
       const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
-  
-      // 2) Fetch files
-      const fileRes = await axios.get(`/files?directory=${dirParam}`, {
-        withCredentials: true,
-      });
-      const fetchedFiles = (fileRes.data || []).map((f) => ({
+      const fetchedFiles = (fileRes.data || []).map(f => ({
         id: f.id,
         name: f.name,
         type: 'file',
         size: f.size,
         formattedSize: formatFileSize(f.size),
         uploader: f.uploader,
+        directory: f.directory
       }));
-  
+
       setItems([...fetchedDirs, ...fetchedFiles]);
       fetchMessagesForFiles(fetchedFiles);
-  
     } catch (error) {
       console.error('Error fetching items:', error);
       message.error(error.response?.data?.error || 'Error fetching directory contents');
@@ -192,140 +166,67 @@ useEffect(() => {
       setLoading(false);
     }
   };
-  
-  const refreshInstructions = async () => {
-    try {
-      const fileRes = await axios.get(`/files`, {
-        withCredentials: true,
-      });
-  
-      const fetchedFiles = (fileRes.data || []).map((f) => ({
-        id: f.id,
-        name: f.name,
-        type: 'file',
-        size: f.size,
-        formattedSize: formatFileSize(f.size),
-        uploader: f.uploader,
-        directory: f.directory, // important for linking
-      }));
-  
-      let newCount = 0;
-      const newMessageMap = {};
-  
-      for (const file of fetchedFiles) {
-        const res = await axios.get(`/file/messages?file_id=${file.id}`, {
-          withCredentials: true,
-        });
-        const messages = res.data || [];
-        const previousLength = fileMessages[file.id]?.length || 0;
-        const currentLength = messages.length;
-  
-        // Attach the file path for navigation
-        messages.forEach((msg) => {
-          msg.file_path = file.directory;
-        });
-  
-        if (currentLength > previousLength) {
-          newCount += currentLength - previousLength;
-        }
-  
-        newMessageMap[file.id] = messages;
-      }
-  
-      setFileMessages(newMessageMap);
-  
-      if (newCount > 0) {
-        message.success(`📥 ${newCount} new instruction${newCount > 1 ? 's' : ''} loaded!`);
-      } else {
-        message.info('📄 No new instructions.');
-      }
-    } catch (error) {
-      console.error('Error refreshing instructions:', error);
-      message.error('Failed to refresh instructions');
-    }
-  };
-  
-  
-  
+
   useEffect(() => {
     fetchItems();
-    // eslint-disable-next-line
   }, [currentPath]);
 
-  const filteredItems = items.filter((item) =>
+  const filteredItems = items.filter(item =>
     (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleFolderClick = (folderName) => {
+    const newPath = path.join(currentPath, folderName);
+    if (!newPath.startsWith('Operation')) return;
+    setCurrentPath(newPath);
+  };
+
+  const handleGoUp = () => {
+    if (!currentPath || currentPath === 'Operation') return;
+    const parent = path.dirname(currentPath);
+    setCurrentPath(parent === '.' ? '' : parent);
+  };
+
+  const getPathSegments = (p) => p.split('/').filter(Boolean).slice(1);
+  const segments = getPathSegments(currentPath);
   
+  const breadcrumbItems = [
+    <Breadcrumb.Item key="operation">
+      <a onClick={() => setCurrentPath('Operation')}>Operation</a>
+    </Breadcrumb.Item>,
+    ...segments.map((seg, index) => {
+      const partialPath = ['Operation', ...segments.slice(0, index + 1)].join('/');
+      const isLast = index === segments.length - 1;
+      return (
+        <Breadcrumb.Item key={index}>
+          {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
+        </Breadcrumb.Item>
+      );
+    })
+  ];
+
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
       return;
     }
     try {
-      await axios.post(
-        '/directory/create',
-        { name: newFolderName, parent: currentPath, container: 'operation' },
-        { withCredentials: true }
-      );
+      await axios.post('/directory/create', {
+        name: newFolderName,
+        parent: currentPath,
+        container: 'operation'
+      }, { withCredentials: true });
       message.success('Folder created successfully');
       setCreateFolderModal(false);
       setNewFolderName('');
       fetchItems();
+      fetchDirectories();
     } catch (error) {
       console.error('Create folder error:', error);
       message.error(error.response?.data?.error || 'Error creating folder');
     }
   };
 
-  // ----------------------------------
-  // Navigation & Breadcrumb
-  // ----------------------------------
-  const handleFolderClick = (folderName) => {
-    const newPath = path.join(currentPath, folderName);
-    if (!newPath.startsWith('Operation')) return;
-    setCurrentPath(newPath);
-  };
-  
-
-  const handleGoUp = () => {
-    if (!currentPath) return; // root
-    if (currentPath === 'Operation') {
-      return; // Stop here to prevent going above "Operation"
-    }
-    
-    const parent = path.dirname(currentPath);
-    setCurrentPath(parent === '.' ? '' : parent);
-  };
-
-  const getPathSegments = (p) => {
-    const parts = p.split('/').filter(Boolean);
-    return parts.slice(1); // remove the first 'Operation' part
-  };
-  
-  const segments = getPathSegments(currentPath);
-  
-  const breadcrumbItems = [
-    <Breadcrumb.Item key="operation">
-      <a onClick={() => setCurrentPath('Operation')}>Operation</a>
-    </Breadcrumb.Item>
-  ];
-  
-  segments.forEach((seg, index) => {
-    const partialPath = ['Operation', ...segments.slice(0, index + 1)].join('/');
-    const isLast = index === segments.length - 1;
-  
-    breadcrumbItems.push(
-      <Breadcrumb.Item key={index}>
-        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
-      </Breadcrumb.Item>
-    );
-  });
-  
-  
-
-  // ----------------------------------
-  // Upload Modal
-  // ----------------------------------
   const handleOpenUploadModal = () => {
     if (!currentPath) {
       message.error('Please select or create a folder before uploading.');
@@ -335,47 +236,35 @@ useEffect(() => {
     setUploadModalVisible(true);
   };
 
-  const doModalUpload = async (isConfidential) => {
+  const handleModalUpload = async () => {
     if (!uploadingFile) {
       message.error('Please select a file first');
       return;
     }
-    if (!currentPath) {
-      message.error('Please select or create a folder first');
-      return;
-    }
-
     const formData = new FormData();
     formData.append('file', uploadingFile);
     formData.append('directory', currentPath);
     formData.append('container', 'operation');
-
     try {
-      const res = await axios.post('/upload', formData, {
+      await axios.post('/upload', formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      message.success(res.data.message || 'File uploaded successfully');
+      message.success('File uploaded successfully');
       setUploadModalVisible(false);
       setUploadingFile(null);
+      fetchItems();
+      fetchAllFilesWithMessages();
     } catch (error) {
-      console.error('Modal-based upload error:', error);
+      console.error('Upload error:', error);
       message.error(error.response?.data?.error || 'Error uploading file');
     }
   };
 
-  const handleModalUpload = () => {
-    doModalUpload();
-  };
-
-  // ----------------------------------
-  // Delete
-  // ----------------------------------
   const handleDelete = async (record) => {
-    const isOwner =
-      record.type === 'directory'
-        ? record.created_by === currentUser
-        : record.uploader === currentUser;
+    const isOwner = record.type === 'directory' 
+      ? record.created_by === currentUser 
+      : record.uploader === currentUser;
     if (!isOwner) {
       message.error('Only the owner can delete this item.');
       return;
@@ -394,17 +283,15 @@ useEffect(() => {
       }
       message.success(`${record.name} deleted successfully`);
       fetchItems();
+      fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Delete error:', error);
       message.error(error.response?.data?.error || 'Error deleting item');
     }
   };
 
-  // ----------------------------------
-  // Download
-  // ----------------------------------
   const handleDownload = (fileName) => {
-    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+    const downloadUrl = `http://localhost:8080/download?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(fileName)}`;
     window.open(downloadUrl, '_blank');
   };
 
@@ -414,14 +301,10 @@ useEffect(() => {
     window.open(downloadUrl, '_blank');
   };
 
-  // ----------------------------------
-  // Rename
-  // ----------------------------------
   const handleRename = (record) => {
-    const isOwner =
-      record.type === 'directory'
-        ? record.created_by === currentUser
-        : record.uploader === currentUser;
+    const isOwner = record.type === 'directory' 
+      ? record.created_by === currentUser 
+      : record.uploader === currentUser;
     if (!isOwner) {
       message.error('Only the owner can rename this item.');
       return;
@@ -464,15 +347,13 @@ useEffect(() => {
       setRenameModalVisible(false);
       setSelectedItem(null);
       fetchItems();
+      fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Rename error:', error);
       message.error(error.response?.data?.error || 'Error renaming item');
     }
   };
 
-  // ----------------------------------
-  // Copy
-  // ----------------------------------
   const handleCopy = (record) => {
     const suggestedName = record.name + '_copy';
     setCopyItem(record);
@@ -526,14 +407,10 @@ useEffect(() => {
     }
   };
 
-  // ----------------------------------
-  // Move
-  // ----------------------------------
   const handleMove = (record) => {
-    const isOwner =
-      record.type === 'directory'
-        ? record.created_by === currentUser
-        : record.uploader === currentUser;
+    const isOwner = record.type === 'directory' 
+      ? record.created_by === currentUser 
+      : record.uploader === currentUser;
     if (!isOwner) {
       message.error('Only the owner can move this item.');
       return;
@@ -581,247 +458,191 @@ useEffect(() => {
       setMoveDestination('');
       setMoveItem(null);
       fetchItems();
+      fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Move error:', error);
       message.error(error.response?.data?.error || 'Error moving item');
     }
   };
 
-  // Add the handleViewFile function
-  const handleViewFile = (file) => {
-    const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
-    window.open(previewUrl, '_blank');
-  };
-
-  // ----------------------------------
-  // Table Columns
-  // ----------------------------------
   const columns = [
     {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (name, record) => {
-        if (record.type === 'directory') {
-          return (
-            <Space>
-              <FolderOpenOutlined />
-              <a onClick={() => handleFolderClick(name)}>{name}</a>
-            </Space>
-          );
-        }
-        if (record.type === 'file') {
-          return name;
-        }
-      },
+      render: (name, record) => (
+        <Space>
+          {record.type === 'directory' ? <FolderOutlined /> : <FileTextOutlined />}
+          {record.type === 'directory' ? (
+            <a onClick={() => handleFolderClick(name)}>{name}</a>
+          ) : (
+            <span>{name}</span>
+          )}
+        </Space>
+      ),
     },
     {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
-      render: (type) => (type === 'directory' ? 'Folder' : 'File'),
+      render: type => type === 'directory' ? 'Folder' : 'File'
     },
     {
       title: 'Size',
       dataIndex: 'formattedSize',
       key: 'size',
-      render: (size, record) => (record.type === 'directory' ? '--' : size),
+      render: (size, record) => record.type === 'directory' ? '--' : size
     },
     {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        const isOwner =
-          record.type === 'directory'
-            ? record.created_by === currentUser
-            : record.uploader === currentUser;
-
+        const isOwner = record.type === 'directory' 
+          ? record.created_by === currentUser 
+          : record.uploader === currentUser;
+        
         return (
           <Space>
-            {/* View File */}
             {record.type === 'file' && (
-  <Tooltip title="View File">
-    <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
-  </Tooltip>
-)}
-
-            {/* Download for files */}
-            {record.type === 'file' && (
-  <Tooltip title="Download">
-    <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
-  </Tooltip>
-)}
-                 {/* Download for folders */}
-        {record.type === 'directory' && (
-          <Tooltip title="Download Folder">
-            <Button
-              icon={<DownloadOutlined />}
-              onClick={() => handleDownloadFolder(record.name)}
-            />
-          </Tooltip>
-        )}
-
-            {/* Rename */}
+              <Tooltip title="View File">
+                <Button icon={<FileOutlined />} onClick={() => window.open(`http://localhost:8080/preview?directory=${encodeURIComponent(record.directory)}&filename=${encodeURIComponent(record.name)}`, '_blank')} />
+              </Tooltip>
+            )}
+            <Tooltip title={record.type === 'directory' ? 'Download Folder' : 'Download File'}>
+              <Button icon={<DownloadOutlined />} onClick={() => record.type === 'directory' 
+                ? handleDownloadFolder(record.name)
+                : handleDownload(record.name)} 
+              />
+            </Tooltip>
             {isOwner && (
               <Tooltip title="Rename">
                 <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
               </Tooltip>
             )}
-
-            {/* Copy */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
-
-            {/* Move */}
             {isOwner && (
               <Tooltip title="Move">
                 <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
               </Tooltip>
             )}
-
-            {/* Delete */}
             {isOwner && (
               <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
                 <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
               </Tooltip>
             )}
-
-
           </Space>
         );
-      },
-    },
+      }
+    }
   ];
 
   return (
     <Layout style={{ minHeight: '84vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '5px', padding: '10px', background: '#fff' }}>
+        {/* File Instructions Section */}
+        <div style={{ marginBottom: 24 }}>
+          <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
+            <Col><h3 style={{ margin: 0 }}>📬 File Instructions</h3></Col>
+            <Col>
+              <Space>
+                <Checkbox checked={hideDone} onChange={(e) => setHideDone(e.target.checked)}>
+                  Hide Completed
+                </Checkbox>
+                <Button
+                  type="dashed"
+                  icon={<DownloadOutlined />}
+                  size="small"
+                  onClick={fetchAllFilesWithMessages}
+                >
+                  Refresh
+                </Button>
+              </Space>
+            </Col>
+          </Row>
 
-      <div style={{ marginBottom: 24 }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
-  <Col><h3 style={{ margin: 0 }}>📬 File Instructions</h3></Col>
-  <Col>
-    <Space>
-      <Checkbox checked={hideDone} onChange={(e) => setHideDone(e.target.checked)}>
-        Hide Completed
-      </Checkbox>
-      <Button
-        type="dashed"
-        icon={<DownloadOutlined />}
-        size="small"
-        onClick={refreshInstructions}
-      >
-        Refresh
-      </Button>
-    </Space>
-  </Col>
-</Row>
+          {allFilesWithMessages.map(file => {
+            const filteredMessages = hideDone
+              ? file.messages.filter(msg => !msg.is_done)
+              : file.messages;
 
+            if (filteredMessages.length === 0) return null;
 
-  {Object.entries(fileMessages).map(([fileId, messages]) => {
-   const filteredMessages = hideDone
-   ? messages.filter((msg) => !msg.is_done)
-   : messages;
- 
- if (filteredMessages.length === 0) return null;
- 
- const sortedMessages = [...filteredMessages].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
- 
-  return (
-    <Card
-      key={fileId}
-      type="inner"
-      size="small"
-      title={<span style={{ fontWeight: 500 }}>🗂 File ID: {fileId}</span>}
-      style={{ marginBottom: 12, borderRadius: 8, background: '#fafafa' }}
-    >
-      {sortedMessages.map((msg) => {
-        const isNew = !msg.is_done && !msg.seenAt;
-        const bgColor = msg.is_done ? '#f6ffed' : isNew ? '#e6f7ff' : '#fffbe6';
-        const borderColor = msg.is_done ? '#b7eb8f' : isNew ? '#91d5ff' : '#ffe58f';
-        const statusText = msg.is_done ? '✅ Done' : isNew ? '🟦 New' : '🟨 Pending';
-        const statusColor = msg.is_done ? 'green' : isNew ? '#1890ff' : '#faad14';
-
-        // Mark as seen after render (optional visual trick)
-        if (isNew) {
-          setTimeout(() => {
-            msg.seenAt = new Date(); // client-side only
-          }, 1500);
-        }
-
-        return (
-          <div
-            key={msg.id}
-            className={isNew ? 'pulse-new' : ''}
-            style={{
-              background: bgColor,
-              borderLeft: `4px solid ${borderColor}`,
-              padding: '10px 12px',
-              marginBottom: 10,
-              borderRadius: 4,
-            }}
-          >
-            <div style={{ fontSize: 13, marginBottom: 4 }}>
-  <strong>📝:</strong> <span style={{ fontStyle: 'italic' }}>{msg.message}</span>
-</div>
-
-<div style={{ fontSize: 12, color: '#555' }}>
-  📁 <a onClick={() => setCurrentPath(msg.file_path)}>{msg.file_path}</a>
-</div>
-
-<div style={{ fontSize: 12, color: '#555' }}>
-  👤 {msg.admin_name || 'N/A'} · 🕓 {new Date(msg.created_at).toLocaleString()}
-</div>
-
-<div style={{ fontSize: 12, marginTop: 4 }}>
-  <strong>Status:</strong>{' '}
-  <span style={{ color: statusColor, fontWeight: 500 }}>{statusText}</span>
-</div>
-
-            {!msg.is_done && (
-              <Button
-                type="primary"
+            return (
+              <Card
+                key={file.id}
+                type="inner"
                 size="small"
-                style={{ marginTop: 6 }}
-                onClick={() =>
-                  Modal.confirm({
-                    title: 'Mark Instruction as Done?',
-                    content: 'Are you sure this instruction has been completed?',
-                    okText: 'Yes',
-                    cancelText: 'Cancel',
-                    onOk: () => markAsDone(msg.id, msg.file_id),
-                  })
+                title={
+                  <Space>
+                    <span style={{ fontWeight: 500 }}>🗂 File: {file.name}</span>
+                    <Badge count={filteredMessages.length} />
+                  </Space>
                 }
+                extra={<Button type="link" size="small" onClick={() => setCurrentPath(file.directory)}>
+                  Go to Folder
+                </Button>}
+                style={{ marginBottom: 12, borderRadius: 8, background: '#fafafa' }}
               >
-                Mark as Done
-              </Button>
-            )}
-          </div>
-        );
-      })}
-    </Card>
-  );
-})}
+                {filteredMessages.map(msg => {
+                  const isNew = !msg.is_done && !msg.seenAt;
+                  const bgColor = msg.is_done ? '#f6ffed' : isNew ? '#e6f7ff' : '#fffbe6';
+                  const borderColor = msg.is_done ? '#b7eb8f' : isNew ? '#91d5ff' : '#ffe58f';
+                  const statusText = msg.is_done ? '✅ Done' : isNew ? '🟦 New' : '🟨 Pending';
+                  const statusColor = msg.is_done ? 'green' : isNew ? '#1890ff' : '#faad14';
 
-</div>
+                  return (
+                    <div
+                      key={msg.id}
+                      style={{
+                        background: bgColor,
+                        borderLeft: `4px solid ${borderColor}`,
+                        padding: '10px 12px',
+                        marginBottom: 10,
+                        borderRadius: 4,
+                      }}
+                    >
+                      <div style={{ fontSize: 13, marginBottom: 4 }}>
+                        <strong>📝:</strong> <span style={{ fontStyle: 'italic' }}>{msg.message}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#555' }}>
+                        👤 {msg.admin_name || 'N/A'} · 🕓 {new Date(msg.created_at).toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: 12, marginTop: 4 }}>
+                        <strong>Status:</strong>{' '}
+                        <span style={{ color: statusColor, fontWeight: 500 }}>{statusText}</span>
+                      </div>
+                      {!msg.is_done && (
+                        <Button
+                          type="primary"
+                          size="small"
+                          style={{ marginTop: 6 }}
+                          onClick={() => markAsDone(msg.id, file.id)}
+                        >
+                          Mark as Done
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </Card>
+            );
+          })}
+        </div>
 
-        {/* Top Bar */}
+        {/* Dashboard UI */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-
           <Col>
-            <h2 style={{ margin: 0, }}>Operation Dashboard</h2>
+            <h2 style={{ margin: 0 }}>Operation Dashboard</h2>
           </Col>
-
           <Col>
-            {/* Single button that opens the modal-based upload */}
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
               Upload File
             </Button>
           </Col>
         </Row>
 
-        {/* Navigation Row */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col>
             <Button icon={<ArrowUpOutlined />} onClick={handleGoUp} disabled={!currentPath}>
@@ -843,10 +664,8 @@ useEffect(() => {
           </Col>
         </Row>
 
-        {/* Breadcrumb */}
         <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
 
-        {/* Table of Items */}
         <Table
           columns={columns}
           dataSource={filteredItems}
@@ -943,7 +762,7 @@ useEffect(() => {
             <Form.Item label="Destination Folder" required>
               <TreeSelect
                 style={{ width: '100%' }}
-                treeData={directories}  // Use your pre-fetched folder tree
+                treeData={directories}
                 placeholder="Select destination folder"
                 value={moveDestination}
                 onChange={(val) => setMoveDestination(val)}
@@ -991,7 +810,6 @@ useEffect(() => {
                 <strong>Selected File:</strong> {uploadingFile.name}
               </Card>
             )}
-
           </Form>
         </Modal>
       </Content>
