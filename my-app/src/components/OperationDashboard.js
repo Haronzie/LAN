@@ -65,8 +65,11 @@ const OperationDashboard = () => {
   const [moveDestination, setMoveDestination] = useState('');
   const [currentUser, setCurrentUser] = useState('');
   const [directories, setDirectories] = useState([]);
+
+  // Upload
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
+
   const [fileMessages, setFileMessages] = useState({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [hideDone, setHideDone] = useState(false);
@@ -232,34 +235,39 @@ const OperationDashboard = () => {
       message.error('Please select or create a folder before uploading.');
       return;
     }
-    setUploadingFile(null);
+    setUploadingFiles([]); // ✅ clear previously selected files
     setUploadModalVisible(true);
   };
 
-  const handleModalUpload = async () => {
+  const doModalUpload = async (isConfidential) => {
     if (!uploadingFile) {
       message.error('Please select a file first');
       return;
     }
+    if (!currentPath) {
+      message.error('Please select or create a folder first');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', uploadingFile);
     formData.append('directory', currentPath);
     formData.append('container', 'operation');
+
     try {
-      await axios.post('/upload', formData, {
+      const res = await axios.post('/upload', formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      message.success('File uploaded successfully');
+      message.success(res.data.message || 'File uploaded successfully');
       setUploadModalVisible(false);
       setUploadingFile(null);
-      fetchItems();
-      fetchAllFilesWithMessages();
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error('Modal-based upload error:', error);
       message.error(error.response?.data?.error || 'Error uploading file');
     }
   };
+  
 
   const handleDelete = async (record) => {
     const isOwner = record.type === 'directory' 
@@ -780,29 +788,32 @@ const OperationDashboard = () => {
           onOk={handleModalUpload}
           onCancel={() => {
             setUploadModalVisible(false);
-            setUploadingFile(null);
+            setUploadingFiles([]);
           }}
+          
           okText="Upload"
         >
           <p>Target Folder: {currentPath || '(none)'}</p>
           <Form layout="vertical">
             <Form.Item>
-              <Button
-                icon={<UploadOutlined />}
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.onchange = (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setUploadingFile(file);
-                    }
-                  };
-                  input.click();
-                }}
-              >
-                Select File
-              </Button>
+            <Button
+  icon={<UploadOutlined />}
+  onClick={() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true; // ✅ allow multiple files
+    input.onchange = (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length > 0) {
+        setUploadingFiles(files);
+      }
+    };
+    input.click();
+  }}
+>
+  Select File(s)
+</Button>
+
             </Form.Item>
 
             {uploadingFile && (
@@ -810,6 +821,7 @@ const OperationDashboard = () => {
                 <strong>Selected File:</strong> {uploadingFile.name}
               </Card>
             )}
+
           </Form>
         </Modal>
       </Content>
