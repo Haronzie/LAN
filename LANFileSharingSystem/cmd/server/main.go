@@ -262,6 +262,7 @@ func main() {
 	router.HandleFunc("/forgot-password", authController.ForgotPassword).Methods("POST")
 	router.HandleFunc("/logout", authController.Logout).Methods("POST")
 	router.HandleFunc("/upload", fileController.Upload).Methods("POST")
+	router.HandleFunc("/bulk-upload", fileController.BulkUpload).Methods("POST")
 	router.HandleFunc("/copy-file", fileController.CopyFile).Methods("POST")
 	router.HandleFunc("/move-file", fileController.MoveFile).Methods("POST")
 	router.HandleFunc("/download", fileController.Download).Methods("GET")
