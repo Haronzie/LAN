@@ -50,11 +50,8 @@ function formatFileSize(size) {
 }
 
 const OperationDashboard = () => {
-  const navigate = useNavigate();
 
-  // ----------------------------------
-  // State Hooks
-  // ----------------------------------
+  
   const [currentPath, setCurrentPath] = useState('Operation');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -86,38 +83,53 @@ const OperationDashboard = () => {
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
 
-  const [receivedMessages, setReceivedMessages] = useState([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [fileMessages, setFileMessages] = useState({});
+
   const [isAdmin, setIsAdmin] = useState(false);
+  const [hideDone, setHideDone] = useState(false);
+
   
 
-  const fetchMessages = async () => {
-    try {
-      setLoadingMessages(true);
-      const res = await axios.get('/file/messages/received', { withCredentials: true });
-      setReceivedMessages(res.data || []);
-    } catch (err) {
-      console.error('Error fetching messages:', err);
-      message.error('Could not fetch file messages');
-    } finally {
-      setLoadingMessages(false);
+  const fetchMessagesForFiles = async (files) => {
+    const newMessageMap = {};
+    for (const file of files) {
+      try {
+        const res = await axios.get(`/file/messages?file_id=${file.id}`, {
+          withCredentials: true,
+        });
+        if (res.data?.length) {
+          newMessageMap[file.id] = res.data;
+        }
+      } catch (error) {
+        console.error(`Failed to fetch messages for file ID ${file.id}:`, error);
+      }
     }
+    setFileMessages(newMessageMap);
   };
 
-  useEffect(() => {
-    fetchMessages();
-  }, []);
-
-  const markAsDone = async (messageId) => {
+  const markAsDone = async (messageId, fileId) => {
     try {
-      await axios.put(`/file/message/done/${messageId}`, {}, { withCredentials: true });
+      await axios.patch(
+        `/file/message/${messageId}/done`,
+        {},
+        { withCredentials: true }
+      );
+  
       message.success('Marked as done');
-      fetchMessages();
+  
+      const res = await axios.get(`/file/messages?file_id=${fileId}`, {
+        withCredentials: true,
+      });
+      setFileMessages(prev => ({ ...prev, [fileId]: res.data }));
     } catch (err) {
       console.error('Error marking message as done:', err);
       message.error('Failed to mark as done');
     }
   };
+  
+  
+  
+  
 
 
 useEffect(() => {
@@ -148,15 +160,15 @@ useEffect(() => {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const dirParam = encodeURIComponent(currentPath);
-
+      const dirParam = encodeURIComponent(currentPath); // ← dynamic, not hardcoded
+  
       // 1) Fetch directories
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, {
         withCredentials: true,
       });
       const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
-
-      // 2) Fetch files with permissions data
+  
+      // 2) Fetch files
       const fileRes = await axios.get(`/files?directory=${dirParam}`, {
         withCredentials: true,
       });
@@ -168,8 +180,10 @@ useEffect(() => {
         formattedSize: formatFileSize(f.size),
         uploader: f.uploader,
       }));
-      
+  
       setItems([...fetchedDirs, ...fetchedFiles]);
+      fetchMessagesForFiles(fetchedFiles);
+  
     } catch (error) {
       console.error('Error fetching items:', error);
       message.error(error.response?.data?.error || 'Error fetching directory contents');
@@ -178,7 +192,61 @@ useEffect(() => {
       setLoading(false);
     }
   };
-
+  
+  const refreshInstructions = async () => {
+    try {
+      const fileRes = await axios.get(`/files`, {
+        withCredentials: true,
+      });
+  
+      const fetchedFiles = (fileRes.data || []).map((f) => ({
+        id: f.id,
+        name: f.name,
+        type: 'file',
+        size: f.size,
+        formattedSize: formatFileSize(f.size),
+        uploader: f.uploader,
+        directory: f.directory, // important for linking
+      }));
+  
+      let newCount = 0;
+      const newMessageMap = {};
+  
+      for (const file of fetchedFiles) {
+        const res = await axios.get(`/file/messages?file_id=${file.id}`, {
+          withCredentials: true,
+        });
+        const messages = res.data || [];
+        const previousLength = fileMessages[file.id]?.length || 0;
+        const currentLength = messages.length;
+  
+        // Attach the file path for navigation
+        messages.forEach((msg) => {
+          msg.file_path = file.directory;
+        });
+  
+        if (currentLength > previousLength) {
+          newCount += currentLength - previousLength;
+        }
+  
+        newMessageMap[file.id] = messages;
+      }
+  
+      setFileMessages(newMessageMap);
+  
+      if (newCount > 0) {
+        message.success(`📥 ${newCount} new instruction${newCount > 1 ? 's' : ''} loaded!`);
+      } else {
+        message.info('📄 No new instructions.');
+      }
+    } catch (error) {
+      console.error('Error refreshing instructions:', error);
+      message.error('Failed to refresh instructions');
+    }
+  };
+  
+  
+  
   useEffect(() => {
     fetchItems();
     // eslint-disable-next-line
@@ -630,24 +698,113 @@ useEffect(() => {
     <Layout style={{ minHeight: '84vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '5px', padding: '10px', background: '#fff' }}>
 
-      {receivedMessages.length > 0 && (
-        <div style={{ marginBottom: '24px' }}>
-          <h3>ðŸ“© File Instructions for You</h3>
-          {receivedMessages.map(msg => (
-            <Card key={msg.id} style={{ marginBottom: 12 }}>
-              <p><strong>ðŸ“ File:</strong> {msg.file_path}</p>
-              <p><strong>ðŸ“ Instruction:</strong> {msg.message}</p>
-              <p><strong>Status:</strong> {msg.status === 'done' ? 'âœ… Done' : 'ðŸ•’ Pending'}</p>
-              {msg.status !== 'done' && (
-                <Button type="primary" onClick={() => markAsDone(msg.id)}>
-                  Mark as Done
-                </Button>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
+      <div style={{ marginBottom: 24 }}>
+      <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
+  <Col><h3 style={{ margin: 0 }}>📬 File Instructions</h3></Col>
+  <Col>
+    <Space>
+      <Checkbox checked={hideDone} onChange={(e) => setHideDone(e.target.checked)}>
+        Hide Completed
+      </Checkbox>
+      <Button
+        type="dashed"
+        icon={<DownloadOutlined />}
+        size="small"
+        onClick={refreshInstructions}
+      >
+        Refresh
+      </Button>
+    </Space>
+  </Col>
+</Row>
 
+
+  {Object.entries(fileMessages).map(([fileId, messages]) => {
+   const filteredMessages = hideDone
+   ? messages.filter((msg) => !msg.is_done)
+   : messages;
+ 
+ if (filteredMessages.length === 0) return null;
+ 
+ const sortedMessages = [...filteredMessages].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+ 
+  return (
+    <Card
+      key={fileId}
+      type="inner"
+      size="small"
+      title={<span style={{ fontWeight: 500 }}>🗂 File ID: {fileId}</span>}
+      style={{ marginBottom: 12, borderRadius: 8, background: '#fafafa' }}
+    >
+      {sortedMessages.map((msg) => {
+        const isNew = !msg.is_done && !msg.seenAt;
+        const bgColor = msg.is_done ? '#f6ffed' : isNew ? '#e6f7ff' : '#fffbe6';
+        const borderColor = msg.is_done ? '#b7eb8f' : isNew ? '#91d5ff' : '#ffe58f';
+        const statusText = msg.is_done ? '✅ Done' : isNew ? '🟦 New' : '🟨 Pending';
+        const statusColor = msg.is_done ? 'green' : isNew ? '#1890ff' : '#faad14';
+
+        // Mark as seen after render (optional visual trick)
+        if (isNew) {
+          setTimeout(() => {
+            msg.seenAt = new Date(); // client-side only
+          }, 1500);
+        }
+
+        return (
+          <div
+            key={msg.id}
+            className={isNew ? 'pulse-new' : ''}
+            style={{
+              background: bgColor,
+              borderLeft: `4px solid ${borderColor}`,
+              padding: '10px 12px',
+              marginBottom: 10,
+              borderRadius: 4,
+            }}
+          >
+            <div style={{ fontSize: 13, marginBottom: 4 }}>
+  <strong>📝:</strong> <span style={{ fontStyle: 'italic' }}>{msg.message}</span>
+</div>
+
+<div style={{ fontSize: 12, color: '#555' }}>
+  📁 <a onClick={() => setCurrentPath(msg.file_path)}>{msg.file_path}</a>
+</div>
+
+<div style={{ fontSize: 12, color: '#555' }}>
+  👤 {msg.admin_name || 'N/A'} · 🕓 {new Date(msg.created_at).toLocaleString()}
+</div>
+
+<div style={{ fontSize: 12, marginTop: 4 }}>
+  <strong>Status:</strong>{' '}
+  <span style={{ color: statusColor, fontWeight: 500 }}>{statusText}</span>
+</div>
+
+            {!msg.is_done && (
+              <Button
+                type="primary"
+                size="small"
+                style={{ marginTop: 6 }}
+                onClick={() =>
+                  Modal.confirm({
+                    title: 'Mark Instruction as Done?',
+                    content: 'Are you sure this instruction has been completed?',
+                    okText: 'Yes',
+                    cancelText: 'Cancel',
+                    onOk: () => markAsDone(msg.id, msg.file_id),
+                  })
+                }
+              >
+                Mark as Done
+              </Button>
+            )}
+          </div>
+        );
+      })}
+    </Card>
+  );
+})}
+
+</div>
 
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>

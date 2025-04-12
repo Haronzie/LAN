@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 type FileController struct {
@@ -940,43 +942,6 @@ func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Instruction sent"})
 }
-
-func (fc *FileController) MarkFileMessageDone(w http.ResponseWriter, r *http.Request) {
-	user, err := fc.App.GetUserFromSession(r)
-	if err != nil {
-		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
-		return
-	}
-
-	var payload struct {
-		MessageID int `json:"message_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		models.RespondError(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-
-	var receiver string
-	err = fc.App.DB.QueryRow(`SELECT receiver FROM file_messages WHERE id = $1`, payload.MessageID).Scan(&receiver)
-	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "Message not found")
-		return
-	}
-
-	if user.Username != receiver && user.Role != "admin" {
-		models.RespondError(w, http.StatusForbidden, "You are not authorized to update this message")
-		return
-	}
-
-	_, err = fc.App.DB.Exec(`UPDATE file_messages SET is_done = TRUE WHERE id = $1`, payload.MessageID)
-	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Failed to update status")
-		return
-	}
-
-	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Marked as done"})
-}
-
 func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request) {
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
@@ -1066,4 +1031,52 @@ func (fc *FileController) GetFileVersions(w http.ResponseWriter, r *http.Request
 	fc.App.LogActivity(fmt.Sprintf("User '%s' viewed version history for file ID %d.", user.Username, fileID))
 
 	models.RespondJSON(w, http.StatusOK, versions)
+}
+func (fc *FileController) MarkFileMessageAsDone(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	vars := mux.Vars(r)
+	messageIDStr := vars["id"]
+	if messageIDStr == "" {
+		models.RespondError(w, http.StatusBadRequest, "Missing message ID")
+		return
+	}
+
+	messageID, err := strconv.Atoi(messageIDStr)
+	if err != nil || messageID <= 0 {
+		models.RespondError(w, http.StatusBadRequest, "Invalid message ID")
+		return
+	}
+
+	var receiver string
+	err = fc.App.DB.QueryRow(`SELECT receiver FROM file_messages WHERE id = $1`, messageID).Scan(&receiver)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "Message not found")
+		return
+	}
+
+	if user.Username != receiver && user.Role != "admin" {
+		models.RespondError(w, http.StatusForbidden, "You are not authorized to update this message")
+		return
+	}
+
+	_, err = fc.App.DB.Exec(`UPDATE file_messages SET is_done = TRUE WHERE id = $1`, messageID)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Failed to update message status")
+		return
+	}
+
+	// ✅ Add this log line
+	fc.App.LogActivity(fmt.Sprintf("User '%s' marked message %d as done.", user.Username, messageID))
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Marked as done"})
 }
