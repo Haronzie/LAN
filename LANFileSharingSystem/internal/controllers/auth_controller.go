@@ -196,43 +196,46 @@ func (ac *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request)
 	req.NewPassword = strings.TrimSpace(req.NewPassword)
 	req.ConfirmPassword = strings.TrimSpace(req.ConfirmPassword)
 
-	// Check for empty fields
 	if req.Username == "" || req.NewPassword == "" || req.ConfirmPassword == "" {
 		models.RespondError(w, http.StatusBadRequest, "Username, new password, and confirm password are required")
 		return
 	}
 
-	// Confirm that newPassword matches confirmPassword
 	if req.NewPassword != req.ConfirmPassword {
 		models.RespondError(w, http.StatusBadRequest, "New password and confirm password do not match")
 		return
 	}
 
-	// Check if the user exists
 	user, err := ac.App.GetUserByUsername(req.Username)
 	if err != nil {
 		models.RespondError(w, http.StatusNotFound, "Username does not exist")
 		return
 	}
 
-	// Optional: Re-check password strength
+	// ✅ Enforce admin-only access
+	if user.Role != "admin" {
+		models.RespondError(w, http.StatusForbidden, "Only admins are allowed to reset password via this endpoint")
+		return
+	}
+
 	if ok, msg := isStrongPassword(req.NewPassword); !ok {
 		models.RespondError(w, http.StatusBadRequest, msg)
 		return
 	}
 
-	// Hash the new password
 	hashedPass, err := models.HashPassword(req.NewPassword)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error hashing new password")
 		return
 	}
 
-	// Update the user's password in the database (assuming UpdateUserPassword exists).
 	if err := ac.App.UpdateUserPassword(user.Username, hashedPass); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error updating password")
 		return
 	}
+
+	ac.App.LogAudit(user.Username, 0, "PASSWORD_RESET", "Admin reset their password")
+	ac.App.LogActivity(fmt.Sprintf("Admin '%s' reset their password", user.Username))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Password updated for user '%s'.", user.Username),
