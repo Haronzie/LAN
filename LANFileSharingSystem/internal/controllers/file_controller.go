@@ -4,6 +4,7 @@ import (
 	"LANFileSharingSystem/internal/encryption"
 	"LANFileSharingSystem/internal/models"
 	"LANFileSharingSystem/internal/services"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -82,6 +83,16 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 
 	existingFR, getErr := fc.App.GetFileRecordByPath(relativePath)
 
+	// 👇 Add this block
+	skip := r.FormValue("skip") == "true"
+	if getErr == nil && skip {
+		models.RespondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("File '%s' skipped (already exists)", rawFileName),
+		})
+		return
+	}
+
+	// 👇 Keep this logic as-is
 	if getErr == nil && !overwrite {
 		// File exists and overwrite not allowed → keep both
 		baseName := strings.TrimSuffix(rawFileName, filepath.Ext(rawFileName))
@@ -956,19 +967,25 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// ✅ Restrict access: Only admin or users who are receivers of at least one message for this file
-	var count int
-	err = fc.App.DB.QueryRow(`
-		SELECT COUNT(*) FROM file_messages
-		WHERE file_id = $1 AND (receiver = $2 OR $2 = ANY (SELECT 'admin'))
-	`, fileID, user.Username).Scan(&count)
-
-	if err != nil || (count == 0 && user.Role != "admin") {
-		models.RespondError(w, http.StatusForbidden, "You are not authorized to view these messages")
-		return
+	var rows *sql.Rows
+	if user.Role == "admin" {
+		// Admin can see all messages for this file
+		rows, err = fc.App.DB.Query(`
+			SELECT id, file_id, sender, receiver, message, is_done, created_at
+			FROM file_messages
+			WHERE file_id = $1
+			ORDER BY created_at DESC
+		`, fileID)
+	} else {
+		// Regular users only see messages addressed to them
+		rows, err = fc.App.DB.Query(`
+			SELECT id, file_id, sender, receiver, message, is_done, created_at
+			FROM file_messages
+			WHERE file_id = $1 AND receiver = $2
+			ORDER BY created_at DESC
+		`, fileID, user.Username)
 	}
 
-	rows, err := fc.App.DB.Query(`SELECT id, file_id, sender, receiver, message, is_done, created_at FROM file_messages WHERE file_id = $1 ORDER BY created_at DESC`, fileID)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Failed to fetch messages")
 		return
@@ -986,6 +1003,7 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 
 	models.RespondJSON(w, http.StatusOK, messages)
 }
+
 func (fc *FileController) GetFileVersions(w http.ResponseWriter, r *http.Request) {
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
@@ -1081,7 +1099,7 @@ func (fc *FileController) MarkFileMessageAsDone(w http.ResponseWriter, r *http.R
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Marked as done"})
 }
 func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(50 << 20); err != nil {
+	if err := r.ParseMultipartForm(200 << 20); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Failed to parse form")
 		return
 	}
@@ -1094,6 +1112,9 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 
 	targetDir := r.FormValue("directory")
 	container := r.FormValue("container")
+	overwrite := r.FormValue("overwrite") == "true"
+	skip := r.FormValue("skip") == "true"
+
 	if targetDir == "" || container == "" {
 		models.RespondError(w, http.StatusBadRequest, "Directory and container are required")
 		return
@@ -1105,63 +1126,108 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var uploadedCount int
+	results := []map[string]string{}
 
 	for _, fileHeader := range files {
-		file, err := fileHeader.Open()
-		if err != nil {
-			continue
-		}
-		defer file.Close()
-
 		rawFileName := fileHeader.Filename
-		relativePath := filepath.Join(targetDir, rawFileName)
-		finalDiskPath := filepath.Join("Cdrrmo", relativePath)
+		status := "unknown"
 
-		// Handle overwrite/keep-both logic as in single upload
-		existingFR, _ := fc.App.GetFileRecordByPath(relativePath)
-		if existingFR.ID != 0 {
-			base := strings.TrimSuffix(rawFileName, filepath.Ext(rawFileName))
-			ext := filepath.Ext(rawFileName)
-			counter := 1
-			for {
-				altName := fmt.Sprintf("%s_%d%s", base, counter, ext)
-				altPath := filepath.Join(targetDir, altName)
-				if _, err := fc.App.GetFileRecordByPath(altPath); err != nil {
-					relativePath = altPath
-					finalDiskPath = filepath.Join("Cdrrmo", altPath)
-					break
-				}
-				counter++
+		func() {
+			file, err := fileHeader.Open()
+			if err != nil {
+				status = "error: failed to open"
+				return
 			}
-		}
+			defer file.Close()
 
-		_ = os.MkdirAll(filepath.Dir(finalDiskPath), 0755)
-		tempFilePath := finalDiskPath + ".tmp"
-		tempFile, _ := os.Create(tempFilePath)
-		io.Copy(tempFile, file)
-		tempFile.Close()
+			relativePath := filepath.Join(targetDir, rawFileName)
+			finalDiskPath := filepath.Join("Cdrrmo", relativePath)
 
-		key := []byte(os.Getenv("ENCRYPTION_KEY"))
-		encryption.EncryptFile(key, tempFilePath, finalDiskPath)
-		os.Remove(tempFilePath)
+			existingFR, getErr := fc.App.GetFileRecordByPath(relativePath)
 
-		fr := models.FileRecord{
-			FileName:    filepath.Base(relativePath),
-			FilePath:    relativePath,
-			Directory:   targetDir,
-			Size:        fileHeader.Size,
-			ContentType: fileHeader.Header.Get("Content-Type"),
-			Uploader:    user.Username,
-		}
-		fc.App.CreateFileRecord(fr)
-		fileID, _ := fc.App.GetFileIDByPath(fr.FilePath)
-		fc.App.CreateFileVersion(fileID, 1, fr.FilePath)
+			if getErr == nil {
+				if skip {
+					status = "skipped"
+					return
+				}
+				if !overwrite {
+					base := strings.TrimSuffix(rawFileName, filepath.Ext(rawFileName))
+					ext := filepath.Ext(rawFileName)
+					counter := 1
+					for {
+						altName := fmt.Sprintf("%s_%d%s", base, counter, ext)
+						altPath := filepath.Join(targetDir, altName)
+						if _, err := fc.App.GetFileRecordByPath(altPath); err != nil {
+							relativePath = altPath
+							finalDiskPath = filepath.Join("Cdrrmo", altPath)
+							break
+						}
+						counter++
+					}
+					status = "renamed"
+				} else {
+					fileID := existingFR.ID
+					updateErr := fc.App.UpdateFileMetadata(fileID, fileHeader.Size, fileHeader.Header.Get("Content-Type"))
+					if updateErr == nil {
+						latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
+						_ = fc.App.CreateFileVersion(fileID, latestVer+1, relativePath)
+						status = "overwritten"
+					}
+				}
+			}
 
-		uploadedCount++
+			if err := os.MkdirAll(filepath.Dir(finalDiskPath), 0755); err != nil {
+				status = "error: mkdir failed"
+				return
+			}
+
+			tempFilePath := finalDiskPath + ".tmp"
+			tempFile, err := os.Create(tempFilePath)
+			if err != nil {
+				status = "error: cannot create temp file"
+				return
+			}
+
+			if _, err := io.Copy(tempFile, file); err != nil {
+				status = "error: write failed"
+				tempFile.Close()
+				os.Remove(tempFilePath)
+				return
+			}
+			tempFile.Close()
+
+			key := []byte(os.Getenv("ENCRYPTION_KEY"))
+			if err := encryption.EncryptFile(key, tempFilePath, finalDiskPath); err != nil {
+				status = "error: encryption failed"
+				os.Remove(tempFilePath)
+				return
+			}
+			os.Remove(tempFilePath)
+
+			if getErr != nil || !overwrite {
+				fr := models.FileRecord{
+					FileName:    filepath.Base(relativePath),
+					FilePath:    relativePath,
+					Directory:   targetDir,
+					Size:        fileHeader.Size,
+					ContentType: fileHeader.Header.Get("Content-Type"),
+					Uploader:    user.Username,
+				}
+				if err := fc.App.CreateFileRecord(fr); err != nil {
+					status = "error: DB insert failed"
+					return
+				}
+				fileID, _ := fc.App.GetFileIDByPath(fr.FilePath)
+				_ = fc.App.CreateFileVersion(fileID, 1, fr.FilePath)
+				status = "uploaded"
+			}
+		}()
+
+		results = append(results, map[string]string{
+			"file":   rawFileName,
+			"status": status,
+		})
 	}
 
-	models.RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": fmt.Sprintf("%d file(s) uploaded successfully", uploadedCount),
-	})
+	models.RespondJSON(w, http.StatusOK, results)
 }
