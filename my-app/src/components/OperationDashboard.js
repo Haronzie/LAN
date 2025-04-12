@@ -93,22 +93,35 @@ const OperationDashboard = () => {
 
   const fetchAllFilesWithMessages = async () => {
     try {
-      const res = await axios.get('/files-with-messages', { withCredentials: true });
-      setAllFilesWithMessages(res.data || []);
-      
-      // Also update the fileMessages state for individual file messages
-      const newMessageMap = {};
-      res.data.forEach(file => {
-        if (file.messages?.length) {
-          newMessageMap[file.id] = file.messages;
+      const res = await axios.get(`/files?directory=${encodeURIComponent(currentPath)}`, { withCredentials: true });
+      const files = res.data || [];
+      setAllFilesWithMessages([]);
+  
+      const result = [];
+  
+      for (const file of files) {
+        try {
+          const msgRes = await axios.get(`/file/messages?file_id=${file.id}`, { withCredentials: true });
+          if (msgRes.data?.length) {
+            result.push({
+              id: file.id,
+              name: file.name,
+              directory: file.directory,
+              messages: msgRes.data
+            });
+          }
+        } catch (err) {
+          console.warn(`Skipped file ID ${file.id}: not authorized or no messages`);
         }
-      });
-      setFileMessages(newMessageMap);
+      }
+  
+      setAllFilesWithMessages(result);
     } catch (error) {
-      console.error('Error fetching files with messages:', error);
+      console.error('Error fetching file list:', error);
       message.error('Failed to load files with instructions');
     }
   };
+  
 
   const markAsDone = async (messageId, fileId) => {
     try {
@@ -250,30 +263,55 @@ const OperationDashboard = () => {
       message.error('Please select one or more files first');
       return;
     }
-
-    const uploadPromises = uploadingFiles.map((file) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('directory', currentPath);
-      formData.append('container', 'operation');
-      return axios.post('/upload', formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-    });
-
+  
     try {
-      await Promise.all(uploadPromises);
-      message.success(`${uploadingFiles.length} file(s) uploaded successfully`);
+      if (uploadingFiles.length === 1) {
+        // Single file → use /upload
+        const formData = new FormData();
+        formData.append('file', uploadingFiles[0]);
+        formData.append('directory', currentPath);
+        formData.append('container', 'operation');
+  
+        await axios.post('/upload', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+  
+        message.success('File uploaded successfully');
+      } else {
+        // Multiple files → use /bulk-upload
+        const formData = new FormData();
+        uploadingFiles.forEach((file) => formData.append('files', file));
+        formData.append('directory', currentPath);
+        formData.append('container', 'operation');
+        formData.append('overwrite', 'false'); // or 'true' or based on user choice
+        formData.append('skip', 'false');      // or 'true' or based on user choice
+  
+        const res = await axios.post('/bulk-upload', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        
+        
+  
+        const results = res.data || [];
+        const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
+        const skipped = results.filter(r => r.status === 'skipped').length;
+        const failed = results.filter(r => r.status.startsWith('error')).length;
+  
+        message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+      }
+  
       setUploadModalVisible(false);
       setUploadingFiles([]);
       fetchItems();
       fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Upload error:', error);
-      message.error('One or more files failed to upload');
+      message.error('Upload failed');
     }
   };
+  
 
   const handleDelete = async (record) => {
     const isOwner = record.type === 'directory' 
