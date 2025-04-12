@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Layout, Card, Form, Input, Button, Switch, InputNumber, message, Typography, Divider } from 'antd';
 
 const { Content } = Layout;
-const { Title, Paragraph, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 const Settings = () => {
   const [loading, setLoading] = useState(false);
@@ -16,18 +16,18 @@ const Settings = () => {
   };
 
   return (
-    <Layout style={{ padding: '16px', background: '#f0f2f5', minHeight: '100%' }}>
+    <Layout style={{ padding: '14px 16px', background: '#f0f2f5', minHeight: '100%' }}>
       <Content style={{ maxWidth: 700, margin: '0 auto' }}>
         <Card 
           bordered={false}
           style={{ 
             borderRadius: '6px', 
             boxShadow: '0 1px 6px rgba(0,0,0,0.08)', 
-            padding: '16px'
+            padding: '14px 16px'
           }}
         >
           <Title level={4} style={{ 
-            marginBottom: '8px', 
+            marginBottom: '6px', 
             textAlign: 'center', 
             fontSize: '16px',
             fontWeight: 500
@@ -38,12 +38,12 @@ const Settings = () => {
             fontSize: '12px', 
             display: 'block', 
             textAlign: 'center',
-            marginBottom: '12px'
+            marginBottom: '10px'
           }}>
             Configure system parameters
           </Text>
           
-          <Divider style={{ margin: '12px 0' }} />
+          <Divider style={{ margin: '10px 0' }} />
           
           <Form 
             layout="vertical" 
@@ -57,6 +57,7 @@ const Settings = () => {
               label={<span style={{ fontSize: '12px' }}>Admin Password</span>}
               name="newPassword"
               rules={[{ required: true, message: 'Required' }]}
+              style={{ marginBottom: '14px' }}
             >
               <Input.Password 
                 placeholder="Enter new password" 
@@ -69,6 +70,7 @@ const Settings = () => {
               label={<span style={{ fontSize: '12px' }}>Maintenance Mode</span>}
               name="maintenanceMode"
               valuePropName="checked"
+              style={{ marginBottom: '14px' }}
             >
               <Switch size="small" />
             </Form.Item>
@@ -77,6 +79,7 @@ const Settings = () => {
               label={<span style={{ fontSize: '12px' }}>Max Upload Size (MB)</span>}
               name="maxUploadSize"
               rules={[{ required: true, message: 'Required' }]}
+              style={{ marginBottom: '14px' }}
             >
               <InputNumber 
                 min={1} 
@@ -91,6 +94,7 @@ const Settings = () => {
               label={<span style={{ fontSize: '12px' }}>Shared Folder Path</span>}
               name="sharedFolderPath"
               rules={[{ required: true, message: 'Required' }]}
+              style={{ marginBottom: '14px' }}
             >
               <Input 
                 placeholder="Enter path" 
@@ -103,11 +107,12 @@ const Settings = () => {
               label={<span style={{ fontSize: '12px' }}>Detailed Logging</span>}
               name="detailedLogging"
               valuePropName="checked"
+              style={{ marginBottom: '16px' }}
             >
               <Switch size="small" />
             </Form.Item>
 
-            <Form.Item style={{ marginTop: '12px' }}>
+            <Form.Item style={{ marginTop: '10px', marginBottom: '8px' }}>
               <Button 
                 type="primary" 
                 htmlType="submit" 
@@ -124,9 +129,10 @@ const Settings = () => {
           <Paragraph 
             type="secondary" 
             style={{ 
-              marginTop: '12px', 
+              marginTop: '10px', 
               fontSize: '11px',
-              lineHeight: '1.4'
+              lineHeight: '1.4',
+              marginBottom: '4px'
             }}
           >
             Configure your LAN file sharing system. Adjust upload limits, storage paths, and logging preferences.

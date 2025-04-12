@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Table, Button, Input, message, Modal, Form, Space, Popover } from 'antd';
+import { Table, Button, Input, message, Modal, Form, Space, Popover, Layout } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  ArrowLeftOutlined,
-  InfoCircleOutlined,
-  UserDeleteOutlined
+  UserDeleteOutlined,
+  InfoCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+
+const { Content } = Layout;
 
 // Password policy text from your RegisterForm
 const passwordPolicyContent = (
@@ -289,131 +290,133 @@ const UserManagement = () => {
   ];
 
   return (
-    <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
-      <div style={{ position: 'relative', marginBottom: 16 }}>
-        <h2 style={{ textAlign: 'center' }}>User Management</h2>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsAddUserModalOpen(true)}
-          style={{ position: 'absolute', right: 0, top: 0 }}
+    <Layout style={{ minHeight: '91vh', background: '#f0f2f5' }}>
+      <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
+        <div style={{ position: 'relative', marginBottom: 16 }}>
+          <h2 style={{ textAlign: 'center', margin: 0 }}>User Management</h2>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsAddUserModalOpen(true)}
+            style={{ position: 'absolute', right: 0, top: 0 }}
+          >
+            Add User
+          </Button>
+        </div>
+        <Input
+          placeholder="Search by username"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ width: 300, marginBottom: 16 }}
+        />
+
+        <Table
+          columns={columns}
+          dataSource={filteredUsers}
+          rowKey="username"
+          loading={loading}
+          pagination={{ pageSize: 10 }}
+        />
+
+        {/* Add User Modal */}
+        <Modal
+          open={isAddUserModalOpen}
+          title="Add New User"
+          onCancel={() => {
+            addUserForm.resetFields();
+            setIsAddUserModalOpen(false);
+          }}
+          onOk={handleAddUserOk}
+          okText="Add"
+          destroyOnClose
+          centered
         >
-          Add User
-        </Button>
-      </div>
-      <Input
-        placeholder="Search by username"
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        style={{ width: 300, marginBottom: 16 }}
-      />
+          <Form form={addUserForm} layout="vertical">
+            <Form.Item
+              label="Username"
+              name="username"
+              rules={[{ required: true, message: 'Please input a username!' }]}
+            >
+              <Input
+                ref={usernameRef}
+                placeholder="Enter new username"
+                onPressEnter={() => {
+                  if (passwordRef.current) {
+                    passwordRef.current.focus({ cursor: 'end' });
+                  }
+                }}
+              />
+            </Form.Item>
 
-      <Table
-        columns={columns}
-        dataSource={filteredUsers}
-        rowKey="username"
-        loading={loading}
-        pagination={{ pageSize: 10 }}
-      />
-
-      {/* Add User Modal */}
-      <Modal
-        open={isAddUserModalOpen}
-        title="Add New User"
-        onCancel={() => {
-          addUserForm.resetFields();
-          setIsAddUserModalOpen(false);
-        }}
-        onOk={handleAddUserOk}
-        okText="Add"
-        destroyOnClose
-        centered
-      >
-        <Form form={addUserForm} layout="vertical">
-          <Form.Item
-            label="Username"
-            name="username"
-            rules={[{ required: true, message: 'Please input a username!' }]}
-          >
-            <Input
-              ref={usernameRef}
-              placeholder="Enter new username"
-              onPressEnter={() => {
-                if (passwordRef.current) {
-                  passwordRef.current.focus({ cursor: 'end' });
-                }
-              }}
-            />
-          </Form.Item>
-
-          {/* Password field with popover hint */}
-          <Form.Item
-            label={
-              <span>
-                Password
-                <Popover content={passwordPolicyContent} title="Password Requirements">
-                  <InfoCircleOutlined style={{ marginLeft: 8, color: '#1890ff', cursor: 'pointer' }} />
-                </Popover>
-              </span>
-            }
-            name="password"
-            rules={[{ required: true, message: 'Please input a password!' }]}
-          >
-            <Input.Password
-              ref={passwordRef}
-              placeholder="Enter new user password"
-              onPressEnter={handleAddUserOk}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* Update User Modal */}
-      <Modal
-        open={isUpdateUserModalOpen}
-        title="Update User"
-        onCancel={() => setIsUpdateUserModalOpen(false)}
-        onOk={handleUpdateUser}
-        okText="Update"
-        destroyOnClose
-      >
-        <Form form={updateForm} layout="vertical">
-          <Form.Item name="old_username" label="Old Username">
-            <Input disabled />
-          </Form.Item>
-          <Form.Item
-            name="new_username"
-            label="New Username"
-            rules={[{ required: true, message: 'Please input the new username!' }]}
-          >
-            <Input placeholder="Enter new username" />
-          </Form.Item>
-          <Form.Item
-            name="new_password"
-            label={
-              <span>
-                New Password&nbsp;
-                <Popover content={passwordPolicyContent} title="Password Requirements">
-                  <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'pointer' }} />
-                </Popover>
-              </span>
-            }
-            rules={[
-              { required: true, message: 'Please input the new password!' },
-              {
-                pattern: new RegExp(
-                  "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,}$"
-                ),
-                message:
-                  'Password must be at least 8 characters long, include uppercase, lowercase, a number, and a special character'
+            {/* Password field with popover hint */}
+            <Form.Item
+              label={
+                <span>
+                  Password
+                  <Popover content={passwordPolicyContent} title="Password Requirements">
+                    <InfoCircleOutlined style={{ marginLeft: 8, color: '#1890ff', cursor: 'pointer' }} />
+                  </Popover>
+                </span>
               }
-            ]}
-          >
-            <Input.Password placeholder="Enter new password" />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </div>
+              name="password"
+              rules={[{ required: true, message: 'Please input a password!' }]}
+            >
+              <Input.Password
+                ref={passwordRef}
+                placeholder="Enter new user password"
+                onPressEnter={handleAddUserOk}
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* Update User Modal */}
+        <Modal
+          open={isUpdateUserModalOpen}
+          title="Update User"
+          onCancel={() => setIsUpdateUserModalOpen(false)}
+          onOk={handleUpdateUser}
+          okText="Update"
+          destroyOnClose
+        >
+          <Form form={updateForm} layout="vertical">
+            <Form.Item name="old_username" label="Old Username">
+              <Input disabled />
+            </Form.Item>
+            <Form.Item
+              name="new_username"
+              label="New Username"
+              rules={[{ required: true, message: 'Please input the new username!' }]}
+            >
+              <Input placeholder="Enter new username" />
+            </Form.Item>
+            <Form.Item
+              name="new_password"
+              label={
+                <span>
+                  New Password&nbsp;
+                  <Popover content={passwordPolicyContent} title="Password Requirements">
+                    <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'pointer' }} />
+                  </Popover>
+                </span>
+              }
+              rules={[
+                { required: true, message: 'Please input the new password!' },
+                {
+                  pattern: new RegExp(
+                    "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,}$"
+                  ),
+                  message:
+                    'Password must be at least 8 characters long, include uppercase, lowercase, a number, and a special character'
+                }
+              ]}
+            >
+              <Input.Password placeholder="Enter new password" />
+            </Form.Item>
+          </Form>
+        </Modal>
+      </Content>
+    </Layout>
   );
 };
 
