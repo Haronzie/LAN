@@ -1033,6 +1033,11 @@ func (fc *FileController) GetFileVersions(w http.ResponseWriter, r *http.Request
 	models.RespondJSON(w, http.StatusOK, versions)
 }
 func (fc *FileController) MarkFileMessageAsDone(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
@@ -1064,11 +1069,14 @@ func (fc *FileController) MarkFileMessageAsDone(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	_, err = fc.App.DB.Exec(`UPDATE file_messages SET is_done = true WHERE id = $1`, messageID)
+	_, err = fc.App.DB.Exec(`UPDATE file_messages SET is_done = TRUE WHERE id = $1`, messageID)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Failed to update message status")
 		return
 	}
+
+	// ✅ Add this log line
+	fc.App.LogActivity(fmt.Sprintf("User '%s' marked message %d as done.", user.Username, messageID))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Marked as done"})
 }

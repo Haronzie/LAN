@@ -86,6 +86,8 @@ const OperationDashboard = () => {
   const [fileMessages, setFileMessages] = useState({});
 
   const [isAdmin, setIsAdmin] = useState(false);
+  const [hideDone, setHideDone] = useState(false);
+
   
 
   const fetchMessagesForFiles = async (files) => {
@@ -107,8 +109,8 @@ const OperationDashboard = () => {
 
   const markAsDone = async (messageId, fileId) => {
     try {
-      await axios.put(
-        `/file/messages/${messageId}/done`,
+      await axios.patch(
+        `/file/message/${messageId}/done`,
         {},
         { withCredentials: true }
       );
@@ -124,6 +126,8 @@ const OperationDashboard = () => {
       message.error('Failed to mark as done');
     }
   };
+  
+  
   
   
 
@@ -695,24 +699,35 @@ useEffect(() => {
       <Content style={{ margin: '5px', padding: '10px', background: '#fff' }}>
 
       <div style={{ marginBottom: 24 }}>
-  <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
-    <Col><h3 style={{ margin: 0 }}>📬 File Instructions</h3></Col>
-    <Col>
-    <Button
-  type="dashed"
-  icon={<DownloadOutlined />}
-  size="small"
-  onClick={refreshInstructions}
->
-  Refresh
-</Button>
+      <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
+  <Col><h3 style={{ margin: 0 }}>📬 File Instructions</h3></Col>
+  <Col>
+    <Space>
+      <Checkbox checked={hideDone} onChange={(e) => setHideDone(e.target.checked)}>
+        Hide Completed
+      </Checkbox>
+      <Button
+        type="dashed"
+        icon={<DownloadOutlined />}
+        size="small"
+        onClick={refreshInstructions}
+      >
+        Refresh
+      </Button>
+    </Space>
+  </Col>
+</Row>
 
-    </Col>
-  </Row>
 
   {Object.entries(fileMessages).map(([fileId, messages]) => {
-  const sortedMessages = [...messages].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
+   const filteredMessages = hideDone
+   ? messages.filter((msg) => !msg.is_done)
+   : messages;
+ 
+ if (filteredMessages.length === 0) return null;
+ 
+ const sortedMessages = [...filteredMessages].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+ 
   return (
     <Card
       key={fileId}
