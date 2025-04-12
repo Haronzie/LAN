@@ -16,7 +16,8 @@ import {
   Breadcrumb,
   Checkbox,
   TreeSelect,
-  Badge
+  Badge,
+  Spin
 } from 'antd';
 import {
   UploadOutlined,
@@ -65,61 +66,12 @@ const OperationDashboard = () => {
   const [moveDestination, setMoveDestination] = useState('');
   const [currentUser, setCurrentUser] = useState('');
   const [directories, setDirectories] = useState([]);
-
-  // Upload
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(null);
-
+  const [uploadingFiles, setUploadingFiles] = useState([]);
   const [fileMessages, setFileMessages] = useState({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [hideDone, setHideDone] = useState(false);
   const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
-
-  const fetchAllFilesWithMessages = async () => {
-    try {
-      const res = await axios.get('/files-with-messages', { withCredentials: true });
-      setAllFilesWithMessages(res.data || []);
-    } catch (error) {
-      console.error('Error fetching files with messages:', error);
-      message.error('Failed to load files with instructions');
-    }
-  };
-
-  const fetchMessagesForFiles = async (files) => {
-    const newMessageMap = {};
-    for (const file of files) {
-      try {
-        const res = await axios.get(`/file/messages?file_id=${file.id}`, {
-          withCredentials: true,
-        });
-        if (res.data?.length) {
-          newMessageMap[file.id] = res.data;
-        }
-      } catch (error) {
-        console.error(`Failed to fetch messages for file ID ${file.id}:`, error);
-      }
-    }
-    setFileMessages(newMessageMap);
-  };
-
-  const markAsDone = async (messageId, fileId) => {
-    try {
-      await axios.patch(
-        `/file/message/${messageId}/done`,
-        {},
-        { withCredentials: true }
-      );
-      message.success('Marked as done');
-      const res = await axios.get(`/file/messages?file_id=${fileId}`, {
-        withCredentials: true,
-      });
-      setFileMessages(prev => ({ ...prev, [fileId]: res.data }));
-      fetchAllFilesWithMessages();
-    } catch (err) {
-      console.error('Error marking message as done:', err);
-      message.error('Failed to mark as done');
-    }
-  };
 
   useEffect(() => {
     const storedUsername = localStorage.getItem('username');
@@ -136,6 +88,45 @@ const OperationDashboard = () => {
       setDirectories(res.data || []);
     } catch (error) {
       console.error('Error fetching directories:', error);
+    }
+  };
+
+  const fetchAllFilesWithMessages = async () => {
+    try {
+      const res = await axios.get('/files-with-messages', { withCredentials: true });
+      setAllFilesWithMessages(res.data || []);
+      
+      // Also update the fileMessages state for individual file messages
+      const newMessageMap = {};
+      res.data.forEach(file => {
+        if (file.messages?.length) {
+          newMessageMap[file.id] = file.messages;
+        }
+      });
+      setFileMessages(newMessageMap);
+    } catch (error) {
+      console.error('Error fetching files with messages:', error);
+      message.error('Failed to load files with instructions');
+    }
+  };
+
+  const markAsDone = async (messageId, fileId) => {
+    try {
+      await axios.patch(
+        `/file/message/${messageId}/done`,
+        {},
+        { withCredentials: true }
+      );
+      message.success('Marked as done');
+      
+      // Refresh both the all files view and individual messages
+      await Promise.all([
+        fetchAllFilesWithMessages(),
+        fetchItems()
+      ]);
+    } catch (err) {
+      console.error('Error marking message as done:', err);
+      message.error('Failed to mark as done');
     }
   };
 
@@ -160,7 +151,22 @@ const OperationDashboard = () => {
       }));
 
       setItems([...fetchedDirs, ...fetchedFiles]);
-      fetchMessagesForFiles(fetchedFiles);
+      
+      // Fetch messages for these files
+      const newMessageMap = {};
+      for (const file of fetchedFiles) {
+        try {
+          const res = await axios.get(`/file/messages?file_id=${file.id}`, {
+            withCredentials: true,
+          });
+          if (res.data?.length) {
+            newMessageMap[file.id] = res.data;
+          }
+        } catch (error) {
+          console.error(`Failed to fetch messages for file ID ${file.id}:`, error);
+        }
+      }
+      setFileMessages(newMessageMap);
     } catch (error) {
       console.error('Error fetching items:', error);
       message.error(error.response?.data?.error || 'Error fetching directory contents');
@@ -235,39 +241,39 @@ const OperationDashboard = () => {
       message.error('Please select or create a folder before uploading.');
       return;
     }
-    setUploadingFiles([]); // ✅ clear previously selected files
+    setUploadingFiles([]);
     setUploadModalVisible(true);
   };
 
-  const doModalUpload = async (isConfidential) => {
-    if (!uploadingFile) {
-      message.error('Please select a file first');
-      return;
-    }
-    if (!currentPath) {
-      message.error('Please select or create a folder first');
+  const handleModalUpload = async () => {
+    if (uploadingFiles.length === 0) {
+      message.error('Please select one or more files first');
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', uploadingFile);
-    formData.append('directory', currentPath);
-    formData.append('container', 'operation');
-
-    try {
-      const res = await axios.post('/upload', formData, {
+    const uploadPromises = uploadingFiles.map((file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('directory', currentPath);
+      formData.append('container', 'operation');
+      return axios.post('/upload', formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      message.success(res.data.message || 'File uploaded successfully');
+    });
+
+    try {
+      await Promise.all(uploadPromises);
+      message.success(`${uploadingFiles.length} file(s) uploaded successfully`);
       setUploadModalVisible(false);
-      setUploadingFile(null);
+      setUploadingFiles([]);
+      fetchItems();
+      fetchAllFilesWithMessages();
     } catch (error) {
-      console.error('Modal-based upload error:', error);
-      message.error(error.response?.data?.error || 'Error uploading file');
+      console.error('Upload error:', error);
+      message.error('One or more files failed to upload');
     }
   };
-  
 
   const handleDelete = async (record) => {
     const isOwner = record.type === 'directory' 
@@ -307,6 +313,11 @@ const OperationDashboard = () => {
     const folderPath = path.join(currentPath, folderName);
     const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
     window.open(downloadUrl, '_blank');
+  };
+
+  const handleViewFile = (file) => {
+    const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
+    window.open(previewUrl, '_blank');
   };
 
   const handleRename = (record) => {
@@ -502,6 +513,11 @@ const OperationDashboard = () => {
       render: (size, record) => record.type === 'directory' ? '--' : size
     },
     {
+      title: 'Uploader/Owner',
+      key: 'owner',
+      render: (record) => record.type === 'directory' ? record.created_by || 'N/A' : record.uploader || 'N/A'
+    },
+    {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
@@ -513,7 +529,7 @@ const OperationDashboard = () => {
           <Space>
             {record.type === 'file' && (
               <Tooltip title="View File">
-                <Button icon={<FileOutlined />} onClick={() => window.open(`http://localhost:8080/preview?directory=${encodeURIComponent(record.directory)}&filename=${encodeURIComponent(record.name)}`, '_blank')} />
+                <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
               </Tooltip>
             )}
             <Tooltip title={record.type === 'directory' ? 'Download Folder' : 'Download File'}>
@@ -646,7 +662,7 @@ const OperationDashboard = () => {
           </Col>
           <Col>
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
-              Upload File
+              Upload File(s)
             </Button>
           </Col>
         </Row>
@@ -783,45 +799,47 @@ const OperationDashboard = () => {
 
         {/* Upload Modal */}
         <Modal
-          title="Upload File"
+          title="Upload File(s)"
           visible={uploadModalVisible}
           onOk={handleModalUpload}
           onCancel={() => {
             setUploadModalVisible(false);
             setUploadingFiles([]);
           }}
-          
           okText="Upload"
         >
           <p>Target Folder: {currentPath || '(none)'}</p>
           <Form layout="vertical">
             <Form.Item>
-            <Button
-  icon={<UploadOutlined />}
-  onClick={() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true; // ✅ allow multiple files
-    input.onchange = (e) => {
-      const files = Array.from(e.target.files || []);
-      if (files.length > 0) {
-        setUploadingFiles(files);
-      }
-    };
-    input.click();
-  }}
->
-  Select File(s)
-</Button>
-
+              <Button
+                icon={<UploadOutlined />}
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.multiple = true;
+                  input.onchange = (e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) {
+                      setUploadingFiles(files);
+                    }
+                  };
+                  input.click();
+                }}
+              >
+                Select File(s)
+              </Button>
             </Form.Item>
 
-            {uploadingFile && (
+            {uploadingFiles.length > 0 && (
               <Card size="small" style={{ marginTop: 16 }}>
-                <strong>Selected File:</strong> {uploadingFile.name}
+                <strong>Selected Files:</strong>
+                <ul style={{ marginTop: 8 }}>
+                  {uploadingFiles.map((file, idx) => (
+                    <li key={idx}>{file.name}</li>
+                  ))}
+                </ul>
               </Card>
             )}
-
           </Form>
         </Modal>
       </Content>
