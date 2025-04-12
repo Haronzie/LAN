@@ -80,8 +80,8 @@ const OperationDashboard = () => {
   const [directories, setDirectories] = useState([]);
 
   // Upload
-  const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(null);
+const [uploadModalVisible, setUploadModalVisible] = useState(false);
+const [uploadingFiles, setUploadingFiles] = useState([]);
 
   const [fileMessages, setFileMessages] = useState({});
 
@@ -331,38 +331,41 @@ useEffect(() => {
       message.error('Please select or create a folder before uploading.');
       return;
     }
-    setUploadingFile(null);
+    setUploadingFiles([]); // ✅ clear previously selected files
     setUploadModalVisible(true);
   };
+  
 
-  const doModalUpload = async (isConfidential) => {
-    if (!uploadingFile) {
-      message.error('Please select a file first');
+  const doModalUpload = async () => {
+    if (uploadingFiles.length === 0) {
+      message.error('Please select one or more files first');
       return;
     }
-    if (!currentPath) {
-      message.error('Please select or create a folder first');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', uploadingFile);
-    formData.append('directory', currentPath);
-    formData.append('container', 'operation');
-
-    try {
-      const res = await axios.post('/upload', formData, {
+  
+    const uploadPromises = uploadingFiles.map((file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('directory', currentPath);
+      formData.append('container', 'operation');
+  
+      return axios.post('/upload', formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      message.success(res.data.message || 'File uploaded successfully');
+    });
+  
+    try {
+      await Promise.all(uploadPromises);
+      message.success(`${uploadingFiles.length} file(s) uploaded successfully`);
       setUploadModalVisible(false);
-      setUploadingFile(null);
+      setUploadingFiles([]);
+      fetchItems(); // refresh file list
     } catch (error) {
-      console.error('Modal-based upload error:', error);
-      message.error(error.response?.data?.error || 'Error uploading file');
+      console.error('Bulk upload error:', error);
+      message.error('One or more files failed to upload');
     }
   };
+  
 
   const handleModalUpload = () => {
     doModalUpload();
@@ -961,36 +964,45 @@ useEffect(() => {
           onOk={handleModalUpload}
           onCancel={() => {
             setUploadModalVisible(false);
-            setUploadingFile(null);
+            setUploadingFiles([]);
           }}
+          
           okText="Upload"
         >
           <p>Target Folder: {currentPath || '(none)'}</p>
           <Form layout="vertical">
             <Form.Item>
-              <Button
-                icon={<UploadOutlined />}
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.onchange = (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setUploadingFile(file);
-                    }
-                  };
-                  input.click();
-                }}
-              >
-                Select File
-              </Button>
+            <Button
+  icon={<UploadOutlined />}
+  onClick={() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true; // ✅ allow multiple files
+    input.onchange = (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length > 0) {
+        setUploadingFiles(files);
+      }
+    };
+    input.click();
+  }}
+>
+  Select File(s)
+</Button>
+
             </Form.Item>
 
-            {uploadingFile && (
-              <Card size="small" style={{ marginTop: 16 }}>
-                <strong>Selected File:</strong> {uploadingFile.name}
-              </Card>
-            )}
+            {uploadingFiles.length > 0 && (
+  <Card size="small" style={{ marginTop: 16 }}>
+    <strong>Selected Files:</strong>
+    <ul style={{ marginTop: 8 }}>
+      {uploadingFiles.map((file, idx) => (
+        <li key={idx}>{file.name}</li>
+      ))}
+    </ul>
+  </Card>
+)}
+
 
           </Form>
         </Modal>

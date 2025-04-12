@@ -1080,3 +1080,88 @@ func (fc *FileController) MarkFileMessageAsDone(w http.ResponseWriter, r *http.R
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Marked as done"})
 }
+func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Failed to parse form")
+		return
+	}
+
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	targetDir := r.FormValue("directory")
+	container := r.FormValue("container")
+	if targetDir == "" || container == "" {
+		models.RespondError(w, http.StatusBadRequest, "Directory and container are required")
+		return
+	}
+
+	files := r.MultipartForm.File["files"]
+	if len(files) == 0 {
+		models.RespondError(w, http.StatusBadRequest, "No files provided")
+		return
+	}
+
+	var uploadedCount int
+
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			continue
+		}
+		defer file.Close()
+
+		rawFileName := fileHeader.Filename
+		relativePath := filepath.Join(targetDir, rawFileName)
+		finalDiskPath := filepath.Join("Cdrrmo", relativePath)
+
+		// Handle overwrite/keep-both logic as in single upload
+		existingFR, _ := fc.App.GetFileRecordByPath(relativePath)
+		if existingFR.ID != 0 {
+			base := strings.TrimSuffix(rawFileName, filepath.Ext(rawFileName))
+			ext := filepath.Ext(rawFileName)
+			counter := 1
+			for {
+				altName := fmt.Sprintf("%s_%d%s", base, counter, ext)
+				altPath := filepath.Join(targetDir, altName)
+				if _, err := fc.App.GetFileRecordByPath(altPath); err != nil {
+					relativePath = altPath
+					finalDiskPath = filepath.Join("Cdrrmo", altPath)
+					break
+				}
+				counter++
+			}
+		}
+
+		_ = os.MkdirAll(filepath.Dir(finalDiskPath), 0755)
+		tempFilePath := finalDiskPath + ".tmp"
+		tempFile, _ := os.Create(tempFilePath)
+		io.Copy(tempFile, file)
+		tempFile.Close()
+
+		key := []byte(os.Getenv("ENCRYPTION_KEY"))
+		encryption.EncryptFile(key, tempFilePath, finalDiskPath)
+		os.Remove(tempFilePath)
+
+		fr := models.FileRecord{
+			FileName:    filepath.Base(relativePath),
+			FilePath:    relativePath,
+			Directory:   targetDir,
+			Size:        fileHeader.Size,
+			ContentType: fileHeader.Header.Get("Content-Type"),
+			Uploader:    user.Username,
+		}
+		fc.App.CreateFileRecord(fr)
+		fileID, _ := fc.App.GetFileIDByPath(fr.FilePath)
+		fc.App.CreateFileVersion(fileID, 1, fr.FilePath)
+
+		uploadedCount++
+	}
+
+	models.RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"message": fmt.Sprintf("%d file(s) uploaded successfully", uploadedCount),
+	})
+}
