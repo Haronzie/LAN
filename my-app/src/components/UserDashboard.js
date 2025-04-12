@@ -1,7 +1,15 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Button, message, Typography } from 'antd';
-import { MenuOutlined } from '@ant-design/icons';
+import { 
+  MenuOutlined,
+  HomeOutlined,
+  DeploymentUnitOutlined,
+  ReadOutlined,
+  ExperimentOutlined,
+  DatabaseOutlined,
+  SettingOutlined
+} from '@ant-design/icons';
 import axios from 'axios';
 import UserDashboardHome from './UserDashboardHome';
 import TrainingDashboard from './TrainingDashboard';
@@ -132,22 +140,22 @@ const UserDashboard = () => {
           defaultSelectedKeys={['home']}
           style={{ height: 'calc(100vh - 64px)', overflowY: 'auto' }}
         >
-          <Menu.Item key="home">
+          <Menu.Item key="home" icon={<HomeOutlined />}>
             <Link to="/user/home">Home</Link>
           </Menu.Item>
-          <Menu.Item key="operation">
+          <Menu.Item key="operation" icon={<DeploymentUnitOutlined />}>
             <Link to="/user/operation">Operation</Link>
           </Menu.Item>
-          <Menu.Item key="training">
+          <Menu.Item key="training" icon={<ReadOutlined />}>
             <Link to="/user/training">Training</Link>
           </Menu.Item>
-          <Menu.Item key="research">
+          <Menu.Item key="research" icon={<ExperimentOutlined />}>
             <Link to="/user/research">Research</Link>
           </Menu.Item>
-          <Menu.Item key="inventory">
+          <Menu.Item key="inventory" icon={<DatabaseOutlined />}>
             <Link to="/user/inventory">Inventory</Link>
           </Menu.Item>
-          <Menu.Item key="settings">
+          <Menu.Item key="settings" icon={<SettingOutlined />}>
             <Link to="/user/settings">Settings</Link>
           </Menu.Item>
         </Menu>

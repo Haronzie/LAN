@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Row, Col, Card, Statistic, List, Button, Typography, message } from 'antd';
 import { Column } from '@ant-design/charts';
+import { UserOutlined, FileOutlined, TeamOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 const AdminDashboardHome = () => {
   const [users, setUsers] = useState([]);
@@ -28,8 +29,9 @@ const AdminDashboardHome = () => {
     data: userStats,
     xField: 'type',
     yField: 'count',
-    height: 180,
+    height: 220,
     columnStyle: { radius: [4, 4, 0, 0] },
+    color: ['#1890ff', '#13c2c2'],
     label: {
       position: 'top',
       style: {
@@ -87,45 +89,108 @@ const AdminDashboardHome = () => {
   }, []);
 
   return (
-    <div style={{ padding: 24 }}>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12}>
-          <Card>
-            <Statistic title="Total Users" value={totalUsers} loading={loadingUsers} />
+    <div style={{ padding: '16px 24px', maxWidth: 1200, margin: '0 auto' }}>
+      <Title level={3} style={{ marginBottom: 24, textAlign: 'center' }}>Dashboard</Title>
+      
+      <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12} md={8}>
+          <Card 
+            bodyStyle={{ padding: '24px' }}
+            style={{ height: '100%', borderRadius: 8 }}
+            hoverable
+          >
+            <Statistic 
+              title="Total Users" 
+              value={totalUsers} 
+              loading={loadingUsers}
+              valueStyle={{ fontSize: 32, fontWeight: 600 }}
+              prefix={<UserOutlined />}
+            />
           </Card>
         </Col>
-        <Col xs={24} sm={12}>
-          <Card>
-            <Statistic title="Total Files" value={totalFiles} loading={loadingFiles} />
+        
+        <Col xs={24} sm={12} md={8}>
+          <Card 
+            bodyStyle={{ padding: '24px' }}
+            style={{ height: '100%', borderRadius: 8 }}
+            hoverable
+          >
+            <Statistic 
+              title="Total Files" 
+              value={totalFiles} 
+              loading={loadingFiles}
+              valueStyle={{ fontSize: 32, fontWeight: 600 }}
+              prefix={<FileOutlined />}
+            />
+          </Card>
+        </Col>
+        
+        <Col xs={24} md={8}>
+          <Card 
+            bodyStyle={{ padding: '24px' }}
+            style={{ height: '100%', borderRadius: 8 }}
+            hoverable
+          >
+            <Statistic 
+              title="Admin Users" 
+              value={adminCount} 
+              loading={loadingUsers}
+              valueStyle={{ fontSize: 32, fontWeight: 600 }}
+              prefix={<TeamOutlined />}
+            />
           </Card>
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
-        <Col xs={24} md={12}>
-          <Card title="Audit Logs">
-            <List
-              size="small"
-              dataSource={auditLogs.slice(0, 5)}
-              renderItem={(item) => (
-                <List.Item>
-                  <Text>
-                    <strong>{new Date(item.created_at).toLocaleTimeString()}</strong>: {item.details}
-                  </Text>
-                </List.Item>
-              )}
-            />
-            <div style={{ textAlign: 'right', marginTop: 8 }}>
-              <Button type="link" size="small" onClick={() => navigate('audit-logs')}>
-                View All
-              </Button>
-            </div>
+      <Row gutter={[24, 24]}>
+        <Col xs={24} lg={12}>
+          <Card 
+            title="User Role Distribution"
+            style={{ borderRadius: 8 }}
+            headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
+            bodyStyle={{ padding: '16px 24px' }}
+          >
+            <Column {...chartConfig} />
           </Card>
         </Col>
-
-        <Col xs={24} md={12}>
-          <Card title="User Role Distribution">
-            <Column {...chartConfig} />
+        
+        <Col xs={24} lg={12}>
+          <Card 
+            title="Recent Audit Logs"
+            style={{ borderRadius: 8 }}
+            headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
+            bodyStyle={{ padding: '16px 24px' }}
+            extra={
+              <Button 
+                type="link" 
+                size="small" 
+                onClick={() => navigate('audit-logs')}
+                style={{ padding: '0 4px' }}
+              >
+                View All
+              </Button>
+            }
+          >
+            {auditLogs.length > 0 ? (
+              <List
+                size="small"
+                dataSource={auditLogs.slice(0, 5)}
+                renderItem={(item) => (
+                  <List.Item style={{ padding: '8px 0' }}>
+                    <div style={{ width: '100%' }}>
+                      <Text strong style={{ display: 'block' }}>
+                        {new Date(item.created_at).toLocaleString()}
+                      </Text>
+                      <Text type="secondary" style={{ display: 'block' }}>
+                        {item.details}
+                      </Text>
+                    </div>
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <Text type="secondary">No audit logs available</Text>
+            )}
           </Card>
         </Col>
       </Row>
