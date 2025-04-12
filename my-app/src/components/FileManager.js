@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback,useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Layout,
   Table,
@@ -40,14 +40,10 @@ const { Content } = Layout;
 const { Option } = Select;
 const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 
-
-// Professional Searchable Dropdown Component for Grant/Revoke access
-// Professional Searchable Dropdown Component for Grant/Revoke access
-const UserSearchSelect = ({ value, onUserSelect }) => {
+const UserSearchSelect = ({ value, onUserSelect, required }) => {
   const [options, setOptions] = useState([]);
   const [fetching, setFetching] = useState(false);
 
-  // Debounced search function to reduce API calls
   const fetchUserOptions = useCallback(
     debounce(async (value) => {
       if (!value) {
@@ -58,7 +54,6 @@ const UserSearchSelect = ({ value, onUserSelect }) => {
       setFetching(true);
       try {
         const response = await axios.get(`/users?search=${value}`, { withCredentials: true });
-        // Assuming the endpoint returns an array of user objects with a 'username' property.
         setOptions(response.data || []);
       } catch (error) {
         console.error('Error fetching users:', error);
@@ -86,6 +81,7 @@ const UserSearchSelect = ({ value, onUserSelect }) => {
       style={{ width: '100%' }}
       allowClear
       value={value}
+      status={required && !value ? 'error' : ''}
     >
       {options.map((user) => (
         <Option key={user.username} value={user.username}>
@@ -96,14 +92,11 @@ const UserSearchSelect = ({ value, onUserSelect }) => {
   );
 };
 
-
-// Helper: split a path like "Folder/Subfolder" into segments
 function getPathSegments(p) {
   if (!p) return [];
   return p.split('/').filter(Boolean);
 }
 
-// Convert file size to human-readable format
 function formatFileSize(size) {
   if (size === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -112,10 +105,30 @@ function formatFileSize(size) {
 }
 
 const FileManager = () => {
-  const [items, setItems] = useState([]); // files + directories
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [currentPath, setCurrentPath] = useState(''); // "" = root
+  const [currentPath, setCurrentPath] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [createFolderModal, setCreateFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(null);
+  const [fileUploadMessage, setFileUploadMessage] = useState('');
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [renameNewName, setRenameNewName] = useState('');
+  const [copyModalVisible, setCopyModalVisible] = useState(false);
+  const [copyNewName, setCopyNewName] = useState('');
+  const [copyItem, setCopyItem] = useState(null);
+  const [moveModalVisible, setMoveModalVisible] = useState(false);
+  const [moveDestination, setMoveDestination] = useState('');
+  const [moveItem, setMoveItem] = useState(null);
+  const [folderTreeData, setFolderTreeData] = useState([]);
+  const [selectedDestination, setSelectedDestination] = useState('');
+  const [targetUsername, setTargetUsername] = useState('');
+
+  const navigate = useNavigate();
+  const isRoot = currentPath === '';
 
   const generateSuggestedName = async (baseName, extension, destinationPath) => {
     try {
@@ -138,41 +151,6 @@ const FileManager = () => {
     }
   };
 
-  // Create folder modal
-  const [createFolderModal, setCreateFolderModal] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
-
-  // Upload modal states
-  const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(null);
-  const [fileUploadMessage, setFileUploadMessage] = useState('');
-
-
-  // Rename modal
-  const [renameModalVisible, setRenameModalVisible] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [renameNewName, setRenameNewName] = useState('');
-
-  // Copy modal
-  const [copyModalVisible, setCopyModalVisible] = useState(false);
-  const [copyNewName, setCopyNewName] = useState('');
-  const [copyItem, setCopyItem] = useState(null);
-
-  // Move modal
-  const [moveModalVisible, setMoveModalVisible] = useState(false);
-  const [moveDestination, setMoveDestination] = useState('');
-  const [moveItem, setMoveItem] = useState(null);
-
-  // Folder tree for optional destination selection
-  const [folderTreeData, setFolderTreeData] = useState([]);
-  const [selectedDestination, setSelectedDestination] = useState('');
-
-  const [targetUsername, setTargetUsername] = useState('');
-
-  const navigate = useNavigate();
-  const isRoot = currentPath === '';
-
-  // Fetch items for the current folder
   const fetchItems = async () => {
     setLoading(true);
     try {
@@ -201,7 +179,6 @@ const FileManager = () => {
           parent: '',
         }));
   
-        // Merge while avoiding duplicates
         const dirNames = directories.map((d) => d.name);
         fixedFolders.forEach((folder) => {
           if (!dirNames.includes(folder.name)) {
@@ -218,9 +195,7 @@ const FileManager = () => {
       setLoading(false);
     }
   };
-  
 
-  // Fetch entire folder tree on mount
   const fetchFolderTree = async () => {
     try {
       const res = await axios.get('/directory/tree', { withCredentials: true });
@@ -234,16 +209,15 @@ const FileManager = () => {
     fetchFolderTree();
   }, []);
 
-  // Reload items when currentPath changes
   useEffect(() => {
     fetchItems();
   }, [currentPath]);
 
-  // Optional polling every 10 seconds
   useEffect(() => {
     const interval = setInterval(fetchItems, 10000);
     return () => clearInterval(interval);
   }, [currentPath]);
+
   useEffect(() => {
     const updateSuggestedName = async () => {
       if (copyItem && copyItem.type === 'file') {
@@ -258,12 +232,10 @@ const FileManager = () => {
     updateSuggestedName();
   }, [selectedDestination]);
 
-  // Filter items by search term
   const filteredItems = items.filter((item) =>
     (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Create folder
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -286,7 +258,6 @@ const FileManager = () => {
     }
   };
 
-  // Folder navigation
   const handleFolderClick = (folderName) => {
     const newPath = isRoot ? folderName : path.join(currentPath, folderName);
     setCurrentPath(newPath);
@@ -302,10 +273,6 @@ const FileManager = () => {
     };
     return disableCurrent(folderTreeData);
   }, [folderTreeData, currentPath]);
-  
-  
-
-  
 
   const handleGoUp = () => {
     if (isRoot) return;
@@ -319,7 +286,6 @@ const FileManager = () => {
     setCurrentPath(newPath);
   };
 
-  // Upload handling
   const handleOpenUploadModal = () => {
     if (isRoot) {
       message.error('Please select an existing folder before uploading a file.');
@@ -328,16 +294,19 @@ const FileManager = () => {
     setUploadingFile(null);
     setUploadModalVisible(true);
   };
+
   const handleUpload = async () => {
     if (!uploadingFile) {
       message.error('Please select a file first');
       return;
     }
-    if (!targetUsername) {
-      message.error('Please select a valid user to send the file to.');
+
+    // Only require target user if there's a message
+    if (fileUploadMessage.trim() && !targetUsername) {
+      message.error('Please select a valid user to send the file to when including a message.');
       return;
     }
-  
+
     const filename = uploadingFile.name;
     const formData = new FormData();
     formData.append('file', uploadingFile);
@@ -384,9 +353,7 @@ const FileManager = () => {
   
       const { message: uploadMsg, file_id } = res.data;
   
-      if (!file_id) {
-        message.warning('Upload succeeded but file ID not returned — message not sent.');
-      } else if (fileUploadMessage.trim() && targetUsername.trim()) {
+      if (fileUploadMessage.trim() && targetUsername.trim()) {
         try {
           await axios.post('/file/message', {
             file_id,
@@ -412,10 +379,7 @@ const FileManager = () => {
       message.error(error.response?.data?.error || 'Upload error');
     }
   };
-  
-  
-  
-  // Delete file or folder
+
   const handleDelete = async (record) => {
     try {
       if (record.type === 'directory') {
@@ -443,14 +407,12 @@ const FileManager = () => {
     }
   };
 
-  // Download file or folder
   const handleDownload = (fileName) => {
     const encodedDir = encodeURIComponent(currentPath || '');
     const encodedFile = encodeURIComponent(fileName.trim());
     const downloadUrl = `${BASE_URL}/download?directory=${encodedDir}&filename=${encodedFile}`;
     window.open(downloadUrl, '_blank');
   };
-  
 
   const handleDownloadFolder = (folderName) => {
     const folderPath = currentPath ? `${currentPath}/${folderName}` : folderName;
@@ -458,7 +420,6 @@ const FileManager = () => {
     const downloadUrl = `${BASE_URL}/download-folder?directory=${encodedPath}`;
     window.open(downloadUrl, '_blank');
   };
-  
 
   const handleViewFile = (file) => {
     const encodedDir = encodeURIComponent(currentPath || '');
@@ -466,9 +427,7 @@ const FileManager = () => {
     const previewUrl = `${BASE_URL}/preview?directory=${encodedDir}&filename=${encodedFile}`;
     window.open(previewUrl, '_blank');
   };
-  
 
-  // Rename
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
       message.error('New name cannot be empty');
@@ -506,7 +465,6 @@ const FileManager = () => {
     }
   };
 
-  // Copy
   const handleCopy = async (record) => {
     const name = record.name;
     const ext = path.extname(name);
@@ -517,7 +475,6 @@ const FileManager = () => {
     setCopyNewName(suggested);
     setCopyModalVisible(true);
   };
-  
 
   const handleCopyConfirm = async () => {
     if (!copyNewName.trim()) {
@@ -564,12 +521,11 @@ const FileManager = () => {
       message.error(err.response?.data?.error || 'Error copying item');
     }
   };
-  
 
   const handleMove = (record) => {
     setMoveItem(record);
-    setMoveDestination(''); // clear previous
-    setMoveModalVisible(true); // show modal to let user pick folder first
+    setMoveDestination('');
+    setMoveModalVisible(true);
   };
 
   const handleMoveConfirm = async () => {
@@ -584,7 +540,6 @@ const FileManager = () => {
     }
   
     try {
-      // Only check for name conflicts on files
       if (moveItem.type === 'file') {
         const res = await axios.get(`/files?directory=${encodeURIComponent(moveDestination)}`, {
           withCredentials: true
@@ -616,7 +571,6 @@ const FileManager = () => {
                       try {
                         await finalizeMove(true);
                         setMoveModalVisible(false); 
-
                         conflictModal.destroy();
                       } catch (err) {
                         console.error('Replace failed:', err);
@@ -661,18 +615,16 @@ const FileManager = () => {
             cancelButtonProps: { style: { display: 'none' } },
           });
   
-          return; // Wait for user interaction in modal
+          return;
         }
       }
   
-      // If no conflict or moving a folder
       await finalizeMove(false);
     } catch (err) {
       console.error('Move error:', err);
       message.error('Error checking for conflict or moving file');
     }
   };
-  
   
   const finalizeMove = async (overwrite) => {
     try {
@@ -702,25 +654,21 @@ const FileManager = () => {
       message.success(`Moved '${moveItem.name}' successfully`);
       
       setMoveModalVisible(false);
-setMoveDestination('');
-setMoveItem(null);
+      setMoveDestination('');
+      setMoveItem(null);
 
-// If we just moved something out of the current folder, and it's now empty, redirect
-if (moveDestination !== currentPath) {
-  setCurrentPath(moveDestination);
-} else {
-  fetchItems(); 
-}
-fetchFolderTree(); // Always refresh tree
+      if (moveDestination !== currentPath) {
+        setCurrentPath(moveDestination);
+      } else {
+        fetchItems(); 
+      }
+      fetchFolderTree();
     } catch (err) {
       console.error('Move error:', err);
       message.error(err.response?.data?.error || 'Error moving item');
     }
   };
-  
-  
 
-  // Table columns
   const columns = [
     {
       title: 'Name',
@@ -756,14 +704,12 @@ fetchFolderTree(); // Always refresh tree
       render: (record) => {
         return (
           <Space>
-            {/* View File */}
             {record.type === 'file' && (
               <Tooltip title="View File">
                 <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
               </Tooltip>
             )}
 
-            {/* Download */}
             {record.type === 'file' && (
               <Tooltip title="Download">
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
@@ -775,7 +721,6 @@ fetchFolderTree(); // Always refresh tree
               </Tooltip>
             )}
 
-            {/* Rename */}
             <Tooltip title="Rename">
               <Button
                 icon={<EditOutlined />}
@@ -787,28 +732,23 @@ fetchFolderTree(); // Always refresh tree
               />
             </Tooltip>
 
-            {/* Copy */}
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
 
-            {/* Move */}
             <Tooltip title="Move">
               <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
             </Tooltip>
 
-            {/* Delete */}
             <Tooltip title="Delete">
               <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
             </Tooltip>
-            
           </Space>
         );
       }
     }
   ];
 
-  // Breadcrumb
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
     <Breadcrumb.Item key="root">
@@ -826,16 +766,16 @@ fetchFolderTree(); // Always refresh tree
   return (
     <Layout style={{ minHeight: '91vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col flex="auto" style={{ textAlign: 'center' }}>
-          <h2 style={{ margin: 0 }}>File Manager</h2>
-        </Col>
-        <Col>
-          <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
-            Upload File
-          </Button>
-        </Col>
-      </Row>
+        <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+          <Col flex="auto" style={{ textAlign: 'center' }}>
+            <h2 style={{ margin: 0 }}>File Manager</h2>
+          </Col>
+          <Col>
+            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+              Upload File
+            </Button>
+          </Col>
+        </Row>
 
         {segments.length > 0 && (
           <Row style={{ marginBottom: 16 }}>
@@ -876,7 +816,6 @@ fetchFolderTree(); // Always refresh tree
           pagination={{ pageSize: 10 }}
         />
 
-        {/* Create Folder Modal */}
         <Modal
           title="Create New Folder"
           visible={createFolderModal}
@@ -895,7 +834,6 @@ fetchFolderTree(); // Always refresh tree
           </Form>
         </Modal>
 
-        {/* Rename Modal */}
         <Modal
           title="Rename Item"
           visible={renameModalVisible}
@@ -914,53 +852,48 @@ fetchFolderTree(); // Always refresh tree
           </Form>
         </Modal>
 
-        {/* Upload Modal */}
         <Modal
-  title="Upload File"
-  visible={uploadModalVisible}
-  onCancel={() => setUploadModalVisible(false)}
-  onOk={handleUpload}
->
-  <Upload
-    beforeUpload={(file) => {
-      setUploadingFile(file);
-      return false;
-    }}
-    showUploadList={false}
-  >
-    <Button icon={<UploadOutlined />}>Select File</Button>
-  </Upload>
-  <div style={{ marginTop: 8 }}>
-    {uploadingFile && <p>Selected: {uploadingFile.name}</p>}
-  </div>
+          title="Upload File"
+          visible={uploadModalVisible}
+          onCancel={() => setUploadModalVisible(false)}
+          onOk={handleUpload}
+        >
+          <Upload
+            beforeUpload={(file) => {
+              setUploadingFile(file);
+              return false;
+            }}
+            showUploadList={false}
+          >
+            <Button icon={<UploadOutlined />}>Select File</Button>
+          </Upload>
+          <div style={{ marginTop: 8 }}>
+            {uploadingFile && <p>Selected: {uploadingFile.name}</p>}
+          </div>
 
-  <Form.Item label="Instruction (optional)">
-    <Input.TextArea
-      value={fileUploadMessage}
-      onChange={(e) => setFileUploadMessage(e.target.value)}
-      rows={3}
-      placeholder="Add a message or instruction to this file (optional)"
-    />
-  </Form.Item>
+          <Form.Item label="Instruction (optional)">
+            <Input.TextArea
+              value={fileUploadMessage}
+              onChange={(e) => setFileUploadMessage(e.target.value)}
+              rows={3}
+              placeholder="Add a message or instruction to this file (optional)"
+            />
+          </Form.Item>
 
-  {/* ✅ Add this below the instruction */}
-  <Form.Item
-  label="Send to User"
-  required
-  tooltip="Begin typing to search for a registered user"
-  validateStatus={!targetUsername ? 'error' : ''}
-  help={!targetUsername ? 'Please select a user before uploading.' : ''}
->
-  <UserSearchSelect 
-    value={targetUsername}
-    onUserSelect={(value) => setTargetUsername(value)} 
-  />
-</Form.Item>
+          <Form.Item
+            label="Send to User"
+            tooltip="Begin typing to search for a registered user"
+            validateStatus={fileUploadMessage.trim() && !targetUsername ? 'error' : ''}
+            help={fileUploadMessage.trim() && !targetUsername ? 'Please select a user when including a message.' : ''}
+          >
+            <UserSearchSelect 
+              value={targetUsername}
+              onUserSelect={(value) => setTargetUsername(value)}
+              required={!!fileUploadMessage.trim()}
+            />
+          </Form.Item>
+        </Modal>
 
-</Modal>
-
-
-        {/* Copy Modal */}
         <Modal
           title="Copy Item"
           visible={copyModalVisible}
@@ -990,7 +923,6 @@ fetchFolderTree(); // Always refresh tree
           </Form>
         </Modal>
 
-        {/* Move Modal */}
         <Modal
           title="Move Item"
           visible={moveModalVisible}
@@ -998,8 +930,6 @@ fetchFolderTree(); // Always refresh tree
           onCancel={() => setMoveModalVisible(false)}
           okText="Move"
         >
-
-          
           <Form layout="vertical">
             <Form.Item label="Destination Folder" required>
               <TreeSelect
@@ -1014,7 +944,6 @@ fetchFolderTree(); // Always refresh tree
             </Form.Item>
           </Form>
         </Modal>
-
       </Content>
     </Layout>
   );
