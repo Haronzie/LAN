@@ -199,11 +199,34 @@ const FileManager = () => {
   const fetchFolderTree = async () => {
     try {
       const res = await axios.get('/directory/tree', { withCredentials: true });
-      setFolderTreeData(res.data || []);
+      let data = res.data || [];
+  
+      const fixedFolders = ['Operation', 'Research', 'Training'];
+  
+      // Ensure fixed folders are present
+      const existingTitles = new Set(data.map(d => d.title));
+      fixedFolders.forEach(folder => {
+        if (!existingTitles.has(folder)) {
+          data.push({
+            title: folder,
+            value: folder,
+            key: folder,
+            children: []
+          });
+        }
+      });
+  
+      setFolderTreeData(data);
     } catch (error) {
       console.error('Error fetching folder tree:', error);
+      setFolderTreeData([
+        { title: 'Operation', value: 'Operation', key: 'Operation', children: [] },
+        { title: 'Research', value: 'Research', key: 'Research', children: [] },
+        { title: 'Training', value: 'Training', key: 'Training', children: [] },
+      ]);
     }
   };
+  
 
   useEffect(() => {
     fetchFolderTree();
@@ -652,22 +675,19 @@ const FileManager = () => {
       }
   
       message.success(`Moved '${moveItem.name}' successfully`);
-      
+  
       setMoveModalVisible(false);
       setMoveDestination('');
       setMoveItem(null);
-
-      if (moveDestination !== currentPath) {
-        setCurrentPath(moveDestination);
-      } else {
-        fetchItems(); 
-      }
+  
+      fetchItems();  // Stay in current folder
       fetchFolderTree();
     } catch (err) {
       console.error('Move error:', err);
       message.error(err.response?.data?.error || 'Error moving item');
     }
   };
+  
 
   const columns = [
     {
