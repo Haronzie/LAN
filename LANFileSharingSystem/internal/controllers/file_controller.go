@@ -914,6 +914,8 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 	fc.App.LogActivity(fmt.Sprintf("User '%s' previewed file '%s' (ID: %d)", user.Username, fr.FileName, fr.ID))
 }
 
+// inside SendFileMessage, add filePath before building the notification
+
 func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request) {
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
@@ -921,7 +923,6 @@ func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// ⛔ Only allow admins to send instructions
 	if user.Role != "admin" {
 		models.RespondError(w, http.StatusForbidden, "Only admins can send file instructions")
 		return
@@ -933,14 +934,20 @@ func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// ✅ Optional: Check required fields
 	if msg.FileID == 0 || msg.Receiver == "" || msg.Message == "" {
 		models.RespondError(w, http.StatusBadRequest, "Missing file ID, receiver, or message content")
 		return
 	}
 
-	// 🛡️ Enforce sender identity from session
 	msg.Sender = user.Username
+
+	// retrieve file path for this file ID
+	var filePath string
+	err = fc.App.DB.QueryRow(`SELECT file_path FROM files WHERE id = $1`, msg.FileID).Scan(&filePath)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "File path not found for given ID")
+		return
+	}
 
 	_, err = fc.App.DB.Exec(
 		`INSERT INTO file_messages (file_id, sender, receiver, message) VALUES ($1, $2, $3, $4)`,
@@ -951,8 +958,23 @@ func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if fc.App.NotificationHub != nil {
+		notification := map[string]string{
+			"type":      "new_instruction",
+			"receiver":  msg.Receiver,
+			"message":   msg.Message,
+			"file_id":   fmt.Sprintf("%d", msg.FileID),
+			"sender":    msg.Sender,
+			"file_path": filePath,
+		}
+
+		notifBytes, _ := json.Marshal(notification)
+		fc.App.NotificationHub.SendToUser(msg.Receiver, notifBytes)
+	}
+
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Instruction sent"})
 }
+
 func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request) {
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
@@ -1114,6 +1136,8 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	container := r.FormValue("container")
 	overwrite := r.FormValue("overwrite") == "true"
 	skip := r.FormValue("skip") == "true"
+	instruction := r.FormValue("message")
+	receiver := r.FormValue("receiver")
 
 	if targetDir == "" || container == "" {
 		models.RespondError(w, http.StatusBadRequest, "Directory and container are required")
@@ -1132,6 +1156,10 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 		rawFileName := fileHeader.Filename
 		status := "unknown"
 
+		var fileID int
+		var finalDiskPath string
+		var relativePath string
+
 		func() {
 			file, err := fileHeader.Open()
 			if err != nil {
@@ -1140,8 +1168,8 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			}
 			defer file.Close()
 
-			relativePath := filepath.Join(targetDir, rawFileName)
-			finalDiskPath := filepath.Join("Cdrrmo", relativePath)
+			relativePath = filepath.Join(targetDir, rawFileName)
+			finalDiskPath = filepath.Join("Cdrrmo", relativePath)
 
 			existingFR, getErr := fc.App.GetFileRecordByPath(relativePath)
 
@@ -1166,7 +1194,7 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 					}
 					status = "renamed"
 				} else {
-					fileID := existingFR.ID
+					fileID = existingFR.ID
 					updateErr := fc.App.UpdateFileMetadata(fileID, fileHeader.Size, fileHeader.Header.Get("Content-Type"))
 					if updateErr == nil {
 						latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
@@ -1189,17 +1217,17 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if _, err := io.Copy(tempFile, file); err != nil {
-				status = "error: write failed"
 				tempFile.Close()
 				os.Remove(tempFilePath)
+				status = "error: write failed"
 				return
 			}
 			tempFile.Close()
 
 			key := []byte(os.Getenv("ENCRYPTION_KEY"))
 			if err := encryption.EncryptFile(key, tempFilePath, finalDiskPath); err != nil {
-				status = "error: encryption failed"
 				os.Remove(tempFilePath)
+				status = "error: encryption failed"
 				return
 			}
 			os.Remove(tempFilePath)
@@ -1217,11 +1245,34 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 					status = "error: DB insert failed"
 					return
 				}
-				fileID, _ := fc.App.GetFileIDByPath(fr.FilePath)
+				fileID, _ = fc.App.GetFileIDByPath(fr.FilePath)
 				_ = fc.App.CreateFileVersion(fileID, 1, fr.FilePath)
 				status = "uploaded"
 			}
 		}()
+
+		// 👇 Add message if present
+		if status == "uploaded" || status == "overwritten" {
+			if instruction != "" && receiver != "" && fileID > 0 {
+				_, _ = fc.App.DB.Exec(`INSERT INTO file_messages (file_id, sender, receiver, message) VALUES ($1, $2, $3, $4)`,
+					fileID, user.Username, receiver, instruction)
+
+				if fc.App.NotificationHub != nil {
+					var filePath string
+					_ = fc.App.DB.QueryRow(`SELECT file_path FROM files WHERE id = $1`, fileID).Scan(&filePath)
+					notification := map[string]string{
+						"type":      "new_instruction",
+						"receiver":  receiver,
+						"message":   instruction,
+						"file_id":   fmt.Sprintf("%d", fileID),
+						"sender":    user.Username,
+						"file_path": filePath,
+					}
+					notifBytes, _ := json.Marshal(notification)
+					fc.App.NotificationHub.SendToUser(receiver, notifBytes)
+				}
+			}
+		}
 
 		results = append(results, map[string]string{
 			"file":   rawFileName,

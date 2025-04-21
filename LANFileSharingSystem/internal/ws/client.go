@@ -23,19 +23,31 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
+	hub      *Hub
+	conn     *websocket.Conn
+	send     chan []byte
+	Username string
 }
 
 // ServeWs handles websocket requests from clients.
 func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		http.Error(w, "Username is required", http.StatusBadRequest)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Upgrade error:", err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256)}
+	client := &Client{
+		hub:      hub,
+		conn:     conn,
+		send:     make(chan []byte, 256),
+		Username: username,
+	}
 	client.hub.register <- client
 
 	go client.writePump()

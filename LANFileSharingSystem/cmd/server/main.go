@@ -315,7 +315,7 @@ func main() {
 			WithField("correlationID", corrID).
 			Debug("Upgrading to WebSocket")
 		ws.ServeWs(hub, w, r)
-	}).Methods("GET")
+	})
 
 	// Add correlation ID middleware before other middlewares.
 	router.Use(correlationIDMiddleware)

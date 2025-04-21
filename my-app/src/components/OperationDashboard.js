@@ -72,15 +72,67 @@ const OperationDashboard = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [hideDone, setHideDone] = useState(false);
   const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
+  const [ws, setWs] = useState(null);
+
 
   useEffect(() => {
-    const storedUsername = localStorage.getItem('username');
-    const storedRole = localStorage.getItem('role');
-    if (storedUsername) setCurrentUser(storedUsername);
-    if (storedRole === 'admin') setIsAdmin(true);
-    fetchDirectories();
-    fetchAllFilesWithMessages();
+    const username = localStorage.getItem('username');
+    if (!username) return;
+
+    const wsInstance = new WebSocket(`ws://localhost:8080/ws?username=${username}`);
+    setWs(wsInstance);
+
+    wsInstance.onopen = () => {
+      console.log('✅ WebSocket connected');
+    };
+
+    wsInstance.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      console.log('📬 Message:', data);
+    
+      if (data.event === 'new_instruction' && data.receiver === username) {
+        message.open({
+          type: 'info',
+          content: `📬 New instruction for you: "${data.message}"`,
+          duration: 0, // 0 = persist until manually closed
+          key: `instruction-${data.file_id}`, // key prevents stacking if same file gets multiple instructions
+          btn: (
+            <Button
+              type="primary"
+              size="small"
+              onClick={() => {
+                setCurrentPath(data.file_path); // if you're sending path in WS
+                message.destroy(`instruction-${data.file_id}`);
+              }}
+            >
+              View Now
+            </Button>
+          ),
+        });
+        
+        fetchItems();
+        fetchAllFilesWithMessages();
+      }
+    
+      if (data.event === 'file_uploaded' && data.file_name) {
+        message.success(`📁 New file uploaded: ${data.file_name}`);
+        fetchItems();
+        fetchAllFilesWithMessages();
+      }
+    };
+    
+
+    wsInstance.onerror = (e) => {
+      console.error('❌ WebSocket error', e);
+    };
+
+    wsInstance.onclose = () => {
+      console.warn('⚠️ WebSocket closed');
+    };
+
+    return () => wsInstance.close();
   }, []);
+  
 
   const fetchDirectories = async () => {
     try {

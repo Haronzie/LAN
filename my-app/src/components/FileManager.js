@@ -338,9 +338,9 @@ const FileManager = () => {
     const existingFiles = existingFilesRes.data || [];
     const existingNames = existingFiles.map(f => f.name);
   
-    for (const file of uploadingFile) {
-      const filename = file.name;
-      const fileExists = existingNames.includes(filename);
+    if (uploadingFile.length === 1) {
+      const file = uploadingFile[0];
+      const fileExists = existingNames.includes(file.name);
   
       const uploadSingle = async (overwrite) => {
         const formData = new FormData();
@@ -355,36 +355,55 @@ const FileManager = () => {
         try {
           await axios.post('/upload', formData, {
             withCredentials: true,
-            headers: { 'Content-Type': 'multipart/form-data' }
+            headers: { 'Content-Type': 'multipart/form-data' },
           });
-          message.success(`${filename} uploaded`);
+          message.success(`${file.name} uploaded`);
         } catch (error) {
           console.error('Upload failed:', error);
-          message.error(`Upload failed for ${filename}`);
+          message.error(`Upload failed for ${file.name}`);
         }
       };
   
       if (fileExists) {
-        await new Promise((resolve) => {
-          Modal.confirm({
-            title: `A file named '${filename}' already exists.`,
-            icon: <ExclamationCircleOutlined />,
-            content: 'Do you want to overwrite or keep both?',
-            okText: 'Overwrite',
-            cancelText: 'Keep Both',
-            okButtonProps: { danger: true },
-            onOk: async () => {
-              await uploadSingle(true);
-              resolve();
-            },
-            onCancel: async () => {
-              await uploadSingle(false);
-              resolve();
-            }
-          });
+        Modal.confirm({
+          title: `A file named '${file.name}' already exists.`,
+          icon: <ExclamationCircleOutlined />,
+          content: 'Do you want to overwrite or keep both?',
+          okText: 'Overwrite',
+          cancelText: 'Keep Both',
+          okButtonProps: { danger: true },
+          onOk: async () => await uploadSingle(true),
+          onCancel: async () => await uploadSingle(false),
         });
       } else {
         await uploadSingle(false);
+      }
+    } else {
+      const formData = new FormData();
+      uploadingFile.forEach((file) => formData.append('files', file));
+      formData.append('directory', currentPath);
+      formData.append('container', currentPath.split('/')[0] || 'operation');
+      formData.append('overwrite', 'false');
+      formData.append('skip', 'false');
+      if (fileUploadMessage.trim() && targetUsername.trim()) {
+        formData.append('message', fileUploadMessage.trim());
+        formData.append('receiver', targetUsername.trim());
+      }
+  
+      try {
+        const res = await axios.post('/bulk-upload', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        const results = res.data || [];
+        const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
+        const skipped = results.filter(r => r.status === 'skipped').length;
+        const failed = results.filter(r => r.status.startsWith('error')).length;
+  
+        message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+      } catch (error) {
+        console.error('Bulk upload failed:', error);
+        message.error('Bulk upload failed');
       }
     }
   
@@ -394,6 +413,7 @@ const FileManager = () => {
     setTargetUsername('');
     fetchItems();
   };
+  
   
   
   const uploadFile = async (formData, isOverwrite) => {
