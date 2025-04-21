@@ -38,7 +38,7 @@ import debounce from 'lodash.debounce';
 
 const { Content } = Layout;
 const { Option } = Select;
-const BASE_URL = process.env.REACT_APP_BACKEND_URL;
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`;
 
 const UserSearchSelect = ({ value, onUserSelect, required }) => {
   const [options, setOptions] = useState([]);
