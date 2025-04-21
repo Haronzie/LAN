@@ -17,6 +17,7 @@ import {
   Select,
   Spin
 } from 'antd';
+import Dragger from 'antd/lib/upload/Dragger';
 import {
   UploadOutlined,
   DeleteOutlined,
@@ -39,6 +40,7 @@ import debounce from 'lodash.debounce';
 const { Content } = Layout;
 const { Option } = Select;
 const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`;
+
 
 const UserSearchSelect = ({ value, onUserSelect, required }) => {
   const [options, setOptions] = useState([]);
@@ -112,7 +114,7 @@ const FileManager = () => {
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState([]);
   const [fileUploadMessage, setFileUploadMessage] = useState('');
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -314,58 +316,85 @@ const FileManager = () => {
       message.error('Please select an existing folder before uploading a file.');
       return;
     }
-    setUploadingFile(null);
+    setUploadingFile([]); // ✅ now an empty array
     setUploadModalVisible(true);
   };
+  
 
   const handleUpload = async () => {
-    if (!uploadingFile) {
-      message.error('Please select a file first');
+    if (!uploadingFile || uploadingFile.length === 0) {
+      message.error('Please select files first');
       return;
     }
-
-    // Only require target user if there's a message
+  
     if (fileUploadMessage.trim() && !targetUsername) {
       message.error('Please select a valid user to send the file to when including a message.');
       return;
     }
-
-    const filename = uploadingFile.name;
-    const formData = new FormData();
-    formData.append('file', uploadingFile);
-    formData.append('directory', currentPath);
   
-    try {
-      const res = await axios.get(`/files?directory=${encodeURIComponent(currentPath)}`, {
-        withCredentials: true
-      });
-      const existingFiles = res.data || [];
-      const fileExists = existingFiles.some(f => f.name === filename);
+    const existingFilesRes = await axios.get(`/files?directory=${encodeURIComponent(currentPath)}`, {
+      withCredentials: true
+    });
+    const existingFiles = existingFilesRes.data || [];
+    const existingNames = existingFiles.map(f => f.name);
+  
+    for (const file of uploadingFile) {
+      const filename = file.name;
+      const fileExists = existingNames.includes(filename);
+  
+      const uploadSingle = async (overwrite) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('directory', currentPath);
+        if (overwrite) formData.append('overwrite', 'true');
+        if (fileUploadMessage.trim() && targetUsername.trim()) {
+          formData.append('message', fileUploadMessage.trim());
+          formData.append('receiver', targetUsername.trim());
+        }
+  
+        try {
+          await axios.post('/upload', formData, {
+            withCredentials: true,
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          message.success(`${filename} uploaded`);
+        } catch (error) {
+          console.error('Upload failed:', error);
+          message.error(`Upload failed for ${filename}`);
+        }
+      };
   
       if (fileExists) {
-        Modal.confirm({
-          title: `A file named '${filename}' already exists in this folder.`,
-          icon: <ExclamationCircleOutlined />,
-          content: 'Do you want to overwrite or keep both?',
-          okText: 'Overwrite',
-          cancelText: 'Keep Both',
-          okButtonProps: { danger: true },
-          onOk: async () => {
-            formData.append('overwrite', 'true');
-            await uploadFile(formData, true);
-          },
-          onCancel: async () => {
-            await uploadFile(formData, false);
-          }
+        await new Promise((resolve) => {
+          Modal.confirm({
+            title: `A file named '${filename}' already exists.`,
+            icon: <ExclamationCircleOutlined />,
+            content: 'Do you want to overwrite or keep both?',
+            okText: 'Overwrite',
+            cancelText: 'Keep Both',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+              await uploadSingle(true);
+              resolve();
+            },
+            onCancel: async () => {
+              await uploadSingle(false);
+              resolve();
+            }
+          });
         });
       } else {
-        await uploadFile(formData, false);
+        await uploadSingle(false);
       }
-    } catch (err) {
-      console.error('Upload error:', err);
-      message.error(err.response?.data?.error || 'Error checking file conflict');
     }
+  
+    setUploadModalVisible(false);
+    setUploadingFile([]);
+    setFileUploadMessage('');
+    setTargetUsername('');
+    fetchItems();
   };
+  
   
   const uploadFile = async (formData, isOverwrite) => {
     try {
@@ -878,18 +907,55 @@ const FileManager = () => {
           onCancel={() => setUploadModalVisible(false)}
           onOk={handleUpload}
         >
-          <Upload
-            beforeUpload={(file) => {
-              setUploadingFile(file);
-              return false;
-            }}
-            showUploadList={false}
-          >
-            <Button icon={<UploadOutlined />}>Select File</Button>
-          </Upload>
-          <div style={{ marginTop: 8 }}>
-            {uploadingFile && <p>Selected: {uploadingFile.name}</p>}
-          </div>
+         <Dragger
+  multiple
+  fileList={uploadingFile}
+  beforeUpload={(file, fileList) => {
+    setUploadingFile(fileList);
+    return false;
+  }}
+  showUploadList={false}
+  customRequest={async ({ file, onProgress, onSuccess, onError }) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('directory', currentPath);
+    if (fileUploadMessage.trim() && targetUsername.trim()) {
+      formData.append('message', fileUploadMessage.trim());
+      formData.append('receiver', targetUsername.trim());
+    }
+
+    try {
+      await axios.post('/upload', formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (event) => {
+          onProgress({ percent: (event.loaded / event.total) * 100 });
+        }
+      });
+      message.success(`${file.name} uploaded successfully`);
+      onSuccess();
+      fetchItems();
+    } catch (err) {
+      console.error('Upload error:', err);
+      message.error(`${file.name} upload failed`);
+      onError(err);
+    }
+  }}
+>
+  <p className="ant-upload-drag-icon">
+    <UploadOutlined />
+  </p>
+  <p className="ant-upload-text">Click or drag files here to upload</p>
+  <p className="ant-upload-hint">Supports multiple files with progress tracking</p>
+</Dragger>
+
+
+<div style={{ marginTop: 8 }}>
+{Array.isArray(uploadingFile) && uploadingFile.map((file, i) => (
+  <p key={i}>Selected: {file.name}</p>
+))}
+
+</div>
 
           <Form.Item label="Instruction (optional)">
             <Input.TextArea
