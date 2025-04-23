@@ -55,6 +55,31 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	// 🔒 Validate file extension and MIME type
+	allowedExtensions := map[string]bool{
+		".doc":  true,
+		".docx": true,
+		".xls":  true,
+		".xlsx": true,
+		".pdf":  true,
+	}
+
+	allowedMIMETypes := map[string]bool{
+		"application/msword": true,
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+		"application/vnd.ms-excel": true,
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
+		"application/pdf": true,
+	}
+
+	ext := strings.ToLower(filepath.Ext(handler.Filename))
+	mime := handler.Header.Get("Content-Type")
+
+	if !allowedExtensions[ext] || !allowedMIMETypes[mime] {
+		models.RespondError(w, http.StatusBadRequest, "Only Word, Excel, and PDF files with valid MIME types are allowed")
+		return
+	}
+
 	targetDir := r.FormValue("directory")
 	if targetDir != "" {
 		targetDir = filepath.Clean(targetDir)
@@ -83,7 +108,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 
 	existingFR, getErr := fc.App.GetFileRecordByPath(relativePath)
 
-	// 👇 Add this block
 	skip := r.FormValue("skip") == "true"
 	if getErr == nil && skip {
 		models.RespondJSON(w, http.StatusOK, map[string]string{
@@ -92,9 +116,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 👇 Keep this logic as-is
 	if getErr == nil && !overwrite {
-		// File exists and overwrite not allowed → keep both
 		baseName := strings.TrimSuffix(rawFileName, filepath.Ext(rawFileName))
 		ext := filepath.Ext(rawFileName)
 		counter := 1
@@ -150,7 +172,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	os.Remove(tempFilePath)
 
-	// Recheck if the original path was used (overwrite) or renamed (keep both)
 	existingFR, getErr = fc.App.GetFileRecordByPath(relativePath)
 	if getErr == nil && overwrite {
 		fileID := existingFR.ID
@@ -1156,12 +1177,38 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	allowedExtensions := map[string]bool{
+		".doc":  true,
+		".docx": true,
+		".xls":  true,
+		".xlsx": true,
+		".pdf":  true,
+	}
+
+	allowedMIMETypes := map[string]bool{
+		"application/msword": true,
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+		"application/vnd.ms-excel": true,
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
+		"application/pdf": true,
+	}
+
 	results := []map[string]string{}
 
 	for _, fileHeader := range files {
 		rawFileName := fileHeader.Filename
-		status := "unknown"
+		ext := strings.ToLower(filepath.Ext(rawFileName))
+		mime := fileHeader.Header.Get("Content-Type")
 
+		if !allowedExtensions[ext] || !allowedMIMETypes[mime] {
+			results = append(results, map[string]string{
+				"file":   rawFileName,
+				"status": "rejected: invalid file type or MIME",
+			})
+			continue
+		}
+
+		status := "unknown"
 		var fileID int
 		var finalDiskPath string
 		var relativePath string
@@ -1201,7 +1248,7 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 					status = "renamed"
 				} else {
 					fileID = existingFR.ID
-					updateErr := fc.App.UpdateFileMetadata(fileID, fileHeader.Size, fileHeader.Header.Get("Content-Type"))
+					updateErr := fc.App.UpdateFileMetadata(fileID, fileHeader.Size, mime)
 					if updateErr == nil {
 						latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
 						_ = fc.App.CreateFileVersion(fileID, latestVer+1, relativePath)
@@ -1244,7 +1291,7 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 					FilePath:    relativePath,
 					Directory:   targetDir,
 					Size:        fileHeader.Size,
-					ContentType: fileHeader.Header.Get("Content-Type"),
+					ContentType: mime,
 					Uploader:    user.Username,
 				}
 				if err := fc.App.CreateFileRecord(fr); err != nil {
@@ -1257,7 +1304,6 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 
-		// 👇 Add message if present
 		if status == "uploaded" || status == "overwritten" {
 			if instruction != "" && receiver != "" && fileID > 0 {
 				_, _ = fc.App.DB.Exec(`INSERT INTO file_messages (file_id, sender, receiver, message) VALUES ($1, $2, $3, $4)`,
