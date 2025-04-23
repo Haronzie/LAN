@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 
--- Files Table (confidential removed)
+-- Files Table
 CREATE TABLE IF NOT EXISTS files (
     id SERIAL PRIMARY KEY,
     file_name VARCHAR(255) NOT NULL,
@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS files (
     UNIQUE (directory, file_name)
 );
 CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);
+
+-- ✅ Add dynamic metadata field and index
+ALTER TABLE files ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS idx_metadata ON files USING gin (metadata);
 
 -- Directories Table
 CREATE TABLE IF NOT EXISTS directories (
@@ -63,11 +67,11 @@ CREATE TABLE IF NOT EXISTS file_versions (
     FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 );
 
--- Audit Logs Table with ON DELETE SET NULL for file_id
+-- Audit Logs Table with ON DELETE SET NULL
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
-    user_username VARCHAR(50),            -- Foreign key to users.username
-    username_at_action VARCHAR(50),       -- Snapshot column for permanent storage
+    user_username VARCHAR(50),
+    username_at_action VARCHAR(50),
     file_id INT,
     action VARCHAR(20) NOT NULL,
     details VARCHAR(500),
@@ -79,7 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_username);
 CREATE INDEX IF NOT EXISTS idx_audit_file ON audit_logs(file_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
 
-
+-- File Messages Table
 CREATE TABLE IF NOT EXISTS file_messages (
     id SERIAL PRIMARY KEY,
     file_id INTEGER REFERENCES files(id) ON DELETE CASCADE,
