@@ -941,6 +941,12 @@ func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request
 
 	msg.Sender = user.Username
 
+	// 🛑 Prevent sending to self (case-insensitive check)
+	if strings.EqualFold(msg.Sender, msg.Receiver) {
+		models.RespondError(w, http.StatusBadRequest, "You cannot send instructions to yourself")
+		return
+	}
+
 	// retrieve file path for this file ID
 	var filePath string
 	err = fc.App.DB.QueryRow(`SELECT file_path FROM files WHERE id = $1`, msg.FileID).Scan(&filePath)
