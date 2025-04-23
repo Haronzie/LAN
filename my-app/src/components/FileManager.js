@@ -56,7 +56,18 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
       setFetching(true);
       try {
         const response = await axios.get(`/users?search=${value}`, { withCredentials: true });
-        setOptions(response.data || []);
+        const data = response.data || [];
+  
+        // ✅ filter out self here too if not done in map stage
+        const currentUser = (localStorage.getItem('username') || '').toLowerCase();
+        const filtered = data.filter(u => u.username.toLowerCase() !== currentUser);
+  
+        setOptions(filtered);
+  
+        // ✅ Auto-select the top user if one exists
+        if (filtered.length > 0) {
+          onUserSelect(filtered[0].username);
+        }
       } catch (error) {
         console.error('Error fetching users:', error);
       } finally {
@@ -65,6 +76,7 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
     }, 500),
     []
   );
+  
 
   const handleSearch = (inputValue) => {
     fetchUserOptions(inputValue);
@@ -85,11 +97,14 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
       value={value}
       status={required && !value ? 'error' : ''}
     >
-      {options.map((user) => (
-        <Option key={user.username} value={user.username}>
-          {user.username}
-        </Option>
-      ))}
+      {options
+  .filter(u => u.username.toLowerCase() !== (localStorage.getItem('username') || '').toLowerCase())
+  .map((user) => (
+    <Option key={user.username} value={user.username}>
+      {user.username}
+    </Option>
+))}
+
     </Select>
   );
 };
@@ -977,27 +992,42 @@ const FileManager = () => {
 
 </div>
 
-          <Form.Item label="Instruction (optional)">
-            <Input.TextArea
-              value={fileUploadMessage}
-              onChange={(e) => setFileUploadMessage(e.target.value)}
-              rows={3}
-              placeholder="Add a message or instruction to this file (optional)"
-            />
-          </Form.Item>
+<Form.Item label="Instruction Template">
+  <Select
+    placeholder="Select a predefined message"
+    allowClear
+    onChange={(val) => setFileUploadMessage(val || '')}
+    style={{ marginBottom: 8 }}
+  >
+    <Option value="Please review the file and provide feedback.">Request Review</Option>
+    <Option value="Kindly make the necessary corrections.">Correction Request</Option>
+    <Option value="This is urgent. Please address this today.">Urgent Task</Option>
+    <Option value="No specific instruction. Just FYI.">FYI Only</Option>
+  </Select>
+</Form.Item>
 
-          <Form.Item
-            label="Send to User"
-            tooltip="Begin typing to search for a registered user"
-            validateStatus={fileUploadMessage.trim() && !targetUsername ? 'error' : ''}
-            help={fileUploadMessage.trim() && !targetUsername ? 'Please select a user when including a message.' : ''}
-          >
-            <UserSearchSelect 
-              value={targetUsername}
-              onUserSelect={(value) => setTargetUsername(value)}
-              required={!!fileUploadMessage.trim()}
-            />
-          </Form.Item>
+<Form.Item label="Instruction (optional)">
+  <Input.TextArea
+    value={fileUploadMessage}
+    onChange={(e) => setFileUploadMessage(e.target.value)}
+    rows={3}
+    placeholder="You can type a custom instruction or use a template above"
+  />
+</Form.Item>
+
+<Form.Item
+  label="Send to User"
+  tooltip="Begin typing to search for a registered user"
+  validateStatus={fileUploadMessage.trim() && !targetUsername ? 'error' : ''}
+  help={fileUploadMessage.trim() && !targetUsername ? 'Please select a user when including a message.' : ''}
+>
+  <UserSearchSelect 
+    value={targetUsername}
+    onUserSelect={(value) => setTargetUsername(value)}
+    required={!!fileUploadMessage.trim()}
+  />
+</Form.Item>
+
         </Modal>
 
         <Modal
