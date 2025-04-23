@@ -3,7 +3,6 @@ package controllers
 import (
 	"LANFileSharingSystem/internal/encryption"
 	"LANFileSharingSystem/internal/models"
-	"LANFileSharingSystem/internal/services"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -55,7 +54,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// 🔒 Validate file extension and MIME type
 	allowedExtensions := map[string]bool{
 		".doc":  true,
 		".docx": true,
@@ -151,12 +149,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	tempFile.Close()
 
-	scanResult, err := services.ScanFile(tempFilePath)
-	if err != nil || !scanResult.Clean {
-		os.Remove(tempFilePath)
-		models.RespondError(w, http.StatusBadRequest, fmt.Sprintf("File rejected: %v", scanResult.Description))
-		return
-	}
+	// 🧼 Skipped virus scan for Docker compatibility
 
 	key := []byte(os.Getenv("ENCRYPTION_KEY"))
 	if len(key) != 32 {
@@ -1276,6 +1269,8 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			tempFile.Close()
+
+			// 🚫 Skipped ClamAV scan for Docker compatibility
 
 			key := []byte(os.Getenv("ENCRYPTION_KEY"))
 			if err := encryption.EncryptFile(key, tempFilePath, finalDiskPath); err != nil {
