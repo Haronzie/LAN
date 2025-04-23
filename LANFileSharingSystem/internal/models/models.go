@@ -80,13 +80,14 @@ type MoveFileRequest struct {
 
 // FileRecord represents a file stored in the system.
 type FileRecord struct {
-	ID          int    `json:"id"`
-	FileName    string `json:"file_name"`
-	Directory   string `json:"directory"` // <-- New field
-	FilePath    string `json:"file_path"`
-	Size        int64  `json:"size"`
-	ContentType string `json:"content_type"`
-	Uploader    string `json:"uploader"`
+	ID          int                    `json:"id"`
+	FileName    string                 `json:"file_name"`
+	Directory   string                 `json:"directory"`
+	FilePath    string                 `json:"file_path"`
+	Size        int64                  `json:"size"`
+	ContentType string                 `json:"content_type"`
+	Uploader    string                 `json:"uploader"`
+	Metadata    map[string]interface{} `json:"metadata"` // 👈 dynamic field
 }
 
 // -------------------------------------
@@ -361,9 +362,10 @@ func (app *App) ListActivities() ([]map[string]interface{}, error) {
 // -------------------------------------
 
 func (app *App) CreateFileRecord(record FileRecord) error {
+	metadataJSON, _ := json.Marshal(record.Metadata)
 	_, err := app.DB.Exec(`
-		INSERT INTO files (file_name, file_path, directory, size, content_type, uploader)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO files (file_name, file_path, directory, size, content_type, uploader, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`,
 		record.FileName,
 		record.FilePath,
@@ -371,6 +373,7 @@ func (app *App) CreateFileRecord(record FileRecord) error {
 		record.Size,
 		record.ContentType,
 		record.Uploader,
+		metadataJSON,
 	)
 	return err
 }
