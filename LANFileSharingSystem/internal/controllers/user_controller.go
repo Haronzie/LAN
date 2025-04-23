@@ -141,10 +141,21 @@ func (uc *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Case-insensitive duplicate check
+	if !strings.EqualFold(req.OldUsername, req.NewUsername) {
+		existingUser, err := uc.App.GetUserByUsername(req.NewUsername)
+		if err == nil && !strings.EqualFold(existingUser.Username, req.OldUsername) {
+			models.RespondError(w, http.StatusBadRequest, fmt.Sprintf("Username '%s' already exists", req.NewUsername))
+			return
+		}
+	}
+
+	// Update user if username is unique or unchanged
 	if err := uc.App.UpdateUser(req.OldUsername, req.NewUsername, req.NewPassword); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error updating user")
 		return
 	}
+
 	uc.App.LogActivity(fmt.Sprintf("Admin '%s' updated user '%s' to '%s'.", user.Username, req.OldUsername, req.NewUsername))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("User '%s' updated successfully", req.OldUsername),
