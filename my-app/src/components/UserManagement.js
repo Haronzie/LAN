@@ -197,9 +197,16 @@ const UserManagement = () => {
       fetchUsers();
     } catch (error) {
       const errMsg = error.response?.data?.error || 'Error updating user';
-      message.error(errMsg);
+      
+      // Highlight conflict more clearly
+      if (errMsg.toLowerCase().includes("already exists")) {
+        message.warning(errMsg); // or message.info() for a softer tone
+      } else {
+        message.error(errMsg);
+      }
     }
   };
+  
 
   // Handler for promoting a user to admin
   const handleAssignAdmin = async (username) => {
