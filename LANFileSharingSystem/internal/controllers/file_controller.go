@@ -149,8 +149,6 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	tempFile.Close()
 
-	// 🧼 Skipped virus scan for Docker compatibility
-
 	key := []byte(os.Getenv("ENCRYPTION_KEY"))
 	if len(key) != 32 {
 		os.Remove(tempFilePath)
@@ -164,6 +162,15 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	os.Remove(tempFilePath)
+
+	metaJSON := r.FormValue("metadata")
+	var metaMap map[string]interface{}
+	if metaJSON != "" {
+		if err := json.Unmarshal([]byte(metaJSON), &metaMap); err != nil {
+			models.RespondError(w, http.StatusBadRequest, "Invalid metadata JSON")
+			return
+		}
+	}
 
 	existingFR, getErr = fc.App.GetFileRecordByPath(relativePath)
 	if getErr == nil && overwrite {
@@ -201,6 +208,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
 		Uploader:    user.Username,
+		Metadata:    metaMap,
 	}
 
 	if err := fc.App.CreateFileRecord(fr); err != nil {
@@ -1158,6 +1166,15 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	skip := r.FormValue("skip") == "true"
 	instruction := r.FormValue("message")
 	receiver := r.FormValue("receiver")
+	metaJSON := r.FormValue("metadata")
+
+	var metaMap map[string]interface{}
+	if metaJSON != "" {
+		if err := json.Unmarshal([]byte(metaJSON), &metaMap); err != nil {
+			models.RespondError(w, http.StatusBadRequest, "Invalid metadata JSON")
+			return
+		}
+	}
 
 	if targetDir == "" || container == "" {
 		models.RespondError(w, http.StatusBadRequest, "Directory and container are required")
@@ -1270,8 +1287,6 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			}
 			tempFile.Close()
 
-			// 🚫 Skipped ClamAV scan for Docker compatibility
-
 			key := []byte(os.Getenv("ENCRYPTION_KEY"))
 			if err := encryption.EncryptFile(key, tempFilePath, finalDiskPath); err != nil {
 				os.Remove(tempFilePath)
@@ -1288,6 +1303,7 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 					Size:        fileHeader.Size,
 					ContentType: mime,
 					Uploader:    user.Username,
+					Metadata:    metaMap,
 				}
 				if err := fc.App.CreateFileRecord(fr); err != nil {
 					status = "error: DB insert failed"
