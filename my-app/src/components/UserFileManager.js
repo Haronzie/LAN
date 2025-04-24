@@ -24,6 +24,8 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+axios.defaults.baseURL = BASE_URL;
 
 const { Content } = Layout;
 const { Option } = Select;

@@ -6,7 +6,8 @@ import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Bar, Pie } from '@ant-design/charts';
-
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+axios.defaults.baseURL = BASE_URL;
 const InventoryDashboard = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);

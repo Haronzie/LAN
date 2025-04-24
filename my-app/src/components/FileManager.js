@@ -39,8 +39,8 @@ import debounce from 'lodash.debounce';
 
 const { Content } = Layout;
 const { Option } = Select;
-const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`;
-
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+axios.defaults.baseURL = BASE_URL;
 
 const UserSearchSelect = ({ value, onUserSelect, required }) => {
   const [options, setOptions] = useState([]);
@@ -149,9 +149,8 @@ const FileManager = () => {
 
   const generateSuggestedName = async (baseName, extension, destinationPath) => {
     try {
-      const res = await axios.get(`/files?directory=${encodeURIComponent(destinationPath)}`, {
-        withCredentials: true
-      });
+      const res = await axios.get('/directory/tree', { withCredentials: true });
+
       const existingNames = res.data.map(f => f.name);
       let attempt = 0;
       let suggested;
@@ -215,7 +214,7 @@ const FileManager = () => {
 
   const fetchFolderTree = async () => {
     try {
-      const res = await axios.get('/directory/tree', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/directory/tree`, { withCredentials: true });
       let data = res.data || [];
   
       const fixedFolders = ['Operation', 'Research', 'Training'];

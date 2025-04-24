@@ -17,7 +17,8 @@ import OperationDashboard from './OperationDashboard';
 import ResearchDashboard from './ResearchDashboard';
 import InventoryDashboard from './InventoryDashboard';
 import UserSettings from './UserSettings';
-
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+axios.defaults.baseURL = BASE_URL;
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
 

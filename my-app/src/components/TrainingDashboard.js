@@ -35,6 +35,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+axios.defaults.baseURL = BASE_URL;
 
 const { Content } = Layout;
 const { Option } = Select;

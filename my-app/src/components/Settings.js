@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import { Layout, Card, Form, Input, Button, Switch, InputNumber, message, Typography, Divider } from 'antd';
+import axios from 'axios';
+
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+axios.defaults.baseURL = BASE_URL;
 
 const { Content } = Layout;
 const { Title, Text, Paragraph } = Typography;

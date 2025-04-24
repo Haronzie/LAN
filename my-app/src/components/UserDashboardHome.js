@@ -7,6 +7,10 @@ import {
   TeamOutlined,
   DatabaseOutlined
 } from '@ant-design/icons';
+import axios from 'axios';
+
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+axios.defaults.baseURL = BASE_URL;
 
 const { Title } = Typography;
 
