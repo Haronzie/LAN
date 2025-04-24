@@ -174,7 +174,7 @@ func main() {
 		Info("Successfully connected to database")
 
 	// AUTOMATICALLY RUN MIGRATIONS HERE
-	migrationsPath := "file://../../internal/migrations"
+	migrationsPath := "file://internal/migrations"
 	logger.WithField("function", "main").Debug("Initializing migrations...")
 	m, err := migrate.New(migrationsPath, cfg.DatabaseURL)
 	if err != nil {
