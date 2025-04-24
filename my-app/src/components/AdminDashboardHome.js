@@ -7,6 +7,9 @@ import axios from 'axios';
 
 const { Text, Title } = Typography;
 
+// ✅ Dynamic backend API base URL
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+
 const AdminDashboardHome = () => {
   const [users, setUsers] = useState([]);
   const [files, setFiles] = useState([]);
@@ -52,7 +55,7 @@ const AdminDashboardHome = () => {
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
-      const res = await axios.get('/users', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
     } catch {
       message.error('Error fetching users');
@@ -64,7 +67,7 @@ const AdminDashboardHome = () => {
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get('/files', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/files`, { withCredentials: true });
       setFiles(Array.isArray(res.data) ? res.data : []);
     } catch {
       message.error('Error fetching files');
@@ -75,7 +78,7 @@ const AdminDashboardHome = () => {
 
   const fetchAuditLogs = async () => {
     try {
-      const res = await axios.get('/auditlogs', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/auditlogs`, { withCredentials: true });
       setAuditLogs(Array.isArray(res.data) ? res.data : []);
     } catch {
       message.error('Error fetching audit logs');
@@ -94,11 +97,7 @@ const AdminDashboardHome = () => {
       
       <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={12} md={8}>
-          <Card 
-            bodyStyle={{ padding: '24px' }}
-            style={{ height: '100%', borderRadius: 8 }}
-            hoverable
-          >
+          <Card bodyStyle={{ padding: '24px' }} style={{ borderRadius: 8 }} hoverable>
             <Statistic 
               title="Total Users" 
               value={totalUsers} 
@@ -110,11 +109,7 @@ const AdminDashboardHome = () => {
         </Col>
         
         <Col xs={24} sm={12} md={8}>
-          <Card 
-            bodyStyle={{ padding: '24px' }}
-            style={{ height: '100%', borderRadius: 8 }}
-            hoverable
-          >
+          <Card bodyStyle={{ padding: '24px' }} style={{ borderRadius: 8 }} hoverable>
             <Statistic 
               title="Total Files" 
               value={totalFiles} 
@@ -126,11 +121,7 @@ const AdminDashboardHome = () => {
         </Col>
         
         <Col xs={24} md={8}>
-          <Card 
-            bodyStyle={{ padding: '24px' }}
-            style={{ height: '100%', borderRadius: 8 }}
-            hoverable
-          >
+          <Card bodyStyle={{ padding: '24px' }} style={{ borderRadius: 8 }} hoverable>
             <Statistic 
               title="Admin Users" 
               value={adminCount} 
@@ -147,7 +138,7 @@ const AdminDashboardHome = () => {
           <Card 
             title="User Role Distribution"
             style={{ borderRadius: 8 }}
-            headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
+            headStyle={{ borderBottom: 0 }}
             bodyStyle={{ padding: '16px 24px' }}
           >
             <Column {...chartConfig} />
@@ -158,14 +149,13 @@ const AdminDashboardHome = () => {
           <Card 
             title="Recent Audit Logs"
             style={{ borderRadius: 8 }}
-            headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
+            headStyle={{ borderBottom: 0 }}
             bodyStyle={{ padding: '16px 24px' }}
             extra={
               <Button 
                 type="link" 
                 size="small" 
                 onClick={() => navigate('audit-logs')}
-                style={{ padding: '0 4px' }}
               >
                 View All
               </Button>
@@ -177,13 +167,9 @@ const AdminDashboardHome = () => {
                 dataSource={auditLogs.slice(0, 5)}
                 renderItem={(item) => (
                   <List.Item style={{ padding: '8px 0' }}>
-                    <div style={{ width: '100%' }}>
-                      <Text strong style={{ display: 'block' }}>
-                        {new Date(item.created_at).toLocaleString()}
-                      </Text>
-                      <Text type="secondary" style={{ display: 'block' }}>
-                        {item.details}
-                      </Text>
+                    <div>
+                      <Text strong>{new Date(item.created_at).toLocaleString()}</Text><br />
+                      <Text type="secondary">{item.details}</Text>
                     </div>
                   </List.Item>
                 )}

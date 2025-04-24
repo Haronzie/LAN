@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Form, Input, Button, Card, Typography, message, Modal } from 'antd';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
 
 const { Title } = Typography;
 
@@ -22,7 +23,7 @@ const LoginForm = () => {
   const onFinish = async (values) => {
     const hideLoading = message.loading('Logging in...', 0);
     try {
-      const res = await axios.post('/login', values, { withCredentials: true });
+      const res = await axios.post(`${BASE_URL}/login`, values, { withCredentials: true });
       hideLoading();
       message.success(res.data.message || 'Login successful');
       localStorage.setItem('username', res.data.username);
@@ -53,8 +54,10 @@ const LoginForm = () => {
       return;
     }
     try {
-      const res = await axios.get(`/get-user-role?username=${typedUsername}`);
-      if (res.data.role === 'admin') {
+      const res = await axios.get(`${BASE_URL}/get-user-role?username=${typedUsername}`, {
+        withCredentials: true,
+      });
+            if (res.data.role === 'admin') {
         setShowForgotForm(true);
       } else {
         message.error('Only admin can use Forgot Password.');
@@ -76,8 +79,10 @@ const LoginForm = () => {
 
     const hideLoading = message.loading('Resetting password...', 0);
     try {
-      const res = await axios.post('/forgot-password', body);
-      hideLoading();
+      const res = await axios.post(`${BASE_URL}/forgot-password`, body, {
+        withCredentials: true,
+      });
+            hideLoading();
       message.success(res.data.message || 'Password updated successfully');
       setShowForgotForm(false);
     } catch (error) {

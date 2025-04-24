@@ -205,6 +205,11 @@ func main() {
 	// Initialize session store using a secret key from configuration.
 	logger.WithField("function", "main").Debug("Initializing session store...")
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
+	store.Options = &sessions.Options{
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, // change to None if cross-domain and using https
+	}
 
 	// Initialize the application model (shared context).
 	logger.WithField("function", "main").Debug("Creating new application context (App)...")

@@ -20,6 +20,9 @@ import axios from 'axios';
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
 
+// ✅ Dynamic backend API base URL
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+
 const AdminDashboard = () => {
   const [adminName, setAdminName] = useState('Admin');
   const [collapsed, setCollapsed] = useState(false);
@@ -34,13 +37,12 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post('/logout', {}, { withCredentials: true });
+      await axios.post(`${BASE_URL}/logout`, {}, { withCredentials: true });
       navigate('/login');
     } catch {
       message.error('Logout failed.');
     }
   };
-  
 
   const toggleSidebar = () => setCollapsed(!collapsed);
 

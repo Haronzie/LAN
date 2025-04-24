@@ -3,6 +3,7 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"unicode"
@@ -100,6 +101,7 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 // Login handles user authentication.
 func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		log.Println("❌ Invalid request method:", r.Method)
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
@@ -109,6 +111,7 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Println("❌ Failed to decode login request body:", err)
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
@@ -117,29 +120,34 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := ac.App.GetUserByUsername(req.Username)
 	if err != nil {
+		log.Println("❌ User not found or DB error for username:", req.Username, "Error:", err)
 		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
 		return
 	}
-	// Removed the active account check as the feature is no longer implemented.
 
 	if !models.CheckPasswordHash(req.Password, user.Password) {
+		log.Println("❌ Password mismatch for username:", req.Username)
 		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
 		return
 	}
 
 	session, err := ac.App.Store.Get(r, "session")
 	if err != nil {
+		log.Println("❌ Failed to get session:", err)
 		models.RespondError(w, http.StatusInternalServerError, "Error getting session")
 		return
 	}
 	session.Values["username"] = user.Username
 	session.Values["role"] = user.Role
 	session.Options = ac.App.DefaultSessionOptions()
+
 	if err := session.Save(r, w); err != nil {
+		log.Println("❌ Failed to save session:", err)
 		models.RespondError(w, http.StatusInternalServerError, "Error saving session")
 		return
 	}
 
+	log.Println("✅ Login successful:", user.Username, "| Role:", user.Role)
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message":  "Login successful",
 		"username": user.Username,

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -33,6 +34,9 @@ func LoadConfig() Config {
 	if cfg.SessionKey == "" {
 		cfg.SessionKey = "your-default-secret-key"
 	}
+
+	// 👇 Log the SESSION_KEY for debugging (remove in production)
+	log.Println("Loaded SESSION_KEY:", cfg.SessionKey)
 
 	return cfg
 }
