@@ -347,7 +347,9 @@ const FileManager = () => {
       return;
     }
   
-    const existingFilesRes = await axios.get(`/files?directory=${encodeURIComponent(currentPath)}`, {
+    const normalizedPath = currentPath.replace(/\\/g, '/');
+  
+    const existingFilesRes = await axios.get(`/files?directory=${encodeURIComponent(normalizedPath)}`, {
       withCredentials: true
     });
     const existingFiles = existingFilesRes.data || [];
@@ -360,7 +362,7 @@ const FileManager = () => {
       const uploadSingle = async (overwrite) => {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('directory', currentPath);
+        formData.append('directory', normalizedPath); // ✅ updated
         if (overwrite) formData.append('overwrite', 'true');
         if (fileUploadMessage.trim() && targetUsername.trim()) {
           formData.append('message', fileUploadMessage.trim());
@@ -396,8 +398,8 @@ const FileManager = () => {
     } else {
       const formData = new FormData();
       uploadingFile.forEach((file) => formData.append('files', file));
-      formData.append('directory', currentPath);
-      formData.append('container', currentPath.split('/')[0] || 'operation');
+      formData.append('directory', normalizedPath); // ✅ updated
+      formData.append('container', normalizedPath.split('/')[0] || 'operation'); // ✅ updated
       formData.append('overwrite', 'false');
       formData.append('skip', 'false');
       if (fileUploadMessage.trim() && targetUsername.trim()) {
@@ -953,12 +955,13 @@ const FileManager = () => {
   customRequest={async ({ file, onProgress, onSuccess, onError }) => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('directory', currentPath);
+    formData.append('directory', currentPath.replace(/\\/g, '/')); // ✅ Normalize path
+  
     if (fileUploadMessage.trim() && targetUsername.trim()) {
       formData.append('message', fileUploadMessage.trim());
       formData.append('receiver', targetUsername.trim());
     }
-
+  
     try {
       await axios.post('/upload', formData, {
         withCredentials: true,
@@ -976,6 +979,7 @@ const FileManager = () => {
       onError(err);
     }
   }}
+  
 >
   <p className="ant-upload-drag-icon">
     <UploadOutlined />
