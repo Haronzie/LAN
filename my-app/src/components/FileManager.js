@@ -433,6 +433,11 @@ const FileManager = () => {
   
   const uploadFile = async (formData, isOverwrite) => {
     try {
+      // ✅ Ensure currentPath is included in formData
+      if (!formData.has('directory')) {
+        formData.append('directory', currentPath);
+      }
+  
       const res = await axios.post('/upload', formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -440,6 +445,7 @@ const FileManager = () => {
   
       const { message: uploadMsg, file_id } = res.data;
   
+      // ✅ Send instruction if message + target are provided
       if (fileUploadMessage.trim() && targetUsername.trim()) {
         try {
           await axios.post('/file/message', {
@@ -466,6 +472,7 @@ const FileManager = () => {
       message.error(error.response?.data?.error || 'Upload error');
     }
   };
+  
 
   const handleDelete = async (record) => {
     try {
