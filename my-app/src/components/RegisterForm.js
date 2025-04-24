@@ -3,6 +3,9 @@ import { Form, Input, Button, Card, Typography, message, Spin, Popover } from 'a
 import { InfoCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+
+
 
 const { Title } = Typography;
 
@@ -27,7 +30,7 @@ const RegisterForm = () => {
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exists');
+        const res = await axios.get(`${BASE_URL}/admin-exists`, { withCredentials: true });
         setAdminExists(res.data.exists);
       } catch (error) {
         message.error('Failed to check admin status.');
@@ -40,7 +43,7 @@ const RegisterForm = () => {
 
   const onFinish = async (values) => {
     try {
-      const res = await axios.post('/register', values, { withCredentials: true });
+      const res = await axios.post(`${BASE_URL}/register`, values, { withCredentials: true });
       message.success(res.data.message);
       navigate('/login');
     } catch (error) {

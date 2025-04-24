@@ -3,6 +3,7 @@ import { Layout, Menu, Button, Typography, message, Modal, Tooltip } from 'antd'
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './Home.css';
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
 
 const { Header, Content, Footer } = Layout;
 const { Title, Paragraph } = Typography;
@@ -14,7 +15,8 @@ const Home = () => {
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exists', { withCredentials: true });
+        const res = await axios.get(`${BASE_URL}/admin-exists`, { withCredentials: true });
+
         setAdminExists(res.data.exists);
       } catch (error) {
         message.error('Failed to check admin status.');

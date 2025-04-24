@@ -21,6 +21,8 @@ import './App.css';
 import axios from 'axios';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8081`;
+
 
 function App() {
   const [adminExists, setAdminExists] = useState(false);
@@ -29,7 +31,7 @@ function App() {
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exists');
+        const res = await axios.get(`${BASE_URL}/admin-exists`, { withCredentials: true });
         setAdminExists(res.data.exists);
       } catch (error) {
         console.error('Failed to check admin status.');
