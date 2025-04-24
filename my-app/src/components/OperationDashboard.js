@@ -321,7 +321,7 @@ const OperationDashboard = () => {
         // Single file → use /upload
         const formData = new FormData();
         formData.append('file', uploadingFiles[0]);
-        formData.append('directory', currentPath);
+        formData.append('directory', currentPath.replace(/\\/g, '/'));
         formData.append('container', 'operation');
   
         await axios.post('/upload', formData, {
@@ -334,7 +334,7 @@ const OperationDashboard = () => {
         // Multiple files → use /bulk-upload
         const formData = new FormData();
         uploadingFiles.forEach((file) => formData.append('files', file));
-        formData.append('directory', currentPath);
+        formData.append('directory', currentPath.replace(/\\/g, '/'));
         formData.append('container', 'operation');
         formData.append('overwrite', 'false'); // or 'true' or based on user choice
         formData.append('skip', 'false');      // or 'true' or based on user choice

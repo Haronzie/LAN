@@ -217,7 +217,7 @@ const ResearchDashboard = () => {
     }
     const formData = new FormData();
     formData.append('file', uploadingFile);
-    formData.append('directory', currentPath);
+    formData.append('directory', currentPath.replace(/\\/g, '/'));
     formData.append('container', 'research');
     try {
       const res = await axios.post('/upload', formData, {
