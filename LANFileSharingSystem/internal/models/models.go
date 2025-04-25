@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -1067,4 +1068,37 @@ func (app *App) DeleteFileRecordByPath(filePath string) (int, error) {
 	}
 
 	return fileID, nil
+}
+func (app *App) UpdateFileMetadataFields(fileID int, metadata map[string]interface{}) error {
+	metadataJSON, _ := json.Marshal(metadata)
+	_, err := app.DB.Exec(`
+        UPDATE files
+        SET metadata = $1
+        WHERE id = $2
+    `, metadataJSON, fileID)
+	return err
+}
+func (app *App) ListFilesByTag(directory, tag string) ([]FileRecord, error) {
+	query := `
+		SELECT id, file_name, file_path, directory, size, content_type, uploader, metadata
+		FROM files
+		WHERE directory = $1 AND metadata->'tags' @> $2
+	`
+	rows, err := app.DB.Query(query, directory, fmt.Sprintf(`["%s"]`, tag))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []FileRecord
+	for rows.Next() {
+		var fr FileRecord
+		var metadataBytes []byte
+		if err := rows.Scan(&fr.ID, &fr.FileName, &fr.FilePath, &fr.Directory, &fr.Size, &fr.ContentType, &fr.Uploader, &metadataBytes); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(metadataBytes, &fr.Metadata)
+		files = append(files, fr)
+	}
+	return files, nil
 }

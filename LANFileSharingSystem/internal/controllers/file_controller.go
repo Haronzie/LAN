@@ -610,8 +610,17 @@ func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dir := r.URL.Query().Get("directory")
+	tag := r.URL.Query().Get("tag")
 
-	files, err := fc.App.ListFilesInDirectory(dir)
+	var files []models.FileRecord
+	var err error
+
+	if tag != "" {
+		files, err = fc.App.ListFilesByTag(dir, tag) // 👈 NEW QUERY METHOD
+	} else {
+		files, err = fc.App.ListFilesInDirectory(dir)
+	}
+
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error retrieving files")
 		return
@@ -850,13 +859,14 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := encryption.DecryptFile(key, encryptedFilePath, tempDecryptedPath); err != nil {
-		os.Remove(tempDecryptedPath)
-		log.Printf("Decryption failed for %s: %v", relativePath, err)
-		models.RespondError(w, http.StatusInternalServerError, "Error decrypting file")
-		return
+	// Attempt decryption — fallback to raw file if fails
+	decryptErr := encryption.DecryptFile(key, encryptedFilePath, tempDecryptedPath)
+	if decryptErr != nil {
+		log.Printf("Decryption failed for %s: %v — attempting raw file fallback", relativePath, decryptErr)
+		tempDecryptedPath = encryptedFilePath // fallback to raw file
+	} else {
+		defer os.Remove(tempDecryptedPath) // only remove if decryption succeeded
 	}
-	defer os.Remove(tempDecryptedPath)
 
 	ext := strings.ToLower(filepath.Ext(fr.FileName))
 	supportedDirectly := []string{".pdf", ".jpg", ".jpeg", ".png", ".gif"}
@@ -1344,4 +1354,26 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	models.RespondJSON(w, http.StatusOK, results)
+}
+
+func (fc *FileController) UpdateMetadata(w http.ResponseWriter, r *http.Request) {
+	idStr := mux.Vars(r)["id"]
+	fileID, err := strconv.Atoi(idStr)
+	if err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid file ID")
+		return
+	}
+
+	var meta map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&meta); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+
+	if err := fc.App.UpdateFileMetadataFields(fileID, meta); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Failed to update metadata")
+		return
+	}
+
+	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Metadata updated successfully"})
 }

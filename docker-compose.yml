@@ -6,11 +6,13 @@ services:
       context: ./LANFileSharingSystem
     container_name: lanfilesharing-backend
     ports:
-      - "${PORT}:${PORT}"  # use from .env
+      - "${PORT}:${PORT}"
     env_file:
       - .env
     depends_on:
       - db
+    volumes:
+      - ./LANFileSharingSystem/Cdrrmo:/app/Cdrrmo  # ✅ persists uploaded files
     networks:
       - lan-network
 

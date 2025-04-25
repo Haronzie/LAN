@@ -143,6 +143,10 @@ const FileManager = () => {
   const [folderTreeData, setFolderTreeData] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState('');
   const [targetUsername, setTargetUsername] = useState('');
+  const [editingMetadataFile, setEditingMetadataFile] = useState(null);
+const [metadataFields, setMetadataFields] = useState([{ key: '', value: '' }]);
+const [metadataModalVisible, setMetadataModalVisible] = useState(false);
+const [tagSearch, setTagSearch] = useState('');
 
   const navigate = useNavigate();
   const isRoot = currentPath === '';
@@ -167,12 +171,14 @@ const FileManager = () => {
     }
   };
 
-  const fetchItems = async () => {
+  const fetchItems = async (tag = '') => {
     setLoading(true);
     try {
       const directoryParam = encodeURIComponent(currentPath);
+      const tagParam = tag ? `&tag=${encodeURIComponent(tag)}` : '';
+  
       const [filesRes, dirsRes] = await Promise.all([
-        axios.get(`/files?directory=${directoryParam}`, { withCredentials: true }),
+        axios.get(`/files?directory=${directoryParam}${tagParam}`, { withCredentials: true }),
         axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true })
       ]);
   
@@ -211,7 +217,7 @@ const FileManager = () => {
       setLoading(false);
     }
   };
-
+  
   const fetchFolderTree = async () => {
     try {
       const res = await axios.get(`${BASE_URL}/directory/tree`, { withCredentials: true });
@@ -794,7 +800,7 @@ const FileManager = () => {
                 <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
               </Tooltip>
             )}
-
+  
             {record.type === 'file' && (
               <Tooltip title="Download">
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
@@ -805,7 +811,21 @@ const FileManager = () => {
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
-
+  
+            {/* ✅ NEW: Edit Metadata */}
+            {record.type === 'file' && (
+              <Tooltip title="Edit Metadata">
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={() => {
+                    setEditingMetadataFile(record);
+                    setMetadataFields([{ key: '', value: '' }]);
+                    setMetadataModalVisible(true);
+                  }}
+                />
+              </Tooltip>
+            )}
+  
             <Tooltip title="Rename">
               <Button
                 icon={<EditOutlined />}
@@ -816,15 +836,15 @@ const FileManager = () => {
                 }}
               />
             </Tooltip>
-
+  
             <Tooltip title="Copy">
               <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
             </Tooltip>
-
+  
             <Tooltip title="Move">
               <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
             </Tooltip>
-
+  
             <Tooltip title="Delete">
               <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
             </Tooltip>
@@ -833,6 +853,7 @@ const FileManager = () => {
       }
     }
   ];
+  
 
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
@@ -870,28 +891,41 @@ const FileManager = () => {
           </Row>
         )}
 
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          {!isRoot && (
-            <Col>
-              <Button icon={<ArrowUpOutlined />} onClick={handleGoUp}>
-                Go Up
-              </Button>
-            </Col>
-          )}
-          <Col>
-            <Button icon={<FolderAddOutlined />} onClick={() => setCreateFolderModal(true)}>
-              Create Folder
-            </Button>
-          </Col>
-          <Col>
-            <Input
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              allowClear
-            />
-          </Col>
-        </Row>
+<Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+  {!isRoot && (
+    <Col>
+      <Button icon={<ArrowUpOutlined />} onClick={handleGoUp}>
+        Go Up
+      </Button>
+    </Col>
+  )}
+  <Col>
+    <Button icon={<FolderAddOutlined />} onClick={() => setCreateFolderModal(true)}>
+      Create Folder
+    </Button>
+  </Col>
+  <Col>
+    <Input
+      placeholder="Search..."
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      allowClear
+    />
+  </Col>
+  <Col>
+    <Input
+      placeholder="Search by tag..."
+      value={tagSearch}
+      onChange={(e) => {
+        const newTag = e.target.value.trim();
+        setTagSearch(newTag);
+        fetchItems(newTag); // ✅ call backend with tag
+      }}
+      allowClear
+    />
+  </Col>
+</Row>
+
 
         <Table
           columns={columns}
@@ -1063,26 +1097,83 @@ const FileManager = () => {
         </Modal>
 
         <Modal
-          title="Move Item"
-          visible={moveModalVisible}
-          onOk={handleMoveConfirm}
-          onCancel={() => setMoveModalVisible(false)}
-          okText="Move"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Destination Folder" required>
-              <TreeSelect
-                style={{ width: '100%' }}
-                treeData={filteredTreeData}
-                placeholder="Select destination folder"
-                value={moveDestination}
-                onChange={(val) => setMoveDestination(val)}
-                treeDefaultExpandAll
-                allowClear
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+  title="Move Item"
+  visible={moveModalVisible}
+  onOk={handleMoveConfirm}
+  onCancel={() => setMoveModalVisible(false)}
+  okText="Move"
+>
+  <Form layout="vertical">
+    <Form.Item label="Destination Folder" required>
+      <TreeSelect
+        style={{ width: '100%' }}
+        treeData={filteredTreeData}
+        placeholder="Select destination folder"
+        value={moveDestination}
+        onChange={(val) => setMoveDestination(val)}
+        treeDefaultExpandAll
+        allowClear
+      />
+    </Form.Item>
+  </Form>
+</Modal>
+
+{/* ✅ Insert this new modal here */}
+<Modal
+  title={`Edit Metadata for ${editingMetadataFile?.name}`}
+  visible={metadataModalVisible}
+  onCancel={() => setMetadataModalVisible(false)}
+  onOk={async () => {
+    const metadata = {};
+    metadataFields.forEach(({ key, value }) => {
+      if (key.trim()) metadata[key.trim()] = value;
+    });
+    try {
+      await axios.put(`/file/${editingMetadataFile.id}/metadata`, metadata, {
+        withCredentials: true,
+      });
+      message.success("Metadata updated!");
+      setMetadataModalVisible(false);
+      fetchItems();
+    } catch (err) {
+      message.error("Update failed");
+    }
+  }}
+>
+  {metadataFields.map((field, idx) => (
+    <Space key={idx} style={{ display: 'flex', marginBottom: 8 }} align="start">
+      <Input
+        placeholder="Key"
+        value={field.key}
+        onChange={(e) => {
+          const newFields = [...metadataFields];
+          newFields[idx].key = e.target.value;
+          setMetadataFields(newFields);
+        }}
+      />
+      <Input
+        placeholder="Value"
+        value={field.value}
+        onChange={(e) => {
+          const newFields = [...metadataFields];
+          newFields[idx].value = e.target.value;
+          setMetadataFields(newFields);
+        }}
+      />
+      <Button danger onClick={() => {
+        const newFields = metadataFields.filter((_, i) => i !== idx);
+        setMetadataFields(newFields);
+      }}>
+        Remove
+      </Button>
+    </Space>
+  ))}
+  <Button type="dashed" block onClick={() => setMetadataFields([...metadataFields, { key: '', value: '' }])}>
+    + Add Field
+  </Button>
+</Modal>
+
+
       </Content>
     </Layout>
   );
