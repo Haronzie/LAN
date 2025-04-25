@@ -318,3 +318,7 @@ func (ac *AuthController) GetUserRole(w http.ResponseWriter, r *http.Request) {
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{"role": user.Role})
 }
+func (ac *AuthController) AdminCheck(w http.ResponseWriter, r *http.Request) {
+	hasAdmin := ac.App.AdminExists()
+	models.RespondJSON(w, http.StatusOK, map[string]bool{"adminExists": hasAdmin})
+}

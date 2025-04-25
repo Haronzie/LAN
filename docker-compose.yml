@@ -12,7 +12,8 @@ services:
     depends_on:
       - db
     volumes:
-      - ./LANFileSharingSystem/Cdrrmo:/app/Cdrrmo  # ✅ persists uploaded files
+     - ./LANFileSharingSystem/cmd/server/Cdrrmo:/app/Cdrrmo
+
     networks:
       - lan-network
 

@@ -1102,3 +1102,21 @@ func (app *App) ListFilesByTag(directory, tag string) ([]FileRecord, error) {
 	}
 	return files, nil
 }
+func (app *App) EnsureDefaultRoles() {
+	var count int
+	err := app.DB.QueryRow("SELECT COUNT(*) FROM roles").Scan(&count)
+	if err != nil {
+		log.Printf("Error checking roles: %v", err)
+		return
+	}
+	if count == 0 {
+		_, err := app.DB.Exec(`
+			INSERT INTO roles (name) VALUES ('admin'), ('user')
+		`)
+		if err != nil {
+			log.Printf("Error seeding roles: %v", err)
+		} else {
+			log.Println("✅ Default roles seeded: admin, user")
+		}
+	}
+}

@@ -214,6 +214,7 @@ func main() {
 	// Initialize the application model (shared context).
 	logger.WithField("function", "main").Debug("Creating new application context (App)...")
 	app := models.NewApp(db, store)
+	app.EnsureDefaultRoles() // ✅ Seed roles: 'admin', 'user'
 
 	// Initialize the notification hub and attach it to your app context.
 	logger.WithField("function", "main").Debug("Initializing WebSocket hub...")
@@ -266,6 +267,7 @@ func main() {
 	router.HandleFunc("/login", authController.Login).Methods("POST")
 	router.HandleFunc("/forgot-password", authController.ForgotPassword).Methods("POST")
 	router.HandleFunc("/logout", authController.Logout).Methods("POST")
+	router.HandleFunc("/admin-exists", authController.AdminCheck).Methods("GET")
 	router.HandleFunc("/upload", fileController.Upload).Methods("POST")
 	router.HandleFunc("/bulk-upload", fileController.BulkUpload).Methods("POST")
 	router.HandleFunc("/copy-file", fileController.CopyFile).Methods("POST")
@@ -273,7 +275,6 @@ func main() {
 	router.HandleFunc("/download", fileController.Download).Methods("GET")
 	router.HandleFunc("/files", fileController.ListFiles).Methods("GET")
 	router.HandleFunc("/file/{id:[0-9]+}/metadata", fileController.UpdateMetadata).Methods("PUT")
-
 	router.HandleFunc("/file/rename", fileController.RenameFile).Methods("PUT")
 	router.HandleFunc("/users/fetch", userController.FetchUserList).Methods("GET")
 	router.HandleFunc("/users", userController.ListUsers).Methods("GET")
