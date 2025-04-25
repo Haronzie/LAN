@@ -283,7 +283,6 @@ func main() {
 	router.HandleFunc("/user/delete", userController.DeleteUser).Methods("DELETE")
 	router.HandleFunc("/assign-admin", userController.AssignAdmin).Methods("POST")
 	router.HandleFunc("/delete-file", fileController.DeleteFile).Methods("DELETE")
-	router.HandleFunc("/admin-exists", userController.AdminExists).Methods("GET")
 	router.HandleFunc("/user-role", userController.GetUserRole).Methods("GET")
 	router.HandleFunc("/get-user-role", authController.GetUserRole).Methods("GET")
 	router.HandleFunc("/files/all", fileController.ListAllFiles).Methods("GET")
