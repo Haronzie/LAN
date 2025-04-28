@@ -32,6 +32,7 @@ import {
   LockOutlined,
   FileOutlined
 } from '@ant-design/icons';
+import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
@@ -91,7 +92,7 @@ const TrainingDashboard = () => {
 
   // Upload
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(null);
+  const [uploadingFiles, setUploadingFiles] = useState([]);
 
   // ----------------------------------
   // Initial Load: set user and fetch directories
@@ -226,12 +227,12 @@ const TrainingDashboard = () => {
       message.error('Please select or create a folder before uploading.');
       return;
     }
-    setUploadingFile(null);
+    setUploadingFiles([]);
     setUploadModalVisible(true);
   };
 
   const doModalUpload = async () => {
-    if (!uploadingFile) {
+    if (!uploadingFiles) {
       message.error('Please select a file first');
       return;
     }
@@ -240,7 +241,7 @@ const TrainingDashboard = () => {
       return;
     }
     const formData = new FormData();
-    formData.append('file', uploadingFile);
+    formData.append('file', uploadingFiles);
     formData.append('directory', currentPath);
     formData.append('container', 'training');
     try {
@@ -250,7 +251,7 @@ const TrainingDashboard = () => {
       });
       message.success(res.data.message || 'File uploaded successfully');
       setUploadModalVisible(false);
-      setUploadingFile(null);
+      setUploadingFiles(null);
       fetchItems();
     } catch (error) {
       console.error('Modal-based upload error:', error);
@@ -258,9 +259,40 @@ const TrainingDashboard = () => {
     }
   };
 
-  const handleModalUpload = () => {
-    doModalUpload();
-  };
+  const handleModalUpload = async () => {
+    if (uploadingFiles.length === 0) {
+      message.error('Please select one or more files first');
+      return;
+    }
+  
+    try {
+      const formData = new FormData();
+      uploadingFiles.forEach(file => formData.append('files', file)); // multiple files
+      formData.append('directory', currentPath);
+      formData.append('container', 'training');
+      formData.append('overwrite', 'false');
+      formData.append('skip', 'false');
+  
+      const res = await axios.post('/bulk-upload', formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+  
+      const results = res.data || [];
+      const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
+      const skipped = results.filter(r => r.status === 'skipped').length;
+      const failed = results.filter(r => r.status.startsWith('error')).length;
+  
+      message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+  
+      setUploadModalVisible(false);
+      setUploadingFiles([]);
+      fetchItems();
+    } catch (error) {
+      console.error('Upload error:', error);
+      message.error('Upload failed');
+    }
+  };  
 
   const handleDelete = async (record) => {
     const isOwner =
@@ -726,43 +758,46 @@ const TrainingDashboard = () => {
 
         {/* Upload Modal */}
         <Modal
-          title="Upload File"
-          visible={uploadModalVisible}
-          onOk={handleModalUpload}
-          onCancel={() => {
-            setUploadModalVisible(false);
-            setUploadingFile(null);
-          }}
-          okText="Upload"
-        >
-          <p>Target Folder: {currentPath || '(none)'}</p>
-          <Form layout="vertical">
-            <Form.Item>
-              <Button
-                icon={<UploadOutlined />}
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.onchange = (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setUploadingFile(file);
-                    }
-                  };
-                  input.click();
-                }}
-              >
-                Select File
-              </Button>
-            </Form.Item>
-            {uploadingFile && (
-              <Card size="small" style={{ marginTop: 16 }}>
-                <strong>Selected File:</strong> {uploadingFile.name}
-              </Card>
-            )}
-            
-          </Form>
-        </Modal>
+        title="Upload File(s)"
+        visible={uploadModalVisible}
+        onOk={handleModalUpload}
+        onCancel={() => {
+          setUploadModalVisible(false);
+          setUploadingFiles([]);
+        }}
+        okText="Upload"
+        okButtonProps={{ disabled: uploadingFiles.length === 0 }}
+      >
+        <p>Target Folder: {currentPath || '(none)'}</p>
+        <Form layout="vertical">
+          <Form.Item>
+            <Dragger
+              multiple
+              fileList={uploadingFiles}
+              beforeUpload={(file, fileList) => {
+                setUploadingFiles(fileList);
+                return false; // don't upload automatically
+              }}
+              showUploadList={{ showRemoveIcon: true, showPreviewIcon: false }}
+              onRemove={(file) => {
+                setUploadingFiles(prev => prev.filter(f => f.uid !== file.uid));
+              }}
+              customRequest={({ onSuccess }) => {
+                setTimeout(() => {
+                  onSuccess("ok");
+                }, 0);
+              }}
+              style={{ padding: '12px 0' }}
+            >
+              <p className="ant-upload-drag-icon">
+                <UploadOutlined />
+              </p>
+              <p className="ant-upload-text">Click or drag files here to upload</p>
+              <p className="ant-upload-hint">Supports multiple files</p>
+            </Dragger>
+          </Form.Item>
+        </Form>
+      </Modal>
       </Content>
     </Layout>
   );

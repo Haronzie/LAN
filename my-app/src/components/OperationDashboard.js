@@ -20,6 +20,7 @@ import {
   Spin
 } from 'antd';
 import {
+  Upload,
   UploadOutlined,
   DeleteOutlined,
   DownloadOutlined,
@@ -33,6 +34,7 @@ import {
   FileTextOutlined,
   FolderOutlined
 } from '@ant-design/icons';
+import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
@@ -900,36 +902,31 @@ const OperationDashboard = () => {
         >
           <p>Target Folder: {currentPath || '(none)'}</p>
           <Form layout="vertical">
-            <Form.Item>
-              <Button
-                icon={<UploadOutlined />}
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.multiple = true;
-                  input.onchange = (e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length > 0) {
-                      setUploadingFiles(files);
-                    }
-                  };
-                  input.click();
-                }}
-              >
-                Select File(s)
-              </Button>
-            </Form.Item>
-
-            {uploadingFiles.length > 0 && (
-              <Card size="small" style={{ marginTop: 16 }}>
-                <strong>Selected Files:</strong>
-                <ul style={{ marginTop: 8 }}>
-                  {uploadingFiles.map((file, idx) => (
-                    <li key={idx}>{file.name}</li>
-                  ))}
-                </ul>
-              </Card>
-            )}
+          <Dragger
+            multiple
+            fileList={uploadingFiles}
+            beforeUpload={(file, fileList) => {
+              setUploadingFiles(fileList);
+              return false; // prevent auto upload
+            }}
+            showUploadList={true}
+            onRemove={(file) => {
+              setUploadingFiles(prev => prev.filter(f => f.uid !== file.uid));
+            }}
+            
+            customRequest={({ onSuccess }) => {
+              setTimeout(() => {
+                onSuccess("ok");
+              }, 0);
+            }}
+            style={{ padding: '12px 0' }}
+          >
+            <p className="ant-upload-drag-icon">
+              <UploadOutlined />
+            </p>
+            <p className="ant-upload-text">Click or drag files here to upload</p>
+            <p className="ant-upload-hint">Supports multiple files</p>
+          </Dragger>
           </Form>
         </Modal>
       </Content>
