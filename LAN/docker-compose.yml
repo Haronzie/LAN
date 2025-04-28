@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: ./LANFileSharingSystem
+    container_name: cdrrmo-backend
+    ports:
+      - "8081:8081"  # Backend listens on 8081 inside the container
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://postgres:Jmc441864@cdrrmo-postgres:5432/takla?sslmode=disable"
+      PORT: "8081"
+      SESSION_KEY: "supersecretkey123"
+      ENCRYPTION_KEY: "12345678901234567890123456789012"
+
+  frontend:
+    build:
+      context: ./my-app
+      args:
+        REACT_APP_API_URL: http://cdrrmo-backend:8081  # Frontend points to backend at container name + port
+    container_name: cdrrmo-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+  postgres:
+    image: postgres:15
+    container_name: cdrrmo-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Jmc441864
+      POSTGRES_DB: takla
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+
+volumes:
+  postgres_data:
