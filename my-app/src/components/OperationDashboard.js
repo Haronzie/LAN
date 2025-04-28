@@ -75,14 +75,6 @@ const OperationDashboard = () => {
   const [hideDone, setHideDone] = useState(false);
   const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
   const [ws, setWs] = useState(null);
-  
-  useEffect(() => {
-    const storedUsername = localStorage.getItem('username');
-    if (storedUsername) setCurrentUser(storedUsername);
-    const storedRole = localStorage.getItem('role');
-    if (storedRole === 'admin') setIsAdmin(true);
-  }, []);
-  
 
   useEffect(() => {
     const username = localStorage.getItem('username');
