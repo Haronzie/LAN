@@ -22,14 +22,14 @@ import (
 // App holds shared resources across the application.
 type App struct {
 	DB              *sql.DB
-	Store           *sessions.CookieStore
+	Store           sessions.Store
 	FileCache       map[string]FileRecord
-	FileShareTokens map[string]string // token -> file name mapping
+	FileShareTokens map[string]string
 	NotificationHub *ws.Hub
 }
 
 // NewApp creates a new App instance.
-func NewApp(db *sql.DB, store *sessions.CookieStore) *App {
+func NewApp(db *sql.DB, store sessions.Store) *App {
 	return &App{
 		DB:              db,
 		Store:           store,

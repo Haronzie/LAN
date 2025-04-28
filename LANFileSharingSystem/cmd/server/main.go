@@ -201,18 +201,22 @@ func main() {
 		WithField("migrationsPath", migrationsPath).
 		Info("Migrations applied successfully (or no changes needed)")
 
-	// Initialize session store using a secret key from configuration.
+		// Initialize session store using a secret key from configuration.
+		// Initialize session store using a secret key from configuration.
 	logger.WithField("function", "main").Debug("Initializing session store...")
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
 
-	// Initialize the application model (shared context).
-	logger.WithField("function", "main").Debug("Creating new application context (App)...")
-	app := models.NewApp(db, store)
-
-	// Initialize the notification hub and attach it to your app context.
+	// Initialize the notification hub FIRST before app
 	logger.WithField("function", "main").Debug("Initializing WebSocket hub...")
 	hub := ws.NewHub()
-	go hub.Run()
+	go func() {
+		logger.WithField("function", "hub.Run()").Info("WebSocket Hub started")
+		hub.Run()
+	}()
+
+	// Now initialize the application model (shared context).
+	logger.WithField("function", "main").Debug("Creating new application context (App)...")
+	app := models.NewApp(db, store)
 	app.NotificationHub = hub
 
 	// Ensure the 'uploads' folder exists.
