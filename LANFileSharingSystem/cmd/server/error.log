@@ -16,3 +16,6 @@
 [36mINFO[0m[2025-04-09 17:26:49]main.go:174 main.main() Successfully connected to database            [36mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable" [36mfunction[0m=main
 [36mINFO[0m[2025-04-09 17:26:49]main.go:203 main.main() Migrations applied successfully (or no changes needed)  [36mfunction[0m=main [36mmigrationsPath[0m="file://../../internal/migrations"
 [36mINFO[0m[2025-04-09 17:26:49]main.go:326 main.main() Starting server                               [36mfunction[0m=main [36mport[0m=8080
+[36mINFO[0m[2025-04-28 09:26:56]main.go:174 main.main() Successfully connected to database            [36mdatabase[0m="postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable" [36mfunction[0m=main
+[36mINFO[0m[2025-04-28 09:26:56]main.go:203 main.main() Migrations applied successfully (or no changes needed)  [36mfunction[0m=main [36mmigrationsPath[0m="file://../../internal/migrations"
+[36mINFO[0m[2025-04-28 09:26:56]main.go:339 main.main() Starting server                               [36mfunction[0m=main [36mport[0m=8080
