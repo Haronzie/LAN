@@ -28,6 +28,7 @@ import {
   SwapOutlined,
   FileOutlined
 } from '@ant-design/icons';
+import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
@@ -71,7 +72,8 @@ const ResearchDashboard = () => {
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(null);
+  const [uploadingFiles, setUploadingFiles] = useState([]);
+
 
   // ----------------------------------
   // Initial Load: set user and fetch directories
@@ -202,12 +204,12 @@ const ResearchDashboard = () => {
       message.error('Please select or create a folder before uploading.');
       return;
     }
-    setUploadingFile(null);
+    setUploadingFiles([]);
     setUploadModalVisible(true);
   };
 
   const doModalUpload = async () => {
-    if (!uploadingFile) {
+    if (!uploadingFiles) {
       message.error('Please select a file first');
       return;
     }
@@ -216,8 +218,8 @@ const ResearchDashboard = () => {
       return;
     }
     const formData = new FormData();
-    formData.append('file', uploadingFile);
-    formData.append('directory', currentPath.replace(/\\/g, '/'));
+    formData.append('file', uploadingFiles);
+    formData.append('directory', currentPath);
     formData.append('container', 'research');
     try {
       const res = await axios.post('/upload', formData, {
@@ -226,7 +228,7 @@ const ResearchDashboard = () => {
       });
       message.success(res.data.message || 'File uploaded successfully');
       setUploadModalVisible(false);
-      setUploadingFile(null);
+      setUploadingFiles(null);
       fetchItems();
     } catch (error) {
       console.error('Modal-based upload error:', error);
@@ -693,40 +695,44 @@ const ResearchDashboard = () => {
 
         {/* Upload Modal */}
         <Modal
-          title="Upload File"
+          title="Upload Files"
           visible={uploadModalVisible}
           onOk={handleModalUpload}
           onCancel={() => {
             setUploadModalVisible(false);
-            setUploadingFile(null);
+            setUploadingFiles([]);
           }}
           okText="Upload"
+          okButtonProps={{ disabled: uploadingFiles.length === 0 }}
         >
           <p>Target Folder: {currentPath}</p>
           <Form layout="vertical">
             <Form.Item>
-              <Button
-                icon={<UploadOutlined />}
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.onchange = (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setUploadingFile(file);
-                    }
-                  };
-                  input.click();
+              <Dragger
+                multiple
+                fileList={uploadingFiles}
+                beforeUpload={(file, fileList) => {
+                  setUploadingFiles(fileList);
+                  return false; // Don't auto upload
                 }}
+                showUploadList={{ showRemoveIcon: true, showPreviewIcon: false }}
+                onRemove={(file) => {
+                  setUploadingFiles(prev => prev.filter(f => f.uid !== file.uid));
+                }}
+                customRequest={({ onSuccess }) => {
+                  setTimeout(() => {
+                    onSuccess("ok");
+                  }, 0);
+                }}
+                style={{ padding: '12px 0' }}
               >
-                Select File
-              </Button>
+                <p className="ant-upload-drag-icon">
+                  <UploadOutlined />
+                </p>
+                <p className="ant-upload-text">Click or drag files here to upload</p>
+                <p className="ant-upload-hint">You can select multiple files</p>
+              </Dragger>
             </Form.Item>
-            {uploadingFile && (
-              <Card size="small" style={{ marginTop: 16 }}>
-                <strong>Selected File:</strong> {uploadingFile.name}
-              </Card>
-            )}
           </Form>
         </Modal>
       </Content>
