@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"strings"
 
 	"LANFileSharingSystem/internal/config"
 	"LANFileSharingSystem/internal/controllers"
@@ -326,9 +325,7 @@ func main() {
 
 	// Wrap your router with CORS middleware.
 	corsRouter := handlers.CORS(
-		handlers.AllowedOriginValidator(func(origin string) bool {
-			return strings.HasPrefix(origin, "http://192.168.") || origin == "http://localhost:3000"
-		}),
+		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
 		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
 		handlers.AllowCredentials(),
