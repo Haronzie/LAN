@@ -1345,3 +1345,39 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 
 	models.RespondJSON(w, http.StatusOK, results)
 }
+
+// CountFilesInMainFolders counts all files in Operation, Research, and Training directories.
+func (fc *FileController) CountFilesInMainFolders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	if _, err := fc.App.GetUserFromSession(r); err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	counts := make(map[string]int)
+
+	folders := []string{"Operation", "Research", "Training"}
+	for _, folder := range folders {
+		rows, err := fc.App.DB.Query(`
+            SELECT COUNT(*) FROM files
+            WHERE directory = $1
+        `, folder)
+		if err != nil {
+			models.RespondError(w, http.StatusInternalServerError, "Database error")
+			return
+		}
+		defer rows.Close()
+
+		var count int
+		if rows.Next() {
+			_ = rows.Scan(&count)
+		}
+		counts[folder] = count
+	}
+
+	models.RespondJSON(w, http.StatusOK, counts)
+}
