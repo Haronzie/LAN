@@ -76,7 +76,6 @@ const OperationDashboard = () => {
   const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
   const [ws, setWs] = useState(null);
 
-
   useEffect(() => {
     const username = localStorage.getItem('username');
     if (!username) return;
