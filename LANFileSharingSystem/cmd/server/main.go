@@ -174,7 +174,7 @@ func main() {
 		Info("Successfully connected to database")
 
 	// AUTOMATICALLY RUN MIGRATIONS HERE
-	migrationsPath := "file://internal/migrations"
+	migrationsPath := "file://../../internal/migrations"
 	logger.WithField("function", "main").Debug("Initializing migrations...")
 	m, err := migrate.New(migrationsPath, cfg.DatabaseURL)
 	if err != nil {
@@ -269,7 +269,6 @@ func main() {
 	router.HandleFunc("/files", fileController.ListFiles).Methods("GET")
 	router.HandleFunc("/file/rename", fileController.RenameFile).Methods("PUT")
 	router.HandleFunc("/count-main-folders", fileController.CountFilesInMainFolders).Methods("GET")
-
 	router.HandleFunc("/users/fetch", userController.FetchUserList).Methods("GET")
 	router.HandleFunc("/users", userController.ListUsers).Methods("GET")
 	router.HandleFunc("/user/add", userController.AddUser).Methods("POST")
