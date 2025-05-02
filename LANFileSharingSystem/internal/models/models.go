@@ -486,26 +486,11 @@ func (app *App) ListDirectory(parent string) ([]map[string]interface{}, error) {
 }
 
 func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
-	var rows *sql.Rows
-	var err error
-
-	if dir == "" {
-		// Root: files with no slash at all
-		rows, err = app.DB.Query(`
-            SELECT id, file_name, file_path, size, content_type, uploader
-            FROM files
-            WHERE file_path NOT LIKE '%/%'
-        `)
-	} else {
-		// Only immediate children of dir.
-		rows, err = app.DB.Query(`
-            SELECT id, file_name, file_path, size, content_type, uploader
-            FROM files
-            WHERE file_path LIKE $1 || '/%' 
-              AND file_path NOT LIKE $1 || '/%/%'
-        `, dir)
-	}
-
+	rows, err := app.DB.Query(`
+		SELECT id, file_name, file_path, size, content_type, uploader, directory
+		FROM files
+		WHERE LOWER(directory) = LOWER($1)
+	`, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +499,7 @@ func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 	var results []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		if err := rows.Scan(&f.ID, &f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader); err != nil {
+		if err := rows.Scan(&f.ID, &f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader, &f.Directory); err != nil {
 			return nil, err
 		}
 		results = append(results, f)

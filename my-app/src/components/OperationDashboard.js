@@ -199,11 +199,13 @@ const OperationDashboard = () => {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const dirParam = encodeURIComponent(currentPath);
+      const normalizedPath = currentPath.replace(/\\/g, '/').toLowerCase();
+      const dirParam = encodeURIComponent(normalizedPath);
       const [dirRes, fileRes] = await Promise.all([
         axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true }),
         axios.get(`/files?directory=${dirParam}`, { withCredentials: true })
       ]);
+      console.log("📦 Files response from API:", fileRes.data);
       
       const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
       const fetchedFiles = (fileRes.data || []).map(f => ({
@@ -317,12 +319,14 @@ const OperationDashboard = () => {
       return;
     }
   
+    const normalizedPath = currentPath.replace(/\\/g, '/').toLowerCase();
+    console.log("Uploading to directory:", normalizedPath); // for debugging
+  
     try {
       if (uploadingFiles.length === 1) {
-        // Single file → use /upload
         const formData = new FormData();
         formData.append('file', uploadingFiles[0]);
-        formData.append('directory', currentPath.replace(/\\/g, '/'));
+        formData.append('directory', normalizedPath);
         formData.append('container', 'operation');
   
         await axios.post('/upload', formData, {
@@ -332,20 +336,17 @@ const OperationDashboard = () => {
   
         message.success('File uploaded successfully');
       } else {
-        // Multiple files → use /bulk-upload
         const formData = new FormData();
         uploadingFiles.forEach((file) => formData.append('files', file));
-        formData.append('directory', currentPath.replace(/\\/g, '/'));
+        formData.append('directory', normalizedPath);
         formData.append('container', 'operation');
-        formData.append('overwrite', 'false'); // or 'true' or based on user choice
-        formData.append('skip', 'false');      // or 'true' or based on user choice
+        formData.append('overwrite', 'false');
+        formData.append('skip', 'false');
   
         const res = await axios.post('/bulk-upload', formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        
-        
   
         const results = res.data || [];
         const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
@@ -357,13 +358,13 @@ const OperationDashboard = () => {
   
       setUploadModalVisible(false);
       setUploadingFiles([]);
-      fetchItems();
+      fetchItems(); // refresh the view
       fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Upload error:', error);
       message.error('Upload failed');
     }
-  };
+  };  
   
 
   const handleDelete = async (record) => {
@@ -786,8 +787,11 @@ const OperationDashboard = () => {
           dataSource={filteredItems}
           rowKey={(record) => (record.id ? record.id : record.name + record.type)}
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={false}
+          scroll={{ y: '49vh' }}  // for content scrolling on table
         />
+
+
 
         {/* Create Folder Modal */}
         <Modal

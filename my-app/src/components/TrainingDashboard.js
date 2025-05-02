@@ -654,6 +654,7 @@ const TrainingDashboard = () => {
           dataSource={filteredItems}
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
+          scroll={{ y: '49vh' }}  // for content scrolling on table
         />
 
         {/* Create Folder Modal */}

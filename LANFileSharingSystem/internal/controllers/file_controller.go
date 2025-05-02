@@ -29,8 +29,15 @@ func NewFileController(app *models.App) *FileController {
 	return &FileController{App: app}
 }
 
-// Upload handles file uploads.
+// handles file uploads.
 func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("🔥 Recovered from panic in Upload: %v", r)
+			models.RespondError(w, http.StatusInternalServerError, "Internal server error")
+		}
+	}()
+
 	if r.Method != http.MethodPost {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
@@ -72,6 +79,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 
 	ext := strings.ToLower(filepath.Ext(handler.Filename))
 	mime := handler.Header.Get("Content-Type")
+	log.Printf("Uploaded file: %s, MIME type: %s\n", handler.Filename, mime)
 
 	if !allowedExtensions[ext] || !allowedMIMETypes[mime] {
 		models.RespondError(w, http.StatusBadRequest, "Only Word, Excel, and PDF files with valid MIME types are allowed")
@@ -79,13 +87,26 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	targetDir := r.FormValue("directory")
+	log.Println("🟡 Got upload directory (raw):", targetDir)
+
 	if targetDir != "" {
-		targetDir = filepath.Clean(targetDir)
+		// Normalize and sanitize
+		cleanTarget := filepath.Clean(targetDir)
+		parts := strings.Split(cleanTarget, string(os.PathSeparator))
+
+		if len(parts) > 0 {
+			parts[0] = strings.ToLower(parts[0]) // Normalize top folder to lowercase
+		}
+
+		targetDir = filepath.Join(parts...)
+		log.Println("📁 Normalized upload directory:", targetDir)
+
 		if strings.HasPrefix(targetDir, "..") {
 			models.RespondError(w, http.StatusBadRequest, "Invalid directory path")
 			return
 		}
-		topFolder := strings.ToLower(strings.Split(targetDir, "/")[0])
+
+		topFolder := strings.ToLower(parts[0])
 		validTopFolders := map[string]bool{
 			"operation": true,
 			"research":  true,
@@ -150,7 +171,9 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	tempFile.Close()
 
 	key := []byte(os.Getenv("ENCRYPTION_KEY"))
+	log.Printf("🔐 ENCRYPTION_KEY length: %d", len(key))
 	if len(key) != 32 {
+		log.Println("❌ Invalid ENCRYPTION_KEY length or missing key")
 		os.Remove(tempFilePath)
 		models.RespondError(w, http.StatusInternalServerError, "Invalid encryption key")
 		return
@@ -200,16 +223,17 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
+	
 	fr := models.FileRecord{
 		FileName:    filepath.Base(relativePath),
-		Directory:   targetDir,
+		Directory:   strings.ToLower(targetDir),
 		FilePath:    relativePath,
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
 		Uploader:    user.Username,
 		Metadata:    metaMap,
 	}
+	log.Println("📁 File saved to directory:", fr.Directory)
 
 	if err := fc.App.CreateFileRecord(fr); err != nil {
 		log.Println("Error saving file record:", err)
@@ -599,36 +623,46 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
+	// Ensure method is GET
 	if r.Method != http.MethodGet {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
 
+	// Check if user is authenticated
 	if _, err := fc.App.GetUserFromSession(r); err != nil {
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 
-	dir := r.URL.Query().Get("directory")
+	// Normalize the requested directory
+	dirRaw := r.URL.Query().Get("directory")
+	dir := strings.ToLower(strings.TrimSpace(dirRaw))
 
+	log.Println("📂 Requested directory:", dir)
+
+	// Fetch files in the directory
 	files, err := fc.App.ListFilesInDirectory(dir)
 	if err != nil {
+		log.Printf("❌ Error listing files in directory '%s': %v\n", dir, err)
 		models.RespondError(w, http.StatusInternalServerError, "Error retrieving files")
 		return
 	}
 
-	var output []map[string]interface{}
+	// Prepare output format
+	output := make([]map[string]interface{}, 0, len(files))
 	for _, f := range files {
 		output = append(output, map[string]interface{}{
+			"id":          f.ID,
 			"name":        f.FileName,
 			"type":        "file",
 			"size":        f.Size,
 			"contentType": f.ContentType,
 			"uploader":    f.Uploader,
-			"id":          f.ID,
 		})
 	}
 
+	// Return file list
 	models.RespondJSON(w, http.StatusOK, output)
 }
 

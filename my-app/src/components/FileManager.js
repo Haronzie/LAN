@@ -55,7 +55,7 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
       }
       setFetching(true);
       try {
-        const response = await axios.get(`/users?search=${value}`, { withCredentials: true });
+        const response = await axios.get(`${BASE_URL}/users?search=${value}`, { withCredentials: true });
         const data = response.data || [];
   
         // ✅ filter out self here too if not done in map stage
@@ -149,7 +149,7 @@ const FileManager = () => {
 
   const generateSuggestedName = async (baseName, extension, destinationPath) => {
     try {
-      const res = await axios.get(`/files?directory=${encodeURIComponent(destinationPath)}`, {
+      const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(destinationPath)}`, {
         withCredentials: true
       });
       const existingNames = res.data.map(f => f.name);
@@ -171,13 +171,16 @@ const FileManager = () => {
   const fetchItems = async () => {
     setLoading(true);
     try {
+      console.log("📂 Fetching files in:", currentPath);
       const directoryParam = encodeURIComponent(currentPath);
       const [filesRes, dirsRes] = await Promise.all([
-        axios.get(`/files?directory=${directoryParam}`, { withCredentials: true }),
-        axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true })
+        axios.get(`${BASE_URL}/files?directory=${directoryParam}`, { withCredentials: true }),
+        axios.get(`${BASE_URL}/directory/list?directory=${directoryParam}`, { withCredentials: true })
       ]);
   
-      const files = (filesRes.data || []).map((f) => ({
+      const files = (filesRes.data || [])
+      .filter(f => (f.directory || '').toLowerCase() === (currentPath || '').toLowerCase())
+      .map(f => ({
         name: f.name,
         type: 'file',
         size: f.size,
@@ -186,6 +189,7 @@ const FileManager = () => {
         uploader: f.uploader,
         id: f.id
       }));
+    
   
       let directories = dirsRes.data || [];
   
@@ -215,7 +219,7 @@ const FileManager = () => {
 
   const fetchFolderTree = async () => {
     try {
-      const res = await axios.get('/directory/tree', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/directory/tree`, { withCredentials: true });
       let data = res.data || [];
   
       const fixedFolders = ['Operation', 'Research', 'Training'];
@@ -283,7 +287,7 @@ const FileManager = () => {
     }
     try {
       await axios.post(
-        '/directory/create',
+        `${BASE_URL}/directory/create`,
         { name: newFolderName, parent: currentPath },
         { withCredentials: true }
       );
@@ -341,6 +345,23 @@ const FileManager = () => {
       message.error('Please select files first');
       return;
     }
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+
+    for (const file of uploadingFile) {
+      const ext = path.extname(file.name).toLowerCase();
+      if (!allowedExtensions.includes(ext) || !allowedTypes.includes(file.type)) {
+        message.error(`Unsupported file: ${file.name} (${file.type})`);
+        return;
+      }
+    }
+
   
     if (fileUploadMessage.trim() && !targetUsername) {
       message.error('Please select a valid user to send the file to when including a message.');
@@ -349,7 +370,7 @@ const FileManager = () => {
   
     const normalizedPath = currentPath.replace(/\\/g, '/');
   
-    const existingFilesRes = await axios.get(`/files?directory=${encodeURIComponent(normalizedPath)}`, {
+    const existingFilesRes = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`, {
       withCredentials: true
     });
     const existingFiles = existingFilesRes.data || [];
@@ -362,7 +383,8 @@ const FileManager = () => {
       const uploadSingle = async (overwrite) => {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('directory', normalizedPath); // ✅ updated
+        console.log("Sending folder:", normalizedPath);
+        formData.append('directory', normalizedPath.toLowerCase()); // ✅ updated
         if (overwrite) formData.append('overwrite', 'true');
         if (fileUploadMessage.trim() && targetUsername.trim()) {
           formData.append('message', fileUploadMessage.trim());
@@ -370,7 +392,7 @@ const FileManager = () => {
         }
   
         try {
-          await axios.post('/upload', formData, {
+          await axios.post(`${BASE_URL}/upload`, formData, {
             withCredentials: true,
             headers: { 'Content-Type': 'multipart/form-data' },
           });
@@ -398,7 +420,7 @@ const FileManager = () => {
     } else {
       const formData = new FormData();
       uploadingFile.forEach((file) => formData.append('files', file));
-      formData.append('directory', normalizedPath); // ✅ updated
+      formData.append('directory', normalizedPath.to); // ✅ updated
       formData.append('container', normalizedPath.split('/')[0] || 'operation'); // ✅ updated
       formData.append('overwrite', 'false');
       formData.append('skip', 'false');
@@ -408,7 +430,7 @@ const FileManager = () => {
       }
   
       try {
-        const res = await axios.post('/bulk-upload', formData, {
+        const res = await axios.post(`${BASE_URL}/bulk-upload`, formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -435,7 +457,7 @@ const FileManager = () => {
   
   const uploadFile = async (formData, isOverwrite) => {
     try {
-      const res = await axios.post('/upload', formData, {
+      const res = await axios.post(`${BASE_URL}/upload`, formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -444,7 +466,7 @@ const FileManager = () => {
   
       if (fileUploadMessage.trim() && targetUsername.trim()) {
         try {
-          await axios.post('/file/message', {
+          await axios.post(`${BASE_URL}/file/message`, {
             file_id,
             receiver: targetUsername.trim(),
             message: fileUploadMessage.trim()
@@ -472,12 +494,13 @@ const FileManager = () => {
   const handleDelete = async (record) => {
     try {
       if (record.type === 'directory') {
-        await axios.delete('/directory/delete', {
+        await axios.delete(`${BASE_URL}/directory/delete`, {
           data: { name: record.name, parent: currentPath },
           withCredentials: true
         });
       } else {
-        await axios.delete('/delete-file', {
+        console.log("🗑 Deleting file:", record.name, "from folder:", currentPath);
+        await axios.delete(`${BASE_URL}/delete-file`, {
           data: {
             filename: record.name,
             directory: currentPath
@@ -525,7 +548,7 @@ const FileManager = () => {
     try {
       if (selectedItem.type === 'directory') {
         await axios.put(
-          '/directory/rename',
+          `${BASE_URL}/directory/rename`,
           {
             old_name: selectedItem.name,
             new_name: renameNewName,
@@ -536,7 +559,7 @@ const FileManager = () => {
         fetchFolderTree();
       } else {
         await axios.put(
-          '/file/rename',
+          `${BASE_URL}/file/rename`,
           {
             old_filename: selectedItem.name,
             new_filename: renameNewName
@@ -579,7 +602,7 @@ const FileManager = () => {
       const targetDir = selectedDestination || currentPath;
   
       if (copyItem.type === 'directory') {
-        await axios.post('/directory/copy', {
+        await axios.post(`${BASE_URL}/directory/copy`, {
           source_name: copyItem.name,
           source_parent: currentPath,
           new_name: copyNewName,
@@ -590,7 +613,7 @@ const FileManager = () => {
         fetchFolderTree();
   
       } else {
-        const res = await axios.post('/copy-file', {
+        const res = await axios.post(`${BASE_URL}/copy-file`, {
           source_file: copyItem.name,
           new_file_name: copyNewName,
           destination_folder: targetDir
@@ -630,7 +653,7 @@ const FileManager = () => {
   
     try {
       if (moveItem.type === 'file') {
-        const res = await axios.get(`/files?directory=${encodeURIComponent(moveDestination)}`, {
+        const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
           withCredentials: true
         });
   
@@ -719,7 +742,7 @@ const FileManager = () => {
     try {
       if (moveItem.type === 'directory') {
         await axios.post(
-          '/directory/move',
+          `${BASE_URL}/directory/move`,
           {
             name: moveItem.name,
             old_parent: currentPath,
@@ -729,7 +752,7 @@ const FileManager = () => {
         );
       } else {
         await axios.post(
-          '/move-file',
+          `${BASE_URL}/move-file`,
           {
             filename: moveItem.name,
             old_parent: currentPath,
@@ -963,7 +986,7 @@ const FileManager = () => {
     }
   
     try {
-      await axios.post('/upload', formData, {
+      await axios.post(`${BASE_URL}/upload`, formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (event) => {
