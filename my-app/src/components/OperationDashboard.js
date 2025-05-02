@@ -38,6 +38,7 @@ import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
+import { MoreOutlined } from '@ant-design/icons';
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -75,11 +76,13 @@ const OperationDashboard = () => {
   const [hideDone, setHideDone] = useState(false);
   const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
   const [ws, setWs] = useState(null);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [selectedFileInfo, setSelectedFileInfo] = useState(null);
 
   useEffect(() => {
     const username = localStorage.getItem('username');
     if (!username) return;
-
+    setCurrentUser(username);
     const wsInstance = new WebSocket(`ws://localhost:8080/ws?username=${username}`);
     setWs(wsInstance);
 
@@ -581,6 +584,9 @@ const OperationDashboard = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+      sorter: (a, b) => a.name.localeCompare(b.name),
+      defaultSortOrder: 'ascend',
+      sortDirections: [],
       render: (name, record) => (
         <Space>
           {record.type === 'directory' ? <FolderOutlined /> : <FileTextOutlined />}
@@ -603,11 +609,6 @@ const OperationDashboard = () => {
       dataIndex: 'formattedSize',
       key: 'size',
       render: (size, record) => record.type === 'directory' ? '--' : size
-    },
-    {
-      title: 'Uploader/Owner',
-      key: 'owner',
-      render: (record) => record.type === 'directory' ? record.created_by || 'N/A' : record.uploader || 'N/A'
     },
     {
       title: 'Actions',
@@ -648,6 +649,15 @@ const OperationDashboard = () => {
                 <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
               </Tooltip>
             )}
+            <Tooltip title="More Info">
+            <Button
+              icon={<MoreOutlined />}
+              onClick={() => {
+                setSelectedFileInfo(record);
+                setInfoModalVisible(true);
+              }}
+            />
+          </Tooltip>
           </Space>
         );
       }
@@ -790,6 +800,27 @@ const OperationDashboard = () => {
           pagination={false}
           scroll={{ y: '49vh' }}  // for content scrolling on table
         />
+        <Modal
+          title="File Information"
+          visible={infoModalVisible}
+          onCancel={() => setInfoModalVisible(false)}
+          footer={null}
+        >
+          {selectedFileInfo ? (
+            <div>
+              <p><strong>Name:</strong> {selectedFileInfo.name}</p>
+              <p><strong>Type:</strong> {selectedFileInfo.type}</p>
+              <p><strong>Size:</strong> {selectedFileInfo.formattedSize}</p>
+              <p><strong>Uploader:</strong> {selectedFileInfo.uploader || 'N/A'}</p>
+              <p><strong>Uploaded On:</strong> {selectedFileInfo.created_at ? new Date(selectedFileInfo.created_at).toLocaleString() : 'N/A'}</p>
+              <p><strong>Directory:</strong> {selectedFileInfo.directory}</p>
+            </div>
+          ) : (
+            <p>No file selected</p>
+          )}
+        </Modal>
+
+
 
 
 

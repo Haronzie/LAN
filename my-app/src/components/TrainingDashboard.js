@@ -528,6 +528,9 @@ const TrainingDashboard = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+      sorter: (a, b) => a.name.localeCompare(b.name),
+      defaultSortOrder: 'ascend',
+      sortDirections: [],
       render: (name, record) => {
         if (record.type === 'directory') {
           return (
@@ -654,8 +657,8 @@ const TrainingDashboard = () => {
           dataSource={filteredItems}
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
-          scroll={{ y: '49vh' }}  // for content scrolling on table
           pagination={false}
+          scroll={{ y: '49vh' }}  // for content scrolling on table
         />
 
         {/* Create Folder Modal */}

@@ -449,6 +449,7 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 	}
 
 	relativePath := filepath.Join(cleanDir, cleanName)
+	log.Println("🔎 Downloading relative path:", relativePath)
 
 	fr, err := fc.App.GetFileRecordByPath(relativePath)
 	if err != nil {
@@ -659,6 +660,7 @@ func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
 			"size":        f.Size,
 			"contentType": f.ContentType,
 			"uploader":    f.Uploader,
+			"created_at": f.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 

@@ -88,6 +88,7 @@ type FileRecord struct {
 	ContentType string                 `json:"content_type"`
 	Uploader    string                 `json:"uploader"`
 	Metadata    map[string]interface{} `json:"metadata"` // 👈 dynamic field
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // -------------------------------------
@@ -487,7 +488,7 @@ func (app *App) ListDirectory(parent string) ([]map[string]interface{}, error) {
 
 func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 	rows, err := app.DB.Query(`
-		SELECT id, file_name, file_path, size, content_type, uploader, directory
+		SELECT id, file_name, file_path, size, content_type, uploader, created_at, directory
 		FROM files
 		WHERE LOWER(directory) = LOWER($1)
 	`, dir)
@@ -499,13 +500,14 @@ func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 	var results []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		if err := rows.Scan(&f.ID, &f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader, &f.Directory); err != nil {
+		if err := rows.Scan(&f.ID, &f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader, &f.CreatedAt, &f.Directory); err != nil {
 			return nil, err
 		}
 		results = append(results, f)
 	}
 	return results, nil
 }
+
 
 // DirectoryExists checks if a directory with the given name exists under the specified parent.
 func (app *App) DirectoryExists(name, parent string) (bool, error) {
