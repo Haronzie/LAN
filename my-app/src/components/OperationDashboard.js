@@ -750,7 +750,7 @@ const OperationDashboard = () => {
         {/* Dashboard UI */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <h2 style={{ margin: 0 }}>Operation Dashboard</h2>
+            <h2 style={{ margin: 0 }}></h2>
           </Col>
           <Col>
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>

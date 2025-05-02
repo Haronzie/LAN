@@ -199,46 +199,67 @@ const ResearchDashboard = () => {
   // ----------------------------------
   // Upload Modal
   // ----------------------------------
+  const handleModalUpload = async () => {
+    if (uploadingFiles.length === 0) {
+      message.error('Please select one or more files first');
+      return;
+    }
+  
+    const normalizedPath = currentPath.replace(/\\/g, '/').toLowerCase();
+  
+    try {
+      if (uploadingFiles.length === 1) {
+        const formData = new FormData();
+        formData.append('file', uploadingFiles[0]);
+        formData.append('directory', normalizedPath);
+        formData.append('container', 'research');
+  
+        await axios.post('/upload', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+  
+        message.success('File uploaded successfully');
+      } else {
+        const formData = new FormData();
+        uploadingFiles.forEach(file => formData.append('files', file));
+        formData.append('directory', normalizedPath);
+        formData.append('container', 'research');
+        formData.append('overwrite', 'false');
+        formData.append('skip', 'false');
+  
+        const res = await axios.post('/bulk-upload', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+  
+        const results = res.data || [];
+        const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
+        const skipped = results.filter(r => r.status === 'skipped').length;
+        const failed = results.filter(r => r.status.startsWith('error')).length;
+  
+        message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+      }
+  
+      setUploadModalVisible(false);
+      setUploadingFiles([]);
+      fetchItems(); // refresh file list
+    } catch (error) {
+      console.error('Upload error:', error);
+      message.error(error.response?.data?.error || 'Upload failed');
+    }
+  };
+  
+  
   const handleOpenUploadModal = () => {
     if (!currentPath) {
-      message.error('Please select or create a folder before uploading.');
+      message.error("Please select or create a folder first.");
       return;
     }
     setUploadingFiles([]);
     setUploadModalVisible(true);
   };
-
-  const doModalUpload = async () => {
-    if (!uploadingFiles) {
-      message.error('Please select a file first');
-      return;
-    }
-    if (!currentPath) {
-      message.error('Please select or create a folder first');
-      return;
-    }
-    const formData = new FormData();
-    formData.append('file', uploadingFiles);
-    formData.append('directory', currentPath);
-    formData.append('container', 'research');
-    try {
-      const res = await axios.post('/upload', formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      message.success(res.data.message || 'File uploaded successfully');
-      setUploadModalVisible(false);
-      setUploadingFiles(null);
-      fetchItems();
-    } catch (error) {
-      console.error('Modal-based upload error:', error);
-      message.error(error.response?.data?.error || 'Error uploading file');
-    }
-  };
-
-  const handleModalUpload = () => {
-    doModalUpload();
-  };
+   
 
   // ----------------------------------
   // Delete
@@ -556,7 +577,7 @@ const ResearchDashboard = () => {
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <h2 style={{ margin: 0 }}>Research Dashboard</h2>
+            <h2 style={{ margin: 0 }}></h2>
           </Col>
           <Col>
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
@@ -726,9 +747,7 @@ const ResearchDashboard = () => {
                 }}
                 style={{ padding: '12px 0' }}
               >
-                <p className="ant-upload-drag-icon">
-                  <UploadOutlined />
-                </p>
+                <p className="ant-upload-drag-icon"><UploadOutlined /></p>
                 <p className="ant-upload-text">Click or drag files here to upload</p>
                 <p className="ant-upload-hint">You can select multiple files</p>
               </Dragger>

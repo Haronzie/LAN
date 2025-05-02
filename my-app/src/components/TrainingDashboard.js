@@ -619,7 +619,7 @@ const TrainingDashboard = () => {
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <h2 style={{ margin: 0 }}>Training Dashboard</h2>
+            <h2 style={{ margin: 0 }}></h2>
           </Col>
           <Col>
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
@@ -655,6 +655,7 @@ const TrainingDashboard = () => {
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
           scroll={{ y: '49vh' }}  // for content scrolling on table
+          pagination={false}
         />
 
         {/* Create Folder Modal */}
