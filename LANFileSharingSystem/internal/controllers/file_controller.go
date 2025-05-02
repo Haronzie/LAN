@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -906,14 +906,24 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 	contentType := fr.ContentType
 
 	if needsConversion {
-		tempDir, err := ioutil.TempDir("", "libreoffice_convert")
+		tempDir, err := os.MkdirTemp("", "libreoffice_convert")
 		if err != nil {
 			models.RespondError(w, http.StatusInternalServerError, "Error creating temp dir for conversion")
 			return
 		}
 		defer os.RemoveAll(tempDir)
 
-		cmd := exec.Command("/Applications/LibreOffice.app/Contents/MacOS/soffice",
+		// Dynamic LibreOffice Path
+		sofficePath := "soffice" // Default for Linux or Windows with PATH set
+		switch runtime.GOOS {
+		case "darwin":
+			sofficePath = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+		case "windows":
+			// Adjust if user installs LibreOffice in a different folder
+			sofficePath = `C:\Program Files\LibreOffice\program\soffice.exe`
+		}
+
+		cmd := exec.Command(sofficePath,
 			"--headless", "--convert-to", "pdf",
 			"--outdir", tempDir,
 			tempDecryptedPath)
@@ -926,7 +936,7 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		files, err := ioutil.ReadDir(tempDir)
+		files, err := os.ReadDir(tempDir)
 		if err != nil {
 			models.RespondError(w, http.StatusInternalServerError, "Could not list converted files")
 			return
