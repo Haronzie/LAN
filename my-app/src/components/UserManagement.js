@@ -300,7 +300,7 @@ const UserManagement = () => {
     <Layout style={{ minHeight: '91vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         <div style={{ position: 'relative', marginBottom: 16 }}>
-          <h2 style={{ textAlign: 'center', margin: 0 }}>User Management</h2>
+          <h2 style={{ textAlign: 'center', margin: 0 }}></h2>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -322,7 +322,7 @@ const UserManagement = () => {
           dataSource={filteredUsers}
           rowKey="username"
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={false}
         />
 
         {/* Add User Modal */}

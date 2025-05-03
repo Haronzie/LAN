@@ -484,9 +484,12 @@ const ResearchDashboard = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+
+      // sort in ascending order
       sorter: (a, b) => a.name.localeCompare(b.name),
       defaultSortOrder: 'ascend',
       sortDirections: [],
+
       render: (name, record) => {
         if (record.type === 'directory') {
           return (

@@ -584,9 +584,12 @@ const OperationDashboard = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      sorter: (a, b) => a.name.localeCompare(b.name),
+
+      // sort in ascending order
+      sorter: (a, b) => a.name.localeCompare(b.name), 
       defaultSortOrder: 'ascend',
       sortDirections: [],
+      
       render: (name, record) => (
         <Space>
           {record.type === 'directory' ? <FolderOutlined /> : <FileTextOutlined />}

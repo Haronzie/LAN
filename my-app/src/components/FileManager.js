@@ -785,6 +785,12 @@ const FileManager = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+
+      // sort in ascending order
+      sorter: (a, b) => a.name.localeCompare(b.name),
+      defaultSortOrder: 'ascend',
+      sortDirections: [],
+
       render: (name, record) => {
         if (record.type === 'directory') {
           return (
@@ -879,7 +885,7 @@ const FileManager = () => {
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col flex="auto" style={{ textAlign: 'center' }}>
-            <h2 style={{ margin: 0 }}>File Manager</h2>
+            <h2 style={{ margin: 0 }}></h2>
           </Col>
           <Col>
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
