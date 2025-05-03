@@ -179,7 +179,9 @@ const FileManager = () => {
       ]);
   
       const files = (filesRes.data || [])
-      .filter(f => (f.directory || '').toLowerCase() === (currentPath || '').toLowerCase())
+      const normalizePath = path => (path || '').replace(/^\/|\/$/g, '').toLowerCase()
+
+      .filter(f => normalizePath(f.directory) === normalizePath(currentPath))
       .map(f => ({
         name: f.name,
         type: 'file',
@@ -922,7 +924,8 @@ const FileManager = () => {
           dataSource={filteredItems}
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={false}
+          scroll={{ y: '49vh' }}  // for content scrolling on table
         />
 
         <Modal
