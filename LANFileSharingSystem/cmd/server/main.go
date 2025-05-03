@@ -247,7 +247,11 @@ func main() {
 	// Create a new router.
 	logger.WithField("function", "main").Debug("Creating new Gorilla mux router...")
 	router := mux.NewRouter()
-	// Removed the first RateLimitMiddleware call here to avoid duplication.
+
+	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	}).Methods("GET")
 
 	// Initialize controllers with the application context.
 	logger.WithField("function", "main").Debug("Initializing controllers...")
