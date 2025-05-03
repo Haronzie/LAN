@@ -103,28 +103,38 @@ const ResearchDashboard = () => {
     setLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
-      // 1) Fetch directories
+  
+      // 1. Fetch folders
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true });
-      const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
-      // 2) Fetch files
-      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
-      const fetchedFiles = (fileRes.data || []).map((f) => ({
-        id: f.id,
-        name: f.name,
-        type: 'file',
-        size: f.size,
-        formattedSize: formatFileSize(f.size),
-        uploader: f.uploader
+      const folders = (dirRes.data || []).map((folder) => ({
+        id: `folder-${folder.name}`,
+        name: folder.name,
+        type: 'directory',
+        created_by: folder.created_by || '',
       }));
-      setItems([...fetchedDirs, ...fetchedFiles]);
+  
+      // 2. Fetch files
+      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
+      const files = (fileRes.data || []).map((file) => ({
+        id: file.id,
+        name: file.name,
+        type: 'file',
+        size: file.size,
+        formattedSize: formatFileSize(file.size),
+        uploader: file.uploader,
+      }));
+  
+      // 3. Merge and sort
+      const sortedItems = [...folders, ...files].sort((a, b) => a.name.localeCompare(b.name));
+      setItems(sortedItems);
     } catch (error) {
-      console.error('Error fetching directory contents:', error);
-      message.error(error.response?.data?.error || 'Error fetching directory contents');
-      setItems([]);
+      console.error('Error loading items:', error);
+      message.error('Failed to fetch files or folders.');
     } finally {
       setLoading(false);
     }
   };
+  
 
   useEffect(() => {
     fetchItems();
@@ -353,7 +363,30 @@ const ResearchDashboard = () => {
   // Copy
   // ----------------------------------
   const handleCopy = (record) => {
-    const suggestedName = record.name + '_copy';
+      // condition in naming the copied file
+      let baseName = record.name;
+      let extension = '';
+      const dotIndex = record.name.lastIndexOf('.');
+      if (dotIndex !== -1) {
+        baseName = record.name.substring(0, dotIndex);
+        extension = record.name.substring(dotIndex);
+      }
+  
+      let suggestedName = record.name;
+      const destination = selectedDestination || currentPath;
+      const existingNames = items
+        .filter(item => item.parent === destination)
+        .map(item => item.name);
+  
+      if (existingNames.includes(record.name)) {
+        let counter = 1;
+        let newName;
+        do {
+          newName = `${baseName}(${counter})${extension}`;
+          counter++;
+        } while (existingNames.includes(newName));
+        suggestedName = newName;
+      }
     setCopyItem(record);
     setCopyNewName(suggestedName);
     setCopyModalVisible(true);

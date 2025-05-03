@@ -202,51 +202,48 @@ const OperationDashboard = () => {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const normalizedPath = currentPath.replace(/\\/g, '/').toLowerCase();
-      const dirParam = encodeURIComponent(normalizedPath);
-      const [dirRes, fileRes] = await Promise.all([
-        axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true }),
-        axios.get(`/files?directory=${dirParam}`, { withCredentials: true })
-      ]);
-      console.log("📦 Files response from API:", fileRes.data);
-      
-      const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
-      const fetchedFiles = (fileRes.data || []).map(f => ({
-        id: f.id,
-        name: f.name,
-        type: 'file',
-        size: f.size,
-        formattedSize: formatFileSize(f.size),
-        uploader: f.uploader,
-        directory: f.directory
+      const dirParam = encodeURIComponent(currentPath);
+  
+      // 1. Fetch folders
+      const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true });
+      const folders = (dirRes.data || []).map((folder) => ({
+        id: `folder-${folder.name}`,
+        name: folder.name,
+        type: 'directory',
+        created_by: folder.created_by || '',
       }));
-
-      setItems([...fetchedDirs, ...fetchedFiles]);
-      
-      // Fetch messages for these files
-      const newMessageMap = {};
-      for (const file of fetchedFiles) {
-        try {
-          const res = await axios.get(`/file/messages?file_id=${file.id}`, {
-            withCredentials: true,
-          });
-          if (res.data?.length) {
-            newMessageMap[file.id] = res.data;
-          }
-        } catch (error) {
-          console.error(`Failed to fetch messages for file ID ${file.id}:`, error);
-        }
-      }
-      setFileMessages(newMessageMap);
+  
+      // 2. Fetch files
+      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
+      const files = (fileRes.data || []).map((file) => ({
+        id: file.id,
+        name: file.name,
+        type: 'file',
+        size: file.size,
+        formattedSize: formatFileSize(file.size),
+        uploader: file.uploader,
+      }));
+  
+      // 3. Combine and sort: folders first, then files, both alphabetically
+      const combined = [...folders, ...files];
+      const sortedItems = combined.sort((a, b) => {
+        // Folders first
+        if (a.type === 'directory' && b.type !== 'directory') return -1;
+        if (a.type !== 'directory' && b.type === 'directory') return 1;
+        // Then alphabetical
+        return a.name.localeCompare(b.name);
+      });
+  
+      // 4. Set the sorted items
+      setItems(sortedItems);
     } catch (error) {
-      console.error('Error fetching items:', error);
-      message.error(error.response?.data?.error || 'Error fetching directory contents');
-      setItems([]);
+      console.error('Error loading items:', error);
+      message.error('Failed to fetch files or folders.');
     } finally {
       setLoading(false);
     }
   };
-
+  
   useEffect(() => {
     fetchItems();
   }, [currentPath]);
@@ -469,7 +466,30 @@ const OperationDashboard = () => {
   };
 
   const handleCopy = (record) => {
-    const suggestedName = record.name + '_copy';
+    // condition in naming the copied file
+    let baseName = record.name;
+    let extension = '';
+    const dotIndex = record.name.lastIndexOf('.');
+    if (dotIndex !== -1) {
+      baseName = record.name.substring(0, dotIndex);
+      extension = record.name.substring(dotIndex);
+    }
+
+    let suggestedName = record.name;
+    const destination = selectedDestination || currentPath;
+    const existingNames = items
+      .filter(item => item.parent === destination)
+      .map(item => item.name);
+
+    if (existingNames.includes(record.name)) {
+      let counter = 1;
+      let newName;
+      do {
+        newName = `${baseName}(${counter})${extension}`;
+        counter++;
+      } while (existingNames.includes(newName));
+      suggestedName = newName;
+    }
     setCopyItem(record);
     setCopyNewName(suggestedName);
     setCopyModalVisible(true);

@@ -397,7 +397,30 @@ const TrainingDashboard = () => {
   // Copy
   // ----------------------------------
   const handleCopy = (record) => {
-    const suggestedName = record.name + '_copy';
+      // condition in naming the copied file
+      let baseName = record.name;
+      let extension = '';
+      const dotIndex = record.name.lastIndexOf('.');
+      if (dotIndex !== -1) {
+        baseName = record.name.substring(0, dotIndex);
+        extension = record.name.substring(dotIndex);
+      }
+  
+      let suggestedName = record.name;
+      const destination = selectedDestination || currentPath;
+      const existingNames = items
+        .filter(item => item.parent === destination)
+        .map(item => item.name);
+  
+      if (existingNames.includes(record.name)) {
+        let counter = 1;
+        let newName;
+        do {
+          newName = `${baseName}(${counter})${extension}`;
+          counter++;
+        } while (existingNames.includes(newName));
+        suggestedName = newName;
+      }
     setCopyItem(record);
     setCopyNewName(suggestedName);
     setCopyModalVisible(true);
@@ -533,7 +556,7 @@ const TrainingDashboard = () => {
       sorter: (a, b) => a.name.localeCompare(b.name),
       defaultSortOrder: 'ascend',
       sortDirections: [],
-      
+
       render: (name, record) => {
         if (record.type === 'directory') {
           return (
