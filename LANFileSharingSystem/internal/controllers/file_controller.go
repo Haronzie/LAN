@@ -95,7 +95,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(cleanTarget, string(os.PathSeparator))
 
 		if len(parts) > 0 {
-			parts[0] = strings.ToLower(parts[0]) // Normalize top folder to lowercase
+
 		}
 
 		targetDir = filepath.Join(parts...)
@@ -223,10 +223,10 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
+
 	fr := models.FileRecord{
 		FileName:    filepath.Base(relativePath),
-		Directory:   strings.ToLower(targetDir),
+		Directory:   targetDir,
 		FilePath:    relativePath,
 		Size:        handler.Size,
 		ContentType: handler.Header.Get("Content-Type"),
@@ -660,7 +660,7 @@ func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
 			"size":        f.Size,
 			"contentType": f.ContentType,
 			"uploader":    f.Uploader,
-			"created_at": f.CreatedAt.Format("2006-01-02 15:04:05"),
+			"created_at":  f.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 
