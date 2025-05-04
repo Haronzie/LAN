@@ -1427,3 +1427,78 @@ func (fc *FileController) CountFilesInMainFolders(w http.ResponseWriter, r *http
 
 	models.RespondJSON(w, http.StatusOK, counts)
 }
+func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+	if _, err := fc.App.GetUserFromSession(r); err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	if q == "" {
+		models.RespondError(w, http.StatusBadRequest, "Search query is required")
+		return
+	}
+	dir := strings.TrimSpace(r.URL.Query().Get("dir"))
+	// Build SQL filter
+	pattern := "%" + q + "%"
+	var rows *sql.Rows
+	var err error
+
+	if dir != "" {
+		// restrict to a directory
+		rows, err = fc.App.DB.Query(
+			`SELECT id, file_name, directory, content_type, size, file_path
+             FROM files
+             WHERE directory ILIKE $1 AND (
+                   LOWER(file_name) LIKE $2 OR
+                   LOWER(file_path) LIKE $2
+             )
+             ORDER BY file_name`,
+			dir, pattern,
+		)
+	} else {
+		// search everywhere
+		rows, err = fc.App.DB.Query(
+			`SELECT id, file_name, directory, content_type, size, file_path
+             FROM files
+             WHERE LOWER(file_name) LIKE $1 OR
+                   LOWER(directory) LIKE $1 OR
+                   LOWER(file_path) LIKE $1
+             ORDER BY directory, file_name`,
+			pattern,
+		)
+	}
+	if err != nil {
+		log.Printf("❌ Search query failed: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Search failed")
+		return
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var (
+			id          int
+			name, d, ct string
+			size        int64
+			path        string
+		)
+		if err := rows.Scan(&id, &name, &d, &ct, &size, &path); err != nil {
+			continue
+		}
+		results = append(results, map[string]interface{}{
+			"id":          id,
+			"name":        name,
+			"directory":   d,
+			"contentType": ct,
+			"size":        size,
+			"path":        path,
+		})
+	}
+
+	models.RespondJSON(w, http.StatusOK, results)
+}

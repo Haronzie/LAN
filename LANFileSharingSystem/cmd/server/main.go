@@ -275,6 +275,7 @@ func main() {
 	router.HandleFunc("/download", fileController.Download).Methods("GET")
 	router.HandleFunc("/files", fileController.ListFiles).Methods("GET")
 	router.HandleFunc("/file/rename", fileController.RenameFile).Methods("PUT")
+	router.HandleFunc("/search", fileController.SearchFiles).Methods("GET")
 	router.HandleFunc("/count-main-folders", fileController.CountFilesInMainFolders).Methods("GET")
 	router.HandleFunc("/users/fetch", userController.FetchUserList).Methods("GET")
 	router.HandleFunc("/users", userController.ListUsers).Methods("GET")
