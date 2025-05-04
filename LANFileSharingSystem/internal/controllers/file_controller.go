@@ -17,9 +17,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	"github.com/gorilla/mux"
 )
+
 
 type FileController struct {
 	App *models.App
@@ -715,11 +715,13 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Filename  string `json:"filename"`
-		OldParent string `json:"old_parent"`
+		ID        string `json:"id"`
 		NewParent string `json:"new_parent"`
+		OldParent string `json:"old_parent"` // add this line
+		Filename  string `json:"filename"`   // and this line
 		Overwrite bool   `json:"overwrite"`
 	}
+	
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
@@ -736,14 +738,22 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build full relative and disk paths
-	oldRelativePath := filepath.Join(req.OldParent, req.Filename)
-	oldFullPath := filepath.Join("Cdrrmo", oldRelativePath)
-
-	fr, err := fc.App.GetFileRecordByPath(oldRelativePath)
+	id, err := strconv.Atoi(req.ID)
 	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "File not found in database")
-		return
+		// handle the error, e.g., return a 400 Bad Request
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid ID format"})
+
 	}
+
+	fr, err := fc.App.GetFileRecordByID(id)
+	if err != nil {
+	models.RespondError(w, http.StatusNotFound, "File not found in database")
+	return
+	}
+
+	oldRelativePath := fr.FilePath
+	oldFullPath := filepath.Join("Cdrrmo", oldRelativePath)
 
 	base := strings.TrimSuffix(fr.FileName, filepath.Ext(fr.FileName))
 	ext := filepath.Ext(fr.FileName)

@@ -143,6 +143,7 @@ const FileManager = () => {
   const [folderTreeData, setFolderTreeData] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState('');
   const [targetUsername, setTargetUsername] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState([]);
 
   const navigate = useNavigate();
   const isRoot = currentPath === '';
@@ -340,7 +341,12 @@ const FileManager = () => {
     setUploadingFile([]); // ✅ now an empty array
     setUploadModalVisible(true);
   };
-  
+
+  const handleRemoveFile = (index) => {
+    const updatedFiles = [...selectedFiles];
+    updatedFiles.splice(index, 1);
+    setSelectedFiles(updatedFiles);
+  };  
 
   const handleUpload = async () => {
     if (!uploadingFile || uploadingFile.length === 0) {
@@ -753,16 +759,26 @@ const FileManager = () => {
           { withCredentials: true }
         );
       } else {
+
+        console.log('Moving file with:', {
+          id: moveItem.id,
+          filename: moveItem.name,
+          old_parent: currentPath,
+          new_parent: moveDestination,
+          overwrite
+        });
+        
         await axios.post(
           `${BASE_URL}/move-file`,
           {
+            id: moveItem.id,
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
             overwrite,
           },
           { withCredentials: true }
-        );
+        );        
       }
   
       message.success(`Moved '${moveItem.name}' successfully`);
@@ -976,57 +992,68 @@ const FileManager = () => {
           onCancel={() => setUploadModalVisible(false)}
           onOk={handleUpload}
         >
-         <Dragger
-  multiple
-  fileList={uploadingFile}
-  beforeUpload={(file, fileList) => {
-    setUploadingFile(fileList);
-    return false;
-  }}
-  showUploadList={false}
-  customRequest={async ({ file, onProgress, onSuccess, onError }) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('directory', currentPath.replace(/\\/g, '/')); // ✅ Normalize path
-  
-    if (fileUploadMessage.trim() && targetUsername.trim()) {
-      formData.append('message', fileUploadMessage.trim());
-      formData.append('receiver', targetUsername.trim());
-    }
-  
-    try {
-      await axios.post(`${BASE_URL}/upload`, formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (event) => {
-          onProgress({ percent: (event.loaded / event.total) * 100 });
-        }
-      });
-      message.success(`${file.name} uploaded successfully`);
-      onSuccess();
-      fetchItems();
-    } catch (err) {
-      console.error('Upload error:', err);
-      message.error(`${file.name} upload failed`);
-      onError(err);
-    }
-  }}
-  
->
-  <p className="ant-upload-drag-icon">
-    <UploadOutlined />
-  </p>
-  <p className="ant-upload-text">Click or drag files here to upload</p>
-  <p className="ant-upload-hint">Supports multiple files with progress tracking</p>
-</Dragger>
+        <Dragger
+          multiple
+          fileList={uploadingFile}
+          beforeUpload={(file, fileList) => {
+            setUploadingFile(fileList);
+            return false;
+          }}
+          
+          showUploadList={{
+            showRemoveIcon: true,
+            removeIcon: <DeleteOutlined style={{ color: 'red' }} />, // You can style this
+            showDownloadIcon: false,
+            showPreviewIcon: false,
+          }}
 
+          onRemove={(file) => {
+            setUploadingFile((prevList) =>
+              prevList.filter((item) => item.uid !== file.uid)
+            );
+          }}
 
-<div style={{ marginTop: 8 }}>
-{Array.isArray(uploadingFile) && uploadingFile.map((file, i) => (
-  <p key={i}>Selected: {file.name}</p>
-))}
+          customRequest={async ({ file, onProgress, onSuccess, onError }) => {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('directory', currentPath.replace(/\\/g, '/')); // ✅ Normalize path
+          
+            if (fileUploadMessage.trim() && targetUsername.trim()) {
+              formData.append('message', fileUploadMessage.trim());
+              formData.append('receiver', targetUsername.trim());
+            }
+          
+            try {
+              await axios.post(`${BASE_URL}/upload`, formData, {
+                withCredentials: true,
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (event) => {
+                  onProgress({ percent: (event.loaded / event.total) * 100 });
+                }
+              });
+              message.success(`${file.name} uploaded successfully`);
+              onSuccess();
+              fetchItems();
+            } catch (err) {
+              console.error('Upload error:', err);
+              message.error(`${file.name} upload failed`);
+              onError(err);
+            }
+          }}
+          
+        >
+          <p className="ant-upload-drag-icon">
+            <UploadOutlined />
+          </p>
+          <p className="ant-upload-text">Click or drag files here to upload</p>
+          <p className="ant-upload-hint">Supports multiple files with progress tracking</p>
+        </Dragger>
+        <div style={{ marginTop: 8 }}>
+        {Array.isArray(uploadingFile) && uploadingFile.map((file, i) => (
+          <p key={i}></p>
+        ))}
 
-</div>
+        </div>
 
 <Form.Item label="Instruction Template">
   <Select
