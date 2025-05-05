@@ -140,7 +140,7 @@ const FileManager = () => {
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveDestination, setMoveDestination] = useState('');
   const [moveItem, setMoveItem] = useState(null);
-  const [folderTreeData, setFolderTreeData] = useState([]);
+  const [ folderTreeData, setFolderTreeData] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState('');
   const [targetUsername, setTargetUsername] = useState('');
   const [selectedFiles, setSelectedFiles] = useState([]);
