@@ -141,14 +141,20 @@ func runMigrations(databaseURL string) {
 	}
 
 	// 2. From cmd/server, go up two levels into internal/migrations
-	migrationsDir := filepath.Clean(filepath.Join(wd, "..", "..", "internal", "migrations"))
-	migrationsPath := "file://" + migrationsDir
+	migrationsDir := filepath.Clean(
+		filepath.Join(wd, "..", "..", "internal", "migrations"),
+	)
+
+	// 3. Convert to forward-slashes and prepend "file:///"
+	//    so that migrate.New parses it correctly on all OSes.
+	//    filepath.ToSlash("C:\\path\\to\\migrations") ➔ "C:/path/to/migrations"
+	slashPath := filepath.ToSlash(migrationsDir)
+	migrationsPath := "file:///" + slashPath
 
 	logger.WithField("function", "runMigrations").
 		WithField("path", migrationsPath).
 		Debug("Initializing migrations")
 
-	// (rest stays the same)
 	m, err := migrate.New(migrationsPath, databaseURL)
 	if err != nil {
 		logger.WithField("errorCode", "MIG_INIT_ERR").
@@ -163,6 +169,7 @@ func runMigrations(databaseURL string) {
 			Error("migration up failed")
 		os.Exit(1)
 	}
+
 	logger.WithField("function", "runMigrations").
 		Info("Migrations applied successfully (or no change)")
 }
