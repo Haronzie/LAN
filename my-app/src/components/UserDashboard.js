@@ -163,31 +163,48 @@ const UserDashboard = () => {
       </Sider>
 
       <Layout>
-        <Header style={{
-          background: '#fff',
-          padding: '0 20px',
-          display: 'flex',
-          alignItems: 'center',
-          height: 64,
-          flexShrink: 0,
-          boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
-        }}>
+        <Header
+          style={{
+            background: '#fff',
+            padding: '0 20px',
+            display: 'flex',
+            alignItems: 'center',
+            height: 64,
+            flexShrink: 0,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
+            position: 'relative',
+          }}
+        >
           {isMobile && (
             <Button
               type="text"
               icon={<MenuOutlined />}
               onClick={toggleSidebar}
-              style={{ marginRight: 16 }}
+              style={{ marginRight: 16, zIndex: 1 }}
             />
           )}
-          <Title level={4} style={{ margin: 0 }}>
-            Welcome, <strong>{username || 'Guest'}</strong>!
-          </Title>
+
+          {/* Centered title using absolute positioning */}
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              textAlign: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <Title level={4} style={{ margin: 0, textTransform: 'capitalize' }}>
+              {currentRoute} Dashboard
+            </Title>
+          </div>
+
           <div style={{ flex: 1 }} />
-          <Button type="primary" onClick={handleLogout}>
+          <Button type="primary" onClick={handleLogout} style={{ zIndex: 1 }}>
             Logout
           </Button>
         </Header>
+
 
         <Content style={{ margin: 0, padding: 0, overflow: 'hidden' }}>
           <div style={{

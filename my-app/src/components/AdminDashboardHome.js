@@ -93,7 +93,7 @@ const AdminDashboardHome = () => {
 
   return (
     <div style={{ padding: '16px 24px', maxWidth: 1200, margin: '0 auto' }}>
-      <Title level={3} style={{ marginBottom: 24, textAlign: 'center' }}>Dashboard</Title>
+      <Title level={3} style={{ marginBottom: 24, textAlign: 'center' }}></Title>
       
       <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={12} md={8}>

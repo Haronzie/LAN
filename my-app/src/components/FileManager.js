@@ -55,7 +55,7 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
       }
       setFetching(true);
       try {
-        const response = await axios.get(`/users?search=${value}`, { withCredentials: true });
+        const response = await axios.get(`${BASE_URL}/users?search=${value}`, { withCredentials: true });
         const data = response.data || [];
   
         // ✅ filter out self here too if not done in map stage
@@ -140,21 +140,19 @@ const FileManager = () => {
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveDestination, setMoveDestination] = useState('');
   const [moveItem, setMoveItem] = useState(null);
-  const [folderTreeData, setFolderTreeData] = useState([]);
+  const [ folderTreeData, setFolderTreeData] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState('');
   const [targetUsername, setTargetUsername] = useState('');
-  const [editingMetadataFile, setEditingMetadataFile] = useState(null);
-const [metadataFields, setMetadataFields] = useState([{ key: '', value: '' }]);
-const [metadataModalVisible, setMetadataModalVisible] = useState(false);
-const [tagSearch, setTagSearch] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState([]);
 
   const navigate = useNavigate();
   const isRoot = currentPath === '';
 
   const generateSuggestedName = async (baseName, extension, destinationPath) => {
     try {
-      const res = await axios.get('/directory/tree', { withCredentials: true });
-
+      const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(destinationPath)}`, {
+        withCredentials: true
+      });
       const existingNames = res.data.map(f => f.name);
       let attempt = 0;
       let suggested;
@@ -174,15 +172,20 @@ const [tagSearch, setTagSearch] = useState('');
   const fetchItems = async (tag = '') => {
     setLoading(true);
     try {
+      console.log("📂 Fetching files in:", currentPath);
       const directoryParam = encodeURIComponent(currentPath);
       const tagParam = tag ? `&tag=${encodeURIComponent(tag)}` : '';
   
       const [filesRes, dirsRes] = await Promise.all([
-        axios.get(`/files?directory=${directoryParam}${tagParam}`, { withCredentials: true }),
-        axios.get(`/directory/list?directory=${directoryParam}`, { withCredentials: true })
+        axios.get(`${BASE_URL}/files?directory=${directoryParam}`, { withCredentials: true }),
+        axios.get(`${BASE_URL}/directory/list?directory=${directoryParam}`, { withCredentials: true })
       ]);
   
-      const files = (filesRes.data || []).map((f) => ({
+      const files = (filesRes.data || [])
+      const normalizePath = path => (path || '').replace(/^\/|\/$/g, '').toLowerCase()
+
+      .filter(f => normalizePath(f.directory) === normalizePath(currentPath))
+      .map(f => ({
         name: f.name,
         type: 'file',
         size: f.size,
@@ -191,6 +194,7 @@ const [tagSearch, setTagSearch] = useState('');
         uploader: f.uploader,
         id: f.id
       }));
+    
   
       let directories = dirsRes.data || [];
   
@@ -288,7 +292,7 @@ const [tagSearch, setTagSearch] = useState('');
     }
     try {
       await axios.post(
-        '/directory/create',
+        `${BASE_URL}/directory/create`,
         { name: newFolderName, parent: currentPath },
         { withCredentials: true }
       );
@@ -339,13 +343,35 @@ const [tagSearch, setTagSearch] = useState('');
     setUploadingFile([]); // ✅ now an empty array
     setUploadModalVisible(true);
   };
-  
+
+  const handleRemoveFile = (index) => {
+    const updatedFiles = [...selectedFiles];
+    updatedFiles.splice(index, 1);
+    setSelectedFiles(updatedFiles);
+  };  
 
   const handleUpload = async () => {
     if (!uploadingFile || uploadingFile.length === 0) {
       message.error('Please select files first');
       return;
     }
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+
+    for (const file of uploadingFile) {
+      const ext = path.extname(file.name).toLowerCase();
+      if (!allowedExtensions.includes(ext) || !allowedTypes.includes(file.type)) {
+        message.error(`Unsupported file: ${file.name} (${file.type})`);
+        return;
+      }
+    }
+
   
     if (fileUploadMessage.trim() && !targetUsername) {
       message.error('Please select a valid user to send the file to when including a message.');
@@ -354,7 +380,7 @@ const [tagSearch, setTagSearch] = useState('');
   
     const normalizedPath = currentPath.replace(/\\/g, '/');
   
-    const existingFilesRes = await axios.get(`/files?directory=${encodeURIComponent(normalizedPath)}`, {
+    const existingFilesRes = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`, {
       withCredentials: true
     });
     const existingFiles = existingFilesRes.data || [];
@@ -367,7 +393,8 @@ const [tagSearch, setTagSearch] = useState('');
       const uploadSingle = async (overwrite) => {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('directory', normalizedPath); // ✅ updated
+        console.log("Sending folder:", normalizedPath);
+        formData.append('directory', normalizedPath.toLowerCase()); // ✅ updated
         if (overwrite) formData.append('overwrite', 'true');
         if (fileUploadMessage.trim() && targetUsername.trim()) {
           formData.append('message', fileUploadMessage.trim());
@@ -375,7 +402,7 @@ const [tagSearch, setTagSearch] = useState('');
         }
   
         try {
-          await axios.post('/upload', formData, {
+          await axios.post(`${BASE_URL}/upload`, formData, {
             withCredentials: true,
             headers: { 'Content-Type': 'multipart/form-data' },
           });
@@ -403,7 +430,7 @@ const [tagSearch, setTagSearch] = useState('');
     } else {
       const formData = new FormData();
       uploadingFile.forEach((file) => formData.append('files', file));
-      formData.append('directory', normalizedPath); // ✅ updated
+      formData.append('directory', normalizedPath.to); // ✅ updated
       formData.append('container', normalizedPath.split('/')[0] || 'operation'); // ✅ updated
       formData.append('overwrite', 'false');
       formData.append('skip', 'false');
@@ -413,7 +440,7 @@ const [tagSearch, setTagSearch] = useState('');
       }
   
       try {
-        const res = await axios.post('/bulk-upload', formData, {
+        const res = await axios.post(`${BASE_URL}/bulk-upload`, formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -440,7 +467,7 @@ const [tagSearch, setTagSearch] = useState('');
   
   const uploadFile = async (formData, isOverwrite) => {
     try {
-      const res = await axios.post('/upload', formData, {
+      const res = await axios.post(`${BASE_URL}/upload`, formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -449,7 +476,7 @@ const [tagSearch, setTagSearch] = useState('');
   
       if (fileUploadMessage.trim() && targetUsername.trim()) {
         try {
-          await axios.post('/file/message', {
+          await axios.post(`${BASE_URL}/file/message`, {
             file_id,
             receiver: targetUsername.trim(),
             message: fileUploadMessage.trim()
@@ -477,12 +504,13 @@ const [tagSearch, setTagSearch] = useState('');
   const handleDelete = async (record) => {
     try {
       if (record.type === 'directory') {
-        await axios.delete('/directory/delete', {
+        await axios.delete(`${BASE_URL}/directory/delete`, {
           data: { name: record.name, parent: currentPath },
           withCredentials: true
         });
       } else {
-        await axios.delete('/delete-file', {
+        console.log("🗑 Deleting file:", record.name, "from folder:", currentPath);
+        await axios.delete(`${BASE_URL}/delete-file`, {
           data: {
             filename: record.name,
             directory: currentPath
@@ -530,7 +558,7 @@ const [tagSearch, setTagSearch] = useState('');
     try {
       if (selectedItem.type === 'directory') {
         await axios.put(
-          '/directory/rename',
+          `${BASE_URL}/directory/rename`,
           {
             old_name: selectedItem.name,
             new_name: renameNewName,
@@ -541,7 +569,7 @@ const [tagSearch, setTagSearch] = useState('');
         fetchFolderTree();
       } else {
         await axios.put(
-          '/file/rename',
+          `${BASE_URL}/file/rename`,
           {
             old_filename: selectedItem.name,
             new_filename: renameNewName
@@ -584,7 +612,7 @@ const [tagSearch, setTagSearch] = useState('');
       const targetDir = selectedDestination || currentPath;
   
       if (copyItem.type === 'directory') {
-        await axios.post('/directory/copy', {
+        await axios.post(`${BASE_URL}/directory/copy`, {
           source_name: copyItem.name,
           source_parent: currentPath,
           new_name: copyNewName,
@@ -595,7 +623,7 @@ const [tagSearch, setTagSearch] = useState('');
         fetchFolderTree();
   
       } else {
-        const res = await axios.post('/copy-file', {
+        const res = await axios.post(`${BASE_URL}/copy-file`, {
           source_file: copyItem.name,
           new_file_name: copyNewName,
           destination_folder: targetDir
@@ -635,7 +663,7 @@ const [tagSearch, setTagSearch] = useState('');
   
     try {
       if (moveItem.type === 'file') {
-        const res = await axios.get(`/files?directory=${encodeURIComponent(moveDestination)}`, {
+        const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
           withCredentials: true
         });
   
@@ -724,7 +752,7 @@ const [tagSearch, setTagSearch] = useState('');
     try {
       if (moveItem.type === 'directory') {
         await axios.post(
-          '/directory/move',
+          `${BASE_URL}/directory/move`,
           {
             name: moveItem.name,
             old_parent: currentPath,
@@ -733,16 +761,26 @@ const [tagSearch, setTagSearch] = useState('');
           { withCredentials: true }
         );
       } else {
+
+        console.log('Moving file with:', {
+          id: moveItem.id,
+          filename: moveItem.name,
+          old_parent: currentPath,
+          new_parent: moveDestination,
+          overwrite
+        });
+        
         await axios.post(
-          '/move-file',
+          `${BASE_URL}/move-file`,
           {
+            id: moveItem.id,
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
             overwrite,
           },
           { withCredentials: true }
-        );
+        );        
       }
   
       message.success(`Moved '${moveItem.name}' successfully`);
@@ -765,6 +803,12 @@ const [tagSearch, setTagSearch] = useState('');
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+
+      // sort in ascending order
+      sorter: (a, b) => a.name.localeCompare(b.name),
+      defaultSortOrder: 'ascend',
+      sortDirections: [],
+
       render: (name, record) => {
         if (record.type === 'directory') {
           return (
@@ -874,7 +918,7 @@ const [tagSearch, setTagSearch] = useState('');
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col flex="auto" style={{ textAlign: 'center' }}>
-            <h2 style={{ margin: 0 }}>File Manager</h2>
+            <h2 style={{ margin: 0 }}></h2>
           </Col>
           <Col>
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
@@ -932,7 +976,8 @@ const [tagSearch, setTagSearch] = useState('');
           dataSource={filteredItems}
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={false}
+          scroll={{ y: '49vh' }}  // for content scrolling on table
         />
 
         <Modal
@@ -977,57 +1022,68 @@ const [tagSearch, setTagSearch] = useState('');
           onCancel={() => setUploadModalVisible(false)}
           onOk={handleUpload}
         >
-         <Dragger
-  multiple
-  fileList={uploadingFile}
-  beforeUpload={(file, fileList) => {
-    setUploadingFile(fileList);
-    return false;
-  }}
-  showUploadList={false}
-  customRequest={async ({ file, onProgress, onSuccess, onError }) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('directory', currentPath.replace(/\\/g, '/')); // ✅ Normalize path
-  
-    if (fileUploadMessage.trim() && targetUsername.trim()) {
-      formData.append('message', fileUploadMessage.trim());
-      formData.append('receiver', targetUsername.trim());
-    }
-  
-    try {
-      await axios.post('/upload', formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (event) => {
-          onProgress({ percent: (event.loaded / event.total) * 100 });
-        }
-      });
-      message.success(`${file.name} uploaded successfully`);
-      onSuccess();
-      fetchItems();
-    } catch (err) {
-      console.error('Upload error:', err);
-      message.error(`${file.name} upload failed`);
-      onError(err);
-    }
-  }}
-  
->
-  <p className="ant-upload-drag-icon">
-    <UploadOutlined />
-  </p>
-  <p className="ant-upload-text">Click or drag files here to upload</p>
-  <p className="ant-upload-hint">Supports multiple files with progress tracking</p>
-</Dragger>
+        <Dragger
+          multiple
+          fileList={uploadingFile}
+          beforeUpload={(file, fileList) => {
+            setUploadingFile(fileList);
+            return false;
+          }}
+          
+          showUploadList={{
+            showRemoveIcon: true,
+            removeIcon: <DeleteOutlined style={{ color: 'red' }} />, // You can style this
+            showDownloadIcon: false,
+            showPreviewIcon: false,
+          }}
 
+          onRemove={(file) => {
+            setUploadingFile((prevList) =>
+              prevList.filter((item) => item.uid !== file.uid)
+            );
+          }}
 
-<div style={{ marginTop: 8 }}>
-{Array.isArray(uploadingFile) && uploadingFile.map((file, i) => (
-  <p key={i}>Selected: {file.name}</p>
-))}
+          customRequest={async ({ file, onProgress, onSuccess, onError }) => {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('directory', currentPath.replace(/\\/g, '/')); // ✅ Normalize path
+          
+            if (fileUploadMessage.trim() && targetUsername.trim()) {
+              formData.append('message', fileUploadMessage.trim());
+              formData.append('receiver', targetUsername.trim());
+            }
+          
+            try {
+              await axios.post(`${BASE_URL}/upload`, formData, {
+                withCredentials: true,
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (event) => {
+                  onProgress({ percent: (event.loaded / event.total) * 100 });
+                }
+              });
+              message.success(`${file.name} uploaded successfully`);
+              onSuccess();
+              fetchItems();
+            } catch (err) {
+              console.error('Upload error:', err);
+              message.error(`${file.name} upload failed`);
+              onError(err);
+            }
+          }}
+          
+        >
+          <p className="ant-upload-drag-icon">
+            <UploadOutlined />
+          </p>
+          <p className="ant-upload-text">Click or drag files here to upload</p>
+          <p className="ant-upload-hint">Supports multiple files with progress tracking</p>
+        </Dragger>
+        <div style={{ marginTop: 8 }}>
+        {Array.isArray(uploadingFile) && uploadingFile.map((file, i) => (
+          <p key={i}></p>
+        ))}
 
-</div>
+        </div>
 
 <Form.Item label="Instruction Template">
   <Select

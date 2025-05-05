@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"strings"
 
 	"LANFileSharingSystem/internal/config"
 	"LANFileSharingSystem/internal/controllers"
@@ -202,24 +201,22 @@ func main() {
 		WithField("migrationsPath", migrationsPath).
 		Info("Migrations applied successfully (or no changes needed)")
 
-	// Initialize session store using a secret key from configuration.
+		// Initialize session store using a secret key from configuration.
+		// Initialize session store using a secret key from configuration.
 	logger.WithField("function", "main").Debug("Initializing session store...")
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
-	store.Options = &sessions.Options{
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode, // change to None if cross-domain and using https
-	}
 
-	// Initialize the application model (shared context).
-	logger.WithField("function", "main").Debug("Creating new application context (App)...")
-	app := models.NewApp(db, store)
-	app.EnsureDefaultRoles() // ✅ Seed roles: 'admin', 'user'
-
-	// Initialize the notification hub and attach it to your app context.
+	// Initialize the notification hub FIRST before app
 	logger.WithField("function", "main").Debug("Initializing WebSocket hub...")
 	hub := ws.NewHub()
-	go hub.Run()
+	go func() {
+		logger.WithField("function", "hub.Run()").Info("WebSocket Hub started")
+		hub.Run()
+	}()
+
+	// Now initialize the application model (shared context).
+	logger.WithField("function", "main").Debug("Creating new application context (App)...")
+	app := models.NewApp(db, store)
 	app.NotificationHub = hub
 
 	// Ensure the 'uploads' folder exists.
@@ -250,7 +247,11 @@ func main() {
 	// Create a new router.
 	logger.WithField("function", "main").Debug("Creating new Gorilla mux router...")
 	router := mux.NewRouter()
-	// Removed the first RateLimitMiddleware call here to avoid duplication.
+
+	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	}).Methods("GET")
 
 	// Initialize controllers with the application context.
 	logger.WithField("function", "main").Debug("Initializing controllers...")
@@ -276,6 +277,8 @@ func main() {
 	router.HandleFunc("/files", fileController.ListFiles).Methods("GET")
 	router.HandleFunc("/file/{id:[0-9]+}/metadata", fileController.UpdateMetadata).Methods("PUT")
 	router.HandleFunc("/file/rename", fileController.RenameFile).Methods("PUT")
+	router.HandleFunc("/search", fileController.SearchFiles).Methods("GET")
+	router.HandleFunc("/count-main-folders", fileController.CountFilesInMainFolders).Methods("GET")
 	router.HandleFunc("/users/fetch", userController.FetchUserList).Methods("GET")
 	router.HandleFunc("/users", userController.ListUsers).Methods("GET")
 	router.HandleFunc("/user/add", userController.AddUser).Methods("POST")
@@ -332,9 +335,7 @@ func main() {
 
 	// Wrap your router with CORS middleware.
 	corsRouter := handlers.CORS(
-		handlers.AllowedOriginValidator(func(origin string) bool {
-			return strings.HasPrefix(origin, "http://192.168.") || origin == "http://localhost:3000"
-		}),
+		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
 		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
 		handlers.AllowCredentials(),

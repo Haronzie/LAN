@@ -23,14 +23,14 @@ import (
 // App holds shared resources across the application.
 type App struct {
 	DB              *sql.DB
-	Store           *sessions.CookieStore
+	Store           sessions.Store
 	FileCache       map[string]FileRecord
-	FileShareTokens map[string]string // token -> file name mapping
+	FileShareTokens map[string]string
 	NotificationHub *ws.Hub
 }
 
 // NewApp creates a new App instance.
-func NewApp(db *sql.DB, store *sessions.CookieStore) *App {
+func NewApp(db *sql.DB, store sessions.Store) *App {
 	return &App{
 		DB:              db,
 		Store:           store,
@@ -89,6 +89,7 @@ type FileRecord struct {
 	ContentType string                 `json:"content_type"`
 	Uploader    string                 `json:"uploader"`
 	Metadata    map[string]interface{} `json:"metadata"` // 👈 dynamic field
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // -------------------------------------
@@ -487,26 +488,11 @@ func (app *App) ListDirectory(parent string) ([]map[string]interface{}, error) {
 }
 
 func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
-	var rows *sql.Rows
-	var err error
-
-	if dir == "" {
-		// Root: files with no slash at all
-		rows, err = app.DB.Query(`
-            SELECT id, file_name, file_path, size, content_type, uploader
-            FROM files
-            WHERE file_path NOT LIKE '%/%'
-        `)
-	} else {
-		// Only immediate children of dir.
-		rows, err = app.DB.Query(`
-            SELECT id, file_name, file_path, size, content_type, uploader
-            FROM files
-            WHERE file_path LIKE $1 || '/%' 
-              AND file_path NOT LIKE $1 || '/%/%'
-        `, dir)
-	}
-
+	rows, err := app.DB.Query(`
+		SELECT id, file_name, file_path, size, content_type, uploader, created_at, directory
+		FROM files
+		WHERE LOWER(directory) = LOWER($1)
+	`, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -515,13 +501,14 @@ func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 	var results []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		if err := rows.Scan(&f.ID, &f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader); err != nil {
+		if err := rows.Scan(&f.ID, &f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader, &f.CreatedAt, &f.Directory); err != nil {
 			return nil, err
 		}
 		results = append(results, f)
 	}
 	return results, nil
 }
+
 
 // DirectoryExists checks if a directory with the given name exists under the specified parent.
 func (app *App) DirectoryExists(name, parent string) (bool, error) {

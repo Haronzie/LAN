@@ -63,7 +63,7 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// First user is an admin; subsequent users are regular users.
+	// First user is admin; next users are regular.
 	role := "admin"
 	if ac.App.AdminExists() {
 		role = "user"
@@ -80,18 +80,7 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set session values.
-	session, err := ac.App.Store.Get(r, "session")
-	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error getting session")
-		return
-	}
-	session.Values["username"] = newUser.Username
-	session.Values["role"] = newUser.Role
-	if err := session.Save(r, w); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error saving session")
-		return
-	}
+	// ✅ NO SESSION CREATION HERE.
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("%s registered successfully", newUser.Username),
@@ -131,12 +120,7 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := ac.App.Store.Get(r, "session")
-	if err != nil {
-		log.Println("❌ Failed to get session:", err)
-		models.RespondError(w, http.StatusInternalServerError, "Error getting session")
-		return
-	}
+	session, _ := ac.App.Store.Get(r, "session") // ✅ just ignore error
 	session.Values["username"] = user.Username
 	session.Values["role"] = user.Role
 	session.Options = ac.App.DefaultSessionOptions()

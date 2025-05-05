@@ -67,15 +67,7 @@ const UserDashboardHome = () => {
         display: 'flex',
         flexDirection: 'column'
       }}>
-        {/* Header */}
-        <div style={{ 
-          textAlign: 'center',
-          marginBottom: '32px'
-        }}>
-          <Title level={2} style={{ margin: 0 }}>
-            User Dashboard
-          </Title>
-        </div>
+        
 
         {/* Dashboard Cards */}
         <div style={{
