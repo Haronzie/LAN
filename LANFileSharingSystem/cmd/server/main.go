@@ -145,11 +145,15 @@ func runMigrations(databaseURL string) {
 		filepath.Join(wd, "..", "..", "internal", "migrations"),
 	)
 
-	// 3. Convert to forward-slashes and prepend "file:///"
-	//    so that migrate.New parses it correctly on all OSes.
-	//    filepath.ToSlash("C:\\path\\to\\migrations") ➔ "C:/path/to/migrations"
+	// 3. Convert to forward-slashes
 	slashPath := filepath.ToSlash(migrationsDir)
-	migrationsPath := "file:///" + slashPath
+
+	// 4. On Windows, avoid the extra slash before drive letter
+	prefix := "file:///"
+	if runtime.GOOS == "windows" {
+		prefix = "file://"
+	}
+	migrationsPath := prefix + slashPath
 
 	logger.WithField("function", "runMigrations").
 		WithField("path", migrationsPath).
