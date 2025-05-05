@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 
 	"LANFileSharingSystem/internal/config"
@@ -129,6 +130,42 @@ func initLogger() {
 		logger.SetLevel(logrus.InfoLevel)
 	}
 }
+func runMigrations(databaseURL string) {
+	// 1. Use the working dir (where you run 'go run')
+	wd, err := os.Getwd()
+	if err != nil {
+		logger.WithField("errorCode", "MIG_INIT_ERR").
+			WithError(err).
+			Error("could not determine working directory")
+		os.Exit(1)
+	}
+
+	// 2. From cmd/server, go up two levels into internal/migrations
+	migrationsDir := filepath.Clean(filepath.Join(wd, "..", "..", "internal", "migrations"))
+	migrationsPath := "file://" + migrationsDir
+
+	logger.WithField("function", "runMigrations").
+		WithField("path", migrationsPath).
+		Debug("Initializing migrations")
+
+	// (rest stays the same)
+	m, err := migrate.New(migrationsPath, databaseURL)
+	if err != nil {
+		logger.WithField("errorCode", "MIG_INIT_ERR").
+			WithField("path", migrationsPath).
+			WithError(err).
+			Error("migration initialization failed")
+		os.Exit(1)
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		logger.WithField("errorCode", "MIG_UP_ERR").
+			WithError(err).
+			Error("migration up failed")
+		os.Exit(1)
+	}
+	logger.WithField("function", "runMigrations").
+		Info("Migrations applied successfully (or no change)")
+}
 
 func main() {
 	// Initialize the structured logger.
@@ -173,36 +210,8 @@ func main() {
 		Info("Successfully connected to database")
 
 	// AUTOMATICALLY RUN MIGRATIONS HERE
-	migrationsPath := "file://internal/migrations"
-	logger.WithField("function", "main").Debug("Initializing migrations...")
-	m, err := migrate.New(migrationsPath, cfg.DatabaseURL)
-	if err != nil {
-		// MIG_INIT_ERR: Migration initialization failures.
-		wrappedErr := fmt.Errorf("migration initialization error (path: %s): %w", migrationsPath, err)
-		logger.WithField("function", "main").
-			WithField("errorCode", "MIG_INIT_ERR").
-			WithField("migrationsPath", migrationsPath).
-			WithError(wrappedErr).
-			Error("Migration initialization failed")
-		logrus.Exit(1)
-	}
-	logger.WithField("function", "main").Debug("Running migrations...")
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		// MIG_UP_ERR: Migration execution failures.
-		wrappedErr := fmt.Errorf("migration error (path: %s): %w", migrationsPath, err)
-		logger.WithField("function", "main").
-			WithField("errorCode", "MIG_UP_ERR").
-			WithField("migrationsPath", migrationsPath).
-			WithError(wrappedErr).
-			Error("Migration up failed")
-		logrus.Exit(1)
-	}
-	logger.WithField("function", "main").
-		WithField("migrationsPath", migrationsPath).
-		Info("Migrations applied successfully (or no changes needed)")
+	runMigrations(cfg.DatabaseURL)
 
-		// Initialize session store using a secret key from configuration.
-		// Initialize session store using a secret key from configuration.
 	logger.WithField("function", "main").Debug("Initializing session store...")
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
 
