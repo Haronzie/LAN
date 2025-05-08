@@ -22,7 +22,7 @@ const LoginForm = () => {
   const onFinish = async (values) => {
     const hideLoading = message.loading('Logging in...', 0);
     try {
-      const res = await axios.post('/login', values, { withCredentials: true });
+      const res = await axios.post('http://localhost:8080/login', values, { withCredentials: true });
       hideLoading();
       message.success(res.data.message || 'Login successful');
       localStorage.setItem('username', res.data.username);
@@ -53,7 +53,7 @@ const LoginForm = () => {
       return;
     }
     try {
-      const res = await axios.get(`/get-user-role?username=${typedUsername}`);
+      const res = await axios.get(`http://localhost:8080/get-user-role?username=${typedUsername}`); 
       if (res.data.role === 'admin') {
         setShowForgotForm(true);
       } else {
@@ -76,7 +76,7 @@ const LoginForm = () => {
 
     const hideLoading = message.loading('Resetting password...', 0);
     try {
-      const res = await axios.post('/forgot-password', body);
+      const res = await axios.post('http://localhost:8080/forgot-password', body);
       hideLoading();
       message.success(res.data.message || 'Password updated successfully');
       setShowForgotForm(false);
