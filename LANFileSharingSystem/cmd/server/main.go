@@ -226,6 +226,16 @@ func main() {
 	logger.WithField("function", "main").Debug("Initializing session store...")
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
 
+	// ── Add this block ────────────────────────────────────────────────────────
+	store.Options = &sessions.Options{
+		Path:     "/",                   // root path
+		MaxAge:   86400 * 7,             // one week
+		HttpOnly: true,                  // inaccessible to JS
+		Secure:   false,                 // OK for localhost; use true in prod
+		SameSite: http.SameSiteNoneMode, // allow cross-site
+		Domain:   "localhost",           // must match your dev host
+	}
+
 	// Initialize the notification hub FIRST before app
 	logger.WithField("function", "main").Debug("Initializing WebSocket hub...")
 	hub := ws.NewHub()
