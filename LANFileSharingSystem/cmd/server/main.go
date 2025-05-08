@@ -147,7 +147,7 @@ func runMigrations(databaseURL string) {
 	slashPath := filepath.ToSlash(migrationsDir)
 
 	// 4. Always use three slashes so Windows sees the drive letter in the path
-	migrationsPath := "file:///" + slashPath
+	migrationsPath := "file://" + slashPath
 
 	logger.WithField("function", "runMigrations").
 		WithField("path", migrationsPath).
