@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./LANFileSharingSystem
+    container_name: cdrrmo-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://postgres:myung@postgres:5432/Cdrrmo?sslmode=disable"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./my-app
+    container_name: cdrrmo-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      REACT_APP_API_BASE: "http://backend:8080"
+
+  postgres:
+    image: postgres:15
+    container_name: cdrrmo-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: myung
+      POSTGRES_DB: Cdrrmo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

@@ -54,7 +54,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/users', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
 
       // Get the first admin information
@@ -300,7 +300,7 @@ const UserManagement = () => {
     <Layout style={{ minHeight: '91vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
         <div style={{ position: 'relative', marginBottom: 16 }}>
-          <h2 style={{ textAlign: 'center', margin: 0 }}>User Management</h2>
+          <h2 style={{ textAlign: 'center', margin: 0 }}></h2>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -322,7 +322,8 @@ const UserManagement = () => {
           dataSource={filteredUsers}
           rowKey="username"
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={false}
+          scroll={{ y: '60vh' }} // this keeps header fixed, body scrolls
         />
 
         {/* Add User Modal */}
