@@ -28,6 +28,7 @@ import {
   SwapOutlined,
   FileOutlined
 } from '@ant-design/icons';
+import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
@@ -71,7 +72,8 @@ const ResearchDashboard = () => {
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(null);
+  const [uploadingFiles, setUploadingFiles] = useState([]);
+
 
   // ----------------------------------
   // Initial Load: set user and fetch directories
@@ -101,28 +103,38 @@ const ResearchDashboard = () => {
     setLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
-      // 1) Fetch directories
+  
+      // 1. Fetch folders
       const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true });
-      const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
-      // 2) Fetch files
-      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
-      const fetchedFiles = (fileRes.data || []).map((f) => ({
-        id: f.id,
-        name: f.name,
-        type: 'file',
-        size: f.size,
-        formattedSize: formatFileSize(f.size),
-        uploader: f.uploader
+      const folders = (dirRes.data || []).map((folder) => ({
+        id: `folder-${folder.name}`,
+        name: folder.name,
+        type: 'directory',
+        created_by: folder.created_by || '',
       }));
-      setItems([...fetchedDirs, ...fetchedFiles]);
+  
+      // 2. Fetch files
+      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
+      const files = (fileRes.data || []).map((file) => ({
+        id: file.id,
+        name: file.name,
+        type: 'file',
+        size: file.size,
+        formattedSize: formatFileSize(file.size),
+        uploader: file.uploader,
+      }));
+  
+      // 3. Merge and sort
+      const sortedItems = [...folders, ...files].sort((a, b) => a.name.localeCompare(b.name));
+      setItems(sortedItems);
     } catch (error) {
-      console.error('Error fetching directory contents:', error);
-      message.error(error.response?.data?.error || 'Error fetching directory contents');
-      setItems([]);
+      console.error('Error loading items:', error);
+      message.error('Failed to fetch files or folders.');
     } finally {
       setLoading(false);
     }
   };
+  
 
   useEffect(() => {
     fetchItems();
@@ -197,46 +209,67 @@ const ResearchDashboard = () => {
   // ----------------------------------
   // Upload Modal
   // ----------------------------------
+  const handleModalUpload = async () => {
+    if (uploadingFiles.length === 0) {
+      message.error('Please select one or more files first');
+      return;
+    }
+  
+    const normalizedPath = currentPath.replace(/\\/g, '/').toLowerCase();
+  
+    try {
+      if (uploadingFiles.length === 1) {
+        const formData = new FormData();
+        formData.append('file', uploadingFiles[0]);
+        formData.append('directory', normalizedPath);
+        formData.append('container', 'research');
+  
+        await axios.post('/upload', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+  
+        message.success('File uploaded successfully');
+      } else {
+        const formData = new FormData();
+        uploadingFiles.forEach(file => formData.append('files', file));
+        formData.append('directory', normalizedPath);
+        formData.append('container', 'research');
+        formData.append('overwrite', 'false');
+        formData.append('skip', 'false');
+  
+        const res = await axios.post('/bulk-upload', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+  
+        const results = res.data || [];
+        const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
+        const skipped = results.filter(r => r.status === 'skipped').length;
+        const failed = results.filter(r => r.status.startsWith('error')).length;
+  
+        message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+      }
+  
+      setUploadModalVisible(false);
+      setUploadingFiles([]);
+      fetchItems(); // refresh file list
+    } catch (error) {
+      console.error('Upload error:', error);
+      message.error(error.response?.data?.error || 'Upload failed');
+    }
+  };
+  
+  
   const handleOpenUploadModal = () => {
     if (!currentPath) {
-      message.error('Please select or create a folder before uploading.');
+      message.error("Please select or create a folder first.");
       return;
     }
-    setUploadingFile(null);
+    setUploadingFiles([]);
     setUploadModalVisible(true);
   };
-
-  const doModalUpload = async () => {
-    if (!uploadingFile) {
-      message.error('Please select a file first');
-      return;
-    }
-    if (!currentPath) {
-      message.error('Please select or create a folder first');
-      return;
-    }
-    const formData = new FormData();
-    formData.append('file', uploadingFile);
-    formData.append('directory', currentPath);
-    formData.append('container', 'research');
-    try {
-      const res = await axios.post('/upload', formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      message.success(res.data.message || 'File uploaded successfully');
-      setUploadModalVisible(false);
-      setUploadingFile(null);
-      fetchItems();
-    } catch (error) {
-      console.error('Modal-based upload error:', error);
-      message.error(error.response?.data?.error || 'Error uploading file');
-    }
-  };
-
-  const handleModalUpload = () => {
-    doModalUpload();
-  };
+   
 
   // ----------------------------------
   // Delete
@@ -330,7 +363,30 @@ const ResearchDashboard = () => {
   // Copy
   // ----------------------------------
   const handleCopy = (record) => {
-    const suggestedName = record.name + '_copy';
+      // condition in naming the copied file
+      let baseName = record.name;
+      let extension = '';
+      const dotIndex = record.name.lastIndexOf('.');
+      if (dotIndex !== -1) {
+        baseName = record.name.substring(0, dotIndex);
+        extension = record.name.substring(dotIndex);
+      }
+  
+      let suggestedName = record.name;
+      const destination = selectedDestination || currentPath;
+      const existingNames = items
+        .filter(item => item.parent === destination)
+        .map(item => item.name);
+  
+      if (existingNames.includes(record.name)) {
+        let counter = 1;
+        let newName;
+        do {
+          newName = `${baseName}(${counter})${extension}`;
+          counter++;
+        } while (existingNames.includes(newName));
+        suggestedName = newName;
+      }
     setCopyItem(record);
     setCopyNewName(suggestedName);
     setCopyModalVisible(true);
@@ -461,6 +517,12 @@ const ResearchDashboard = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+
+      // sort in ascending order
+      sorter: (a, b) => a.name.localeCompare(b.name),
+      defaultSortOrder: 'ascend',
+      sortDirections: [],
+
       render: (name, record) => {
         if (record.type === 'directory') {
           return (
@@ -554,7 +616,7 @@ const ResearchDashboard = () => {
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <h2 style={{ margin: 0 }}>Research Dashboard</h2>
+            <h2 style={{ margin: 0 }}></h2>
           </Col>
           <Col>
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
@@ -589,6 +651,8 @@ const ResearchDashboard = () => {
           dataSource={filteredItems}
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
+          pagination={false}
+          scroll={{ y: '49vh' }}  // for content scrolling on table
         />
 
         {/* Create Folder Modal */}
@@ -693,40 +757,42 @@ const ResearchDashboard = () => {
 
         {/* Upload Modal */}
         <Modal
-          title="Upload File"
+          title="Upload Files"
           visible={uploadModalVisible}
           onOk={handleModalUpload}
           onCancel={() => {
             setUploadModalVisible(false);
-            setUploadingFile(null);
+            setUploadingFiles([]);
           }}
           okText="Upload"
+          okButtonProps={{ disabled: uploadingFiles.length === 0 }}
         >
           <p>Target Folder: {currentPath}</p>
           <Form layout="vertical">
             <Form.Item>
-              <Button
-                icon={<UploadOutlined />}
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.onchange = (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setUploadingFile(file);
-                    }
-                  };
-                  input.click();
+              <Dragger
+                multiple
+                fileList={uploadingFiles}
+                beforeUpload={(file, fileList) => {
+                  setUploadingFiles(fileList);
+                  return false; // Don't auto upload
                 }}
+                showUploadList={{ showRemoveIcon: true, showPreviewIcon: false }}
+                onRemove={(file) => {
+                  setUploadingFiles(prev => prev.filter(f => f.uid !== file.uid));
+                }}
+                customRequest={({ onSuccess }) => {
+                  setTimeout(() => {
+                    onSuccess("ok");
+                  }, 0);
+                }}
+                style={{ padding: '12px 0' }}
               >
-                Select File
-              </Button>
+                <p className="ant-upload-drag-icon"><UploadOutlined /></p>
+                <p className="ant-upload-text">Click or drag files here to upload</p>
+                <p className="ant-upload-hint">You can select multiple files</p>
+              </Dragger>
             </Form.Item>
-            {uploadingFile && (
-              <Card size="small" style={{ marginTop: 16 }}>
-                <strong>Selected File:</strong> {uploadingFile.name}
-              </Card>
-            )}
           </Form>
         </Modal>
       </Content>

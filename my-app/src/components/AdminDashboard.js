@@ -14,7 +14,7 @@ import {
   FileOutlined,
   MenuOutlined,
 } from '@ant-design/icons';
-import { Link, useNavigate, Outlet } from 'react-router-dom';
+import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import axios from 'axios';
 
 const { Header, Content, Sider } = Layout;
@@ -26,6 +26,18 @@ const AdminDashboard = () => {
   const [isMobile, setIsMobile] = useState(false);
   const siderRef = useRef(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const pathParts = location.pathname.split('/');
+  const currentSection = location.pathname.split('/')[2] || 'dashboard';
+  const sectionTitles = {
+    dashboard: 'Home Dashboard',
+    users: 'User Management',
+    files: 'File Manager',
+    settings: 'Settings'
+  };
+  
+  
+  const pageTitle = sectionTitles[currentSection] || 'Dashboard';
 
   useEffect(() => {
     const storedName = localStorage.getItem('username');
@@ -134,7 +146,7 @@ const AdminDashboard = () => {
           <Menu
             theme="dark"
             mode="inline"
-            defaultSelectedKeys={['dashboard']}
+            selectedKeys={[currentSection]}
             items={menuItems}
             style={{ width: '100%', borderRight: 0 }}
           />
@@ -152,19 +164,17 @@ const AdminDashboard = () => {
               height: '64px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              {isMobile && (
-                <Button
-                  type="text"
-                  icon={<MenuOutlined />}
-                  onClick={toggleSidebar}
-                  style={{ marginRight: 12 }}
-                />
-              )}
-              <Title level={4} style={{ margin: 0, fontSize: '16px' }}>
-                Welcome, {adminName}!
-              </Title>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <Title level={3} style={{ margin: 0 }}>{pageTitle}</Title>
             </div>
+            {isMobile && (
+              <Button
+                type="text"
+                icon={<MenuOutlined />}
+                onClick={toggleSidebar}
+                style={{ position: 'absolute', left: 16 }}
+              />
+            )}
             <Button type="primary" size="small" onClick={handleLogout}>
               Logout
             </Button>

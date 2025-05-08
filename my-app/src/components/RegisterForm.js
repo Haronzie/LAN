@@ -40,7 +40,7 @@ const RegisterForm = () => {
 
   const onFinish = async (values) => {
     try {
-      const res = await axios.post('/register', values, { withCredentials: true });
+      const res = await axios.post('http://localhost:8080/register', values, { withCredentials: true });
       message.success(res.data.message);
       navigate('/login');
     } catch (error) {

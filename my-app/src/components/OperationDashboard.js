@@ -20,6 +20,7 @@ import {
   Spin
 } from 'antd';
 import {
+  Upload,
   UploadOutlined,
   DeleteOutlined,
   DownloadOutlined,
@@ -33,9 +34,11 @@ import {
   FileTextOutlined,
   FolderOutlined
 } from '@ant-design/icons';
+import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
+import { MoreOutlined } from '@ant-design/icons';
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -73,12 +76,13 @@ const OperationDashboard = () => {
   const [hideDone, setHideDone] = useState(false);
   const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
   const [ws, setWs] = useState(null);
-
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [selectedFileInfo, setSelectedFileInfo] = useState(null);
 
   useEffect(() => {
     const username = localStorage.getItem('username');
     if (!username) return;
-
+    setCurrentUser(username);
     const wsInstance = new WebSocket(`ws://localhost:8080/ws?username=${username}`);
     setWs(wsInstance);
 
@@ -199,48 +203,47 @@ const OperationDashboard = () => {
     setLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
-      const [dirRes, fileRes] = await Promise.all([
-        axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true }),
-        axios.get(`/files?directory=${dirParam}`, { withCredentials: true })
-      ]);
-      
-      const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
-      const fetchedFiles = (fileRes.data || []).map(f => ({
-        id: f.id,
-        name: f.name,
-        type: 'file',
-        size: f.size,
-        formattedSize: formatFileSize(f.size),
-        uploader: f.uploader,
-        directory: f.directory
+  
+      // 1. Fetch folders
+      const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true });
+      const folders = (dirRes.data || []).map((folder) => ({
+        id: `folder-${folder.name}`,
+        name: folder.name,
+        type: 'directory',
+        created_by: folder.created_by || '',
       }));
-
-      setItems([...fetchedDirs, ...fetchedFiles]);
-      
-      // Fetch messages for these files
-      const newMessageMap = {};
-      for (const file of fetchedFiles) {
-        try {
-          const res = await axios.get(`/file/messages?file_id=${file.id}`, {
-            withCredentials: true,
-          });
-          if (res.data?.length) {
-            newMessageMap[file.id] = res.data;
-          }
-        } catch (error) {
-          console.error(`Failed to fetch messages for file ID ${file.id}:`, error);
-        }
-      }
-      setFileMessages(newMessageMap);
+  
+      // 2. Fetch files
+      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
+      const files = (fileRes.data || []).map((file) => ({
+        id: file.id,
+        name: file.name,
+        type: 'file',
+        size: file.size,
+        formattedSize: formatFileSize(file.size),
+        uploader: file.uploader,
+      }));
+  
+      // 3. Combine and sort: folders first, then files, both alphabetically
+      const combined = [...folders, ...files];
+      const sortedItems = combined.sort((a, b) => {
+        // Folders first
+        if (a.type === 'directory' && b.type !== 'directory') return -1;
+        if (a.type !== 'directory' && b.type === 'directory') return 1;
+        // Then alphabetical
+        return a.name.localeCompare(b.name);
+      });
+  
+      // 4. Set the sorted items
+      setItems(sortedItems);
     } catch (error) {
-      console.error('Error fetching items:', error);
-      message.error(error.response?.data?.error || 'Error fetching directory contents');
-      setItems([]);
+      console.error('Error loading items:', error);
+      message.error('Failed to fetch files or folders.');
     } finally {
       setLoading(false);
     }
   };
-
+  
   useEffect(() => {
     fetchItems();
   }, [currentPath]);
@@ -316,12 +319,14 @@ const OperationDashboard = () => {
       return;
     }
   
+    const normalizedPath = currentPath.replace(/\\/g, '/').toLowerCase();
+    console.log("Uploading to directory:", normalizedPath); // for debugging
+  
     try {
       if (uploadingFiles.length === 1) {
-        // Single file → use /upload
         const formData = new FormData();
         formData.append('file', uploadingFiles[0]);
-        formData.append('directory', currentPath);
+        formData.append('directory', normalizedPath);
         formData.append('container', 'operation');
   
         await axios.post('/upload', formData, {
@@ -331,20 +336,17 @@ const OperationDashboard = () => {
   
         message.success('File uploaded successfully');
       } else {
-        // Multiple files → use /bulk-upload
         const formData = new FormData();
         uploadingFiles.forEach((file) => formData.append('files', file));
-        formData.append('directory', currentPath);
+        formData.append('directory', normalizedPath);
         formData.append('container', 'operation');
-        formData.append('overwrite', 'false'); // or 'true' or based on user choice
-        formData.append('skip', 'false');      // or 'true' or based on user choice
+        formData.append('overwrite', 'false');
+        formData.append('skip', 'false');
   
         const res = await axios.post('/bulk-upload', formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        
-        
   
         const results = res.data || [];
         const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
@@ -356,13 +358,13 @@ const OperationDashboard = () => {
   
       setUploadModalVisible(false);
       setUploadingFiles([]);
-      fetchItems();
+      fetchItems(); // refresh the view
       fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Upload error:', error);
       message.error('Upload failed');
     }
-  };
+  };  
   
 
   const handleDelete = async (record) => {
@@ -464,7 +466,30 @@ const OperationDashboard = () => {
   };
 
   const handleCopy = (record) => {
-    const suggestedName = record.name + '_copy';
+    // condition in naming the copied file
+    let baseName = record.name;
+    let extension = '';
+    const dotIndex = record.name.lastIndexOf('.');
+    if (dotIndex !== -1) {
+      baseName = record.name.substring(0, dotIndex);
+      extension = record.name.substring(dotIndex);
+    }
+
+    let suggestedName = record.name;
+    const destination = selectedDestination || currentPath;
+    const existingNames = items
+      .filter(item => item.parent === destination)
+      .map(item => item.name);
+
+    if (existingNames.includes(record.name)) {
+      let counter = 1;
+      let newName;
+      do {
+        newName = `${baseName}(${counter})${extension}`;
+        counter++;
+      } while (existingNames.includes(newName));
+      suggestedName = newName;
+    }
     setCopyItem(record);
     setCopyNewName(suggestedName);
     setCopyModalVisible(true);
@@ -579,6 +604,12 @@ const OperationDashboard = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+
+      // sort in ascending order
+      sorter: (a, b) => a.name.localeCompare(b.name), 
+      defaultSortOrder: 'ascend',
+      sortDirections: [],
+      
       render: (name, record) => (
         <Space>
           {record.type === 'directory' ? <FolderOutlined /> : <FileTextOutlined />}
@@ -601,11 +632,6 @@ const OperationDashboard = () => {
       dataIndex: 'formattedSize',
       key: 'size',
       render: (size, record) => record.type === 'directory' ? '--' : size
-    },
-    {
-      title: 'Uploader/Owner',
-      key: 'owner',
-      render: (record) => record.type === 'directory' ? record.created_by || 'N/A' : record.uploader || 'N/A'
     },
     {
       title: 'Actions',
@@ -646,6 +672,15 @@ const OperationDashboard = () => {
                 <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
               </Tooltip>
             )}
+            <Tooltip title="More Info">
+            <Button
+              icon={<MoreOutlined />}
+              onClick={() => {
+                setSelectedFileInfo(record);
+                setInfoModalVisible(true);
+              }}
+            />
+          </Tooltip>
           </Space>
         );
       }
@@ -748,7 +783,7 @@ const OperationDashboard = () => {
         {/* Dashboard UI */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <h2 style={{ margin: 0 }}>Operation Dashboard</h2>
+            <h2 style={{ margin: 0 }}></h2>
           </Col>
           <Col>
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
@@ -785,8 +820,32 @@ const OperationDashboard = () => {
           dataSource={filteredItems}
           rowKey={(record) => (record.id ? record.id : record.name + record.type)}
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={false}
+          scroll={{ y: '49vh' }}  // for content scrolling on table
         />
+        <Modal
+          title="File Information"
+          visible={infoModalVisible}
+          onCancel={() => setInfoModalVisible(false)}
+          footer={null}
+        >
+          {selectedFileInfo ? (
+            <div>
+              <p><strong>Name:</strong> {selectedFileInfo.name}</p>
+              <p><strong>Type:</strong> {selectedFileInfo.type}</p>
+              <p><strong>Size:</strong> {selectedFileInfo.formattedSize}</p>
+              <p><strong>Uploader:</strong> {selectedFileInfo.uploader || 'N/A'}</p>
+              <p><strong>Uploaded On:</strong> {selectedFileInfo.created_at ? new Date(selectedFileInfo.created_at).toLocaleString() : 'N/A'}</p>
+              <p><strong>Directory:</strong> {selectedFileInfo.directory}</p>
+            </div>
+          ) : (
+            <p>No file selected</p>
+          )}
+        </Modal>
+
+
+
+
 
         {/* Create Folder Modal */}
         <Modal
@@ -900,36 +959,31 @@ const OperationDashboard = () => {
         >
           <p>Target Folder: {currentPath || '(none)'}</p>
           <Form layout="vertical">
-            <Form.Item>
-              <Button
-                icon={<UploadOutlined />}
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.multiple = true;
-                  input.onchange = (e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length > 0) {
-                      setUploadingFiles(files);
-                    }
-                  };
-                  input.click();
-                }}
-              >
-                Select File(s)
-              </Button>
-            </Form.Item>
-
-            {uploadingFiles.length > 0 && (
-              <Card size="small" style={{ marginTop: 16 }}>
-                <strong>Selected Files:</strong>
-                <ul style={{ marginTop: 8 }}>
-                  {uploadingFiles.map((file, idx) => (
-                    <li key={idx}>{file.name}</li>
-                  ))}
-                </ul>
-              </Card>
-            )}
+          <Dragger
+            multiple
+            fileList={uploadingFiles}
+            beforeUpload={(file, fileList) => {
+              setUploadingFiles(fileList);
+              return false; // prevent auto upload
+            }}
+            showUploadList={true}
+            onRemove={(file) => {
+              setUploadingFiles(prev => prev.filter(f => f.uid !== file.uid));
+            }}
+            
+            customRequest={({ onSuccess }) => {
+              setTimeout(() => {
+                onSuccess("ok");
+              }, 0);
+            }}
+            style={{ padding: '12px 0' }}
+          >
+            <p className="ant-upload-drag-icon">
+              <UploadOutlined />
+            </p>
+            <p className="ant-upload-text">Click or drag files here to upload</p>
+            <p className="ant-upload-hint">Supports multiple files</p>
+          </Dragger>
           </Form>
         </Modal>
       </Content>

@@ -136,3 +136,8 @@ body {
 .pulse-new {
   animation: pulse 1.5s ease-out;
 }
+
+/* Removes background highlight on sorted column headers */
+.ant-table-column-sort {
+  background: none !important;
+}
