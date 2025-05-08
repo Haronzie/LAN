@@ -54,7 +54,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
+      const res = await axios.get('/users', { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
 
       // Get the first admin information
