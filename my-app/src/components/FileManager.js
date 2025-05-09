@@ -209,9 +209,9 @@ const FileManager = () => {
     try {
       const res = await axios.get(`${BASE_URL}/directory/tree`, { withCredentials: true });
       let data = res.data || [];
-  
+
       const fixedFolders = ['Operation', 'Research', 'Training'];
-  
+
       // Ensure fixed folders are present
       const existingTitles = new Set(data.map(d => d.title));
       fixedFolders.forEach(folder => {
@@ -224,7 +224,7 @@ const FileManager = () => {
           });
         }
       });
-  
+
       setFolderTreeData(data);
     } catch (error) {
       console.error('Error fetching folder tree:', error);
