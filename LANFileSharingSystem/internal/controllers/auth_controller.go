@@ -106,18 +106,14 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
 
+	// Validate user credentials
 	user, err := ac.App.GetUserByUsername(req.Username)
-	if err != nil {
+	if err != nil || !models.CheckPasswordHash(req.Password, user.Password) {
 		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
 		return
 	}
 
-	if !models.CheckPasswordHash(req.Password, user.Password) {
-		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
-		return
-	}
-
-	// Fix: Ensure `ac.App.Store` is initialized and accessible.
+	// Create a session
 	session, err := ac.App.Store.Get(r, "session")
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error retrieving session")
@@ -127,11 +123,11 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	session.Values["username"] = user.Username
 	session.Values["role"] = user.Role
 	session.Options = &sessions.Options{
-		Path:     "/",                  // root path
-		MaxAge:   86400 * 7,            // one week
-		HttpOnly: true,                 // inaccessible to JS
-		Secure:   false,                // OK for localhost; use true in prod
-		SameSite: http.SameSiteLaxMode, // adjust SameSite mode as needed
+		Path:     "/",
+		MaxAge:   86400 * 7, // One week
+		HttpOnly: true,
+		Secure:   false, // Set to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode,
 	}
 	if err := session.Save(r, w); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving session")

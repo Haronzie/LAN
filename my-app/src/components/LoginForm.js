@@ -30,14 +30,10 @@ const LoginForm = () => {
       }
     } catch (error) {
       hideLoading();
-      if (error.response) {
-        if (error.response.status === 401) {
-          message.error('Invalid username or password. Please try again.');
-        } else {
-          message.error(error.response.data.message || 'Login failed. Please try again later.');
-        }
+      if (error.response?.status === 401) {
+        message.error('Invalid username or password. Please try again.');
       } else {
-        message.error('Server error. Please check your connection.');
+        message.error(error.response?.data?.message || 'Login failed. Please try again later.');
       }
     }
   };

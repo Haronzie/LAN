@@ -237,7 +237,7 @@ func main() {
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip session validation for specific endpoints
-			if r.URL.Path == "/admin-exists" || r.URL.Path == "/register" {
+			if r.URL.Path == "/login" || r.URL.Path == "/register" || r.URL.Path == "/admin-exists" {
 				next.ServeHTTP(w, r)
 				return
 			}
