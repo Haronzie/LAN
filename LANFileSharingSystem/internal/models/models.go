@@ -91,6 +91,14 @@ type FileRecord struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// Folder represents a folder in the folder tree.
+type Folder struct {
+	Title    string   `json:"title"`
+	Value    string   `json:"value"`
+	Key      string   `json:"key"`
+	Children []Folder `json:"children"`
+}
+
 // -------------------------------------
 //  Request Structs (for user_controller.go)
 // -------------------------------------
@@ -1054,4 +1062,46 @@ func (app *App) DeleteFileRecordByPath(filePath string) (int, error) {
 	}
 
 	return fileID, nil
+}
+
+// GetFolderTree retrieves the folder tree from the database.
+func (app *App) GetFolderTree() ([]Folder, error) {
+	rows, err := app.DB.Query(`
+		SELECT directory_name, parent_directory
+		FROM directories
+		ORDER BY directory_name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Map to store folders by their parent
+	folderMap := make(map[string][]Folder)
+
+	for rows.Next() {
+		var name, parent string
+		if err := rows.Scan(&name, &parent); err != nil {
+			return nil, err
+		}
+		folderMap[parent] = append(folderMap[parent], Folder{
+			Title:    name,
+			Value:    name,
+			Key:      name,
+			Children: []Folder{},
+		})
+	}
+
+	// Recursively build the folder tree
+	var buildTree func(parent string) []Folder
+	buildTree = func(parent string) []Folder {
+		children := folderMap[parent]
+		for i := range children {
+			children[i].Children = buildTree(children[i].Title)
+		}
+		return children
+	}
+
+	// Return the root-level folders
+	return buildTree(""), nil
 }
