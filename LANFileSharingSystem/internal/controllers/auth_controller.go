@@ -8,6 +8,8 @@ import (
 	"unicode"
 
 	"LANFileSharingSystem/internal/models"
+
+	"github.com/gorilla/sessions"
 )
 
 // AuthController handles authentication-related endpoints.
@@ -79,7 +81,7 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ NO SESSION CREATION HERE.
+	// ✅ Ensure no session is created here.
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("%s registered successfully", newUser.Username),
@@ -104,21 +106,29 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
 
+	// Validate user credentials
 	user, err := ac.App.GetUserByUsername(req.Username)
+	if err != nil || !models.CheckPasswordHash(req.Password, user.Password) {
+		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
+		return
+	}
+
+	// Create a session
+	session, err := ac.App.Store.Get(r, "session")
 	if err != nil {
-		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving session")
 		return
 	}
 
-	if !models.CheckPasswordHash(req.Password, user.Password) {
-		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
-		return
-	}
-
-	session, _ := ac.App.Store.Get(r, "session") // ✅ just ignore error
 	session.Values["username"] = user.Username
 	session.Values["role"] = user.Role
-	session.Options = ac.App.DefaultSessionOptions()
+	session.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 7, // One week
+		HttpOnly: true,
+		Secure:   false, // Set to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode,
+	}
 	if err := session.Save(r, w); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving session")
 		return

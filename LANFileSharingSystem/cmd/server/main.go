@@ -131,7 +131,7 @@ func initLogger() {
 	}
 }
 func runMigrations(databaseURL string) {
-	// 1. Get project root (where you ran `go run ./cmd/server`)
+	// 1. Get the absolute path to the project root
 	wd, err := os.Getwd()
 	if err != nil {
 		logger.WithField("errorCode", "MIG_INIT_ERR").
@@ -140,10 +140,11 @@ func runMigrations(databaseURL string) {
 		os.Exit(1)
 	}
 
-	// 2. Point directly to internal/migrations
-	migrationsDir := filepath.Join(wd, "internal", "migrations")
+	// 2. Adjust the path to point to the correct `internal/migrations` directory
+	projectRoot := filepath.Join(wd, "..", "..") // Navigate up to the project root
+	migrationsDir := filepath.Join(projectRoot, "internal", "migrations")
 
-	// 3. Convert Windows backslashes to forward‑slashes
+	// 3. Convert Windows backslashes to forward slashes
 	slashPath := filepath.ToSlash(migrationsDir)
 
 	// 4. Always use three slashes so Windows sees the drive letter in the path
@@ -217,18 +218,37 @@ func main() {
 	// AUTOMATICALLY RUN MIGRATIONS HERE
 	runMigrations(cfg.DatabaseURL)
 
+	// Initialize the session store
 	logger.WithField("function", "main").Debug("Initializing session store...")
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
-
-	// ── Add this block ────────────────────────────────────────────────────────
 	store.Options = &sessions.Options{
-		Path:     "/",                   // root path
-		MaxAge:   86400 * 7,             // one week
-		HttpOnly: true,                  // inaccessible to JS
-		Secure:   false,                 // OK for localhost; use true in prod
-		SameSite: http.SameSiteNoneMode, // allow cross-site
-		Domain:   "localhost",           // must match your dev host
+		Path:     "/",                  // root path
+		MaxAge:   86400 * 7,            // one week
+		HttpOnly: true,                 // inaccessible to JS
+		Secure:   false,                // OK for localhost; use true in prod
+		SameSite: http.SameSiteLaxMode, // adjust SameSite mode as needed
 	}
+
+	// Create a new router.
+	logger.WithField("function", "main").Debug("Creating new Gorilla mux router...")
+	router := mux.NewRouter() // Fix: Ensure `router` is defined only once.
+
+	// Add session middleware
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip session validation for specific endpoints
+			if r.URL.Path == "/login" || r.URL.Path == "/register" || r.URL.Path == "/admin-exists" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			session, _ := store.Get(r, "session")
+			if session.IsNew || session.Values["username"] == nil {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	// Initialize the notification hub FIRST before app
 	logger.WithField("function", "main").Debug("Initializing WebSocket hub...")
@@ -270,8 +290,6 @@ func main() {
 
 	// Create a new router.
 	logger.WithField("function", "main").Debug("Creating new Gorilla mux router...")
-	router := mux.NewRouter()
-
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))

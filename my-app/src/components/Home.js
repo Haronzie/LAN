@@ -17,7 +17,17 @@ const Home = () => {
         const res = await axios.get('/admin-exists', { withCredentials: true });
         setAdminExists(res.data.exists);
       } catch (error) {
-        message.error('Failed to check admin status.');
+        if (error.response?.status === 401) {
+          // Retry without credentials if unauthorized
+          try {
+            const res = await axios.get('/admin-exists');
+            setAdminExists(res.data.exists);
+          } catch (retryError) {
+            message.error('Failed to check admin status.');
+          }
+        } else {
+          message.error('Failed to check admin status.');
+        }
       }
     };
     checkAdmin();

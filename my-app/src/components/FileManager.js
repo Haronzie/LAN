@@ -179,11 +179,8 @@ const FileManager = () => {
         axios.get(`${BASE_URL}/directory/list?directory=${directoryParam}`, { withCredentials: true })
       ]);
   
-      const files = (filesRes.data || [])
-      const normalizePath = path => (path || '').replace(/^\/|\/$/g, '').toLowerCase()
-
-      .filter(f => normalizePath(f.directory) === normalizePath(currentPath))
-      .map(f => ({
+      // Fix: Ensure `filesRes.data` and `dirsRes.data` are properly handled.
+      const files = (filesRes.data || []).map(f => ({
         name: f.name,
         type: 'file',
         size: f.size,
@@ -192,29 +189,17 @@ const FileManager = () => {
         uploader: f.uploader,
         id: f.id
       }));
-    
-  
-      let directories = dirsRes.data || [];
-  
-      if (currentPath === '') {
-        const fixedFolders = ['Operation', 'Research', 'Training'].map((folder) => ({
-          name: folder,
-          type: 'directory',
-          parent: '',
-        }));
-  
-        const dirNames = directories.map((d) => d.name);
-        fixedFolders.forEach((folder) => {
-          if (!dirNames.includes(folder.name)) {
-            directories.push(folder);
-          }
-        });
-      }
-  
+
+      const directories = dirsRes.data || [];
       setItems([...directories, ...files]);
     } catch (error) {
-      console.error('Error fetching items:', error);
-      message.error(error.response?.data?.error || 'Error fetching directory contents');
+      if (error.response?.status === 401) {
+        message.error('Session expired. Redirecting to login...');
+        navigate('/login'); // Redirect to login page
+      } else {
+        console.error('Error fetching items:', error);
+        message.error(error.response?.data?.error || 'Error fetching directory contents');
+      }
     } finally {
       setLoading(false);
     }
