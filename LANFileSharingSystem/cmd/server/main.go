@@ -230,7 +230,7 @@ func main() {
 
 	// Create a new router.
 	logger.WithField("function", "main").Debug("Creating new Gorilla mux router...")
-	router = mux.NewRouter()
+	router := mux.NewRouter() // Fix: Ensure `router` is defined only once.
 
 	// Add session middleware
 	router.Use(func(next http.Handler) http.Handler {
@@ -284,8 +284,6 @@ func main() {
 
 	// Create a new router.
 	logger.WithField("function", "main").Debug("Creating new Gorilla mux router...")
-	router := mux.NewRouter()
-
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))

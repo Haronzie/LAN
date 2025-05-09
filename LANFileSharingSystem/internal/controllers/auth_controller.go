@@ -117,7 +117,13 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := ac.App.Store.Get(r, "session")
+	// Fix: Ensure `ac.App.Store` is initialized and accessible.
+	session, err := ac.App.Store.Get(r, "session")
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving session")
+		return
+	}
+
 	session.Values["username"] = user.Username
 	session.Values["role"] = user.Role
 	session.Options = &sessions.Options{
