@@ -236,6 +236,11 @@ func main() {
 	// Add session middleware
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/admin-exists" {
+				// Skip session validation for this endpoint
+				next.ServeHTTP(w, r)
+				return
+			}
 			session, _ := store.Get(r, "session")
 			if session.IsNew || session.Values["username"] == nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
