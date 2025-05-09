@@ -36,6 +36,14 @@ import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
+// Import common modals
+import {
+  CreateFolderModal,
+  RenameModal,
+  MoveModal,
+  UploadModal,
+  CopyModal
+} from './common/FileModals';
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -139,7 +147,7 @@ const TrainingDashboard = () => {
         formattedSize: formatFileSize(f.size),
         uploader: f.uploader
       }));
-      
+
       setItems([...fetchedDirs, ...fetchedFiles]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
@@ -155,13 +163,13 @@ const TrainingDashboard = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  
+
   const filteredItems = items.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
-  
- 
+
+
+
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -264,7 +272,7 @@ const TrainingDashboard = () => {
       message.error('Please select one or more files first');
       return;
     }
-  
+
     try {
       const formData = new FormData();
       uploadingFiles.forEach(file => formData.append('files', file)); // multiple files
@@ -272,19 +280,19 @@ const TrainingDashboard = () => {
       formData.append('container', 'training');
       formData.append('overwrite', 'false');
       formData.append('skip', 'false');
-  
+
       const res = await axios.post('/bulk-upload', formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-  
+
       const results = res.data || [];
       const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
       const skipped = results.filter(r => r.status === 'skipped').length;
       const failed = results.filter(r => r.status.startsWith('error')).length;
-  
+
       message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
-  
+
       setUploadModalVisible(false);
       setUploadingFiles([]);
       fetchItems();
@@ -292,7 +300,7 @@ const TrainingDashboard = () => {
       console.error('Upload error:', error);
       message.error('Upload failed');
     }
-  };  
+  };
 
   const handleDelete = async (record) => {
     const isOwner =
@@ -405,13 +413,13 @@ const TrainingDashboard = () => {
         baseName = record.name.substring(0, dotIndex);
         extension = record.name.substring(dotIndex);
       }
-  
+
       let suggestedName = record.name;
       const destination = selectedDestination || currentPath;
       const existingNames = items
         .filter(item => item.parent === destination)
         .map(item => item.name);
-  
+
       if (existingNames.includes(record.name)) {
         let counter = 1;
         let newName;
@@ -591,7 +599,7 @@ const TrainingDashboard = () => {
             : record.uploader === currentUser;
         const canManageAccess =
           record.type === 'file' && record.confidential && (isOwner || isAdmin);
-        
+
         return (
           <Space>
             {/* View File (if user has access) */}
@@ -688,147 +696,62 @@ const TrainingDashboard = () => {
         />
 
         {/* Create Folder Modal */}
-        <Modal
-          title="Create New Folder"
+        <CreateFolderModal
           visible={createFolderModal}
-          onOk={handleCreateFolder}
           onCancel={() => setCreateFolderModal(false)}
-          okText="Create"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Folder Name" required>
-              <Input
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="e.g. TrainingData"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          onOk={handleCreateFolder}
+          folderName={newFolderName}
+          setFolderName={setNewFolderName}
+        />
 
         {/* Rename Modal */}
-        <Modal
-          title="Rename Item"
+        <RenameModal
           visible={renameModalVisible}
-          onOk={handleRenameConfirm}
           onCancel={() => setRenameModalVisible(false)}
-          okText="Rename"
-        >
-          <Form layout="vertical">
-            <Form.Item label="New Name" required>
-              <Input
-                value={renameNewName}
-                onChange={(e) => setRenameNewName(e.target.value)}
-                placeholder="Enter new name"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          onOk={handleRenameConfirm}
+          newName={renameNewName}
+          setNewName={setRenameNewName}
+        />
 
         {/* Copy Modal */}
-        <Modal
-          title="Copy Item"
+        <CopyModal
           visible={copyModalVisible}
-          onOk={handleCopyConfirm}
           onCancel={() => setCopyModalVisible(false)}
-          okText="Copy"
-        >
-          <Form layout="vertical">
-            <Form.Item label="New Name" required>
-              <Input
-                value={copyNewName}
-                onChange={(e) => setCopyNewName(e.target.value)}
-                placeholder="Enter new name"
-              />
-            </Form.Item>
-            <Form.Item label="Destination Folder (Optional)">
-              <Select
-                style={{ width: '100%' }}
-                placeholder="Select folder or leave blank"
-                value={selectedDestination}
-                onChange={(val) => setSelectedDestination(val)}
-                allowClear
-              >
-                {items
-                  .filter((item) => item.type === 'directory')
-                  .map((folder) => {
-                    const folderPath = path.join(currentPath, folder.name);
-                    return (
-                      <Option key={folderPath} value={folderPath}>
-                        {folder.name}
-                      </Option>
-                    );
-                  })}
-              </Select>
-            </Form.Item>
-          </Form>
-        </Modal>
+          onOk={handleCopyConfirm}
+          newName={copyNewName}
+          setNewName={setCopyNewName}
+          selectedDestination={selectedDestination}
+          setSelectedDestination={setSelectedDestination}
+          folderOptions={items
+            .filter((item) => item.type === 'directory')
+            .map((folder) => ({
+              label: folder.name,
+              value: path.join(currentPath, folder.name)
+            }))}
+        />
 
         {/* Move Modal */}
-        <Modal
-          title="Move Item"
+        <MoveModal
           visible={moveModalVisible}
-          onOk={handleMoveConfirm}
           onCancel={() => setMoveModalVisible(false)}
-          okText="Move"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Destination Folder" required>
-              <TreeSelect
-                style={{ width: '100%' }}
-                treeData={directories}
-                placeholder="Select destination folder"
-                value={moveDestination}
-                onChange={(val) => setMoveDestination(val)}
-                treeDefaultExpandAll
-                allowClear
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          onOk={handleMoveConfirm}
+          destination={moveDestination}
+          setDestination={setMoveDestination}
+          treeData={directories}
+        />
 
         {/* Upload Modal */}
-        <Modal
-        title="Upload File(s)"
-        visible={uploadModalVisible}
-        onOk={handleModalUpload}
-        onCancel={() => {
-          setUploadModalVisible(false);
-          setUploadingFiles([]);
-        }}
-        okText="Upload"
-        okButtonProps={{ disabled: uploadingFiles.length === 0 }}
-      >
-        <p>Target Folder: {currentPath || '(none)'}</p>
-        <Form layout="vertical">
-          <Form.Item>
-            <Dragger
-              multiple
-              fileList={uploadingFiles}
-              beforeUpload={(file, fileList) => {
-                setUploadingFiles(fileList);
-                return false; // don't upload automatically
-              }}
-              showUploadList={{ showRemoveIcon: true, showPreviewIcon: false }}
-              onRemove={(file) => {
-                setUploadingFiles(prev => prev.filter(f => f.uid !== file.uid));
-              }}
-              customRequest={({ onSuccess }) => {
-                setTimeout(() => {
-                  onSuccess("ok");
-                }, 0);
-              }}
-              style={{ padding: '12px 0' }}
-            >
-              <p className="ant-upload-drag-icon">
-                <UploadOutlined />
-              </p>
-              <p className="ant-upload-text">Click or drag files here to upload</p>
-              <p className="ant-upload-hint">Supports multiple files</p>
-            </Dragger>
-          </Form.Item>
-        </Form>
-      </Modal>
+        <UploadModal
+          visible={uploadModalVisible}
+          onCancel={() => {
+            setUploadModalVisible(false);
+            setUploadingFiles([]);
+          }}
+          onOk={handleModalUpload}
+          files={uploadingFiles}
+          setFiles={setUploadingFiles}
+          currentPath={currentPath}
+        />
       </Content>
     </Layout>
   );
