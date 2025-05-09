@@ -131,7 +131,7 @@ func initLogger() {
 	}
 }
 func runMigrations(databaseURL string) {
-	// 1. Get project root (where you ran `go run ./cmd/server`)
+	// 1. Get the absolute path to the project root
 	wd, err := os.Getwd()
 	if err != nil {
 		logger.WithField("errorCode", "MIG_INIT_ERR").
@@ -140,10 +140,11 @@ func runMigrations(databaseURL string) {
 		os.Exit(1)
 	}
 
-	// 2. Point directly to internal/migrations
-	migrationsDir := filepath.Join(wd, "internal", "migrations")
+	// 2. Adjust the path to point to the correct `internal/migrations` directory
+	projectRoot := filepath.Join(wd, "..", "..") // Navigate up to the project root
+	migrationsDir := filepath.Join(projectRoot, "internal", "migrations")
 
-	// 3. Convert Windows backslashes to forward‑slashes
+	// 3. Convert Windows backslashes to forward slashes
 	slashPath := filepath.ToSlash(migrationsDir)
 
 	// 4. Always use three slashes so Windows sees the drive letter in the path
