@@ -22,6 +22,12 @@ func NewUserController(app *models.App) *UserController {
 
 // ListUsers returns a list of all users. Only admins can access this.
 func (uc *UserController) ListUsers(w http.ResponseWriter, r *http.Request) {
+	session, _ := uc.App.Store.Get(r, "session")
+	if session.IsNew || session.Values["role"] != "admin" {
+		models.RespondError(w, http.StatusUnauthorized, "Unauthorized: Admin access required")
+		return
+	}
+
 	user, err := uc.App.GetUserFromSession(r)
 	if err != nil {
 		log.Println("Failed to retrieve session:", err)

@@ -8,6 +8,8 @@ import (
 	"unicode"
 
 	"LANFileSharingSystem/internal/models"
+
+	"github.com/gorilla/sessions"
 )
 
 // AuthController handles authentication-related endpoints.
@@ -115,10 +117,16 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, _ := ac.App.Store.Get(r, "session") // ✅ just ignore error
+	session, _ := ac.App.Store.Get(r, "session")
 	session.Values["username"] = user.Username
 	session.Values["role"] = user.Role
-	session.Options = ac.App.DefaultSessionOptions()
+	session.Options = &sessions.Options{
+		Path:     "/",                  // root path
+		MaxAge:   86400 * 7,            // one week
+		HttpOnly: true,                 // inaccessible to JS
+		Secure:   false,                // OK for localhost; use true in prod
+		SameSite: http.SameSiteLaxMode, // adjust SameSite mode as needed
+	}
 	if err := session.Save(r, w); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving session")
 		return

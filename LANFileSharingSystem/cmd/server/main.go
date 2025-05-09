@@ -217,18 +217,32 @@ func main() {
 	// AUTOMATICALLY RUN MIGRATIONS HERE
 	runMigrations(cfg.DatabaseURL)
 
+	// Initialize the session store
 	logger.WithField("function", "main").Debug("Initializing session store...")
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
-
-	// ── Add this block ────────────────────────────────────────────────────────
 	store.Options = &sessions.Options{
-		Path:     "/",                   // root path
-		MaxAge:   86400 * 7,             // one week
-		HttpOnly: true,                  // inaccessible to JS
-		Secure:   false,                 // OK for localhost; use true in prod
-		SameSite: http.SameSiteNoneMode, // allow cross-site
-		Domain:   "localhost",           // must match your dev host
+		Path:     "/",                  // root path
+		MaxAge:   86400 * 7,            // one week
+		HttpOnly: true,                 // inaccessible to JS
+		Secure:   false,                // OK for localhost; use true in prod
+		SameSite: http.SameSiteLaxMode, // adjust SameSite mode as needed
 	}
+
+	// Create a new router.
+	logger.WithField("function", "main").Debug("Creating new Gorilla mux router...")
+	router = mux.NewRouter()
+
+	// Add session middleware
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			session, _ := store.Get(r, "session")
+			if session.IsNew || session.Values["username"] == nil {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	// Initialize the notification hub FIRST before app
 	logger.WithField("function", "main").Debug("Initializing WebSocket hub...")

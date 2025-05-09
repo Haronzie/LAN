@@ -213,8 +213,13 @@ const FileManager = () => {
   
       setItems([...directories, ...files]);
     } catch (error) {
-      console.error('Error fetching items:', error);
-      message.error(error.response?.data?.error || 'Error fetching directory contents');
+      if (error.response?.status === 401) {
+        message.error('Session expired. Redirecting to login...');
+        navigate('/login'); // Redirect to login page
+      } else {
+        console.error('Error fetching items:', error);
+        message.error(error.response?.data?.error || 'Error fetching directory contents');
+      }
     } finally {
       setLoading(false);
     }
