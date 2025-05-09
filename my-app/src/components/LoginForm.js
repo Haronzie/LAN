@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, Typography, message, Modal } from 'antd';
+import { Form, Input, Button, Card, Typography, message } from 'antd';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
@@ -7,22 +7,19 @@ const { Title } = Typography;
 
 const LoginForm = () => {
   const navigate = useNavigate();
-
-  // We store the typed username so we can pass it to the forgot password flow
   const [typedUsername, setTypedUsername] = useState('');
-  // Toggles the forgot password form
   const [showForgotForm, setShowForgotForm] = useState(false);
 
-  // Handle input changes in the username field
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
   const handleUsernameChange = (e) => {
     setTypedUsername(e.target.value.trim());
   };
 
-  // Normal login flow
   const onFinish = async (values) => {
     const hideLoading = message.loading('Logging in...', 0);
     try {
-      const res = await axios.post('http://localhost:8080/login', values, { withCredentials: true });
+      const res = await axios.post(`${BACKEND_URL}/login`, values, { withCredentials: true });
       hideLoading();
       message.success(res.data.message || 'Login successful');
       localStorage.setItem('username', res.data.username);
@@ -45,15 +42,13 @@ const LoginForm = () => {
     }
   };
 
-  // Attempt to show the Forgot Password form
-  // 1. We check if typedUsername is admin. If yes, show the form. Otherwise, show an error.
   const handleForgotPasswordClick = async () => {
     if (!typedUsername) {
       message.error('Please type your username first.');
       return;
     }
     try {
-      const res = await axios.get(`http://localhost:8080/get-user-role?username=${typedUsername}`); 
+      const res = await axios.get(`${BACKEND_URL}/get-user-role?username=${typedUsername}`);
       if (res.data.role === 'admin') {
         setShowForgotForm(true);
       } else {
@@ -64,10 +59,8 @@ const LoginForm = () => {
     }
   };
 
-  // Submit the forgot password form
   const onForgotFinish = async (values) => {
     const { newPassword, confirmPassword } = values;
-    // typedUsername is from state
     const body = {
       username: typedUsername,
       newPassword,
@@ -76,7 +69,7 @@ const LoginForm = () => {
 
     const hideLoading = message.loading('Resetting password...', 0);
     try {
-      const res = await axios.post('http://localhost:8080/forgot-password', body);
+      const res = await axios.post(`${BACKEND_URL}/forgot-password`, body);
       hideLoading();
       message.success(res.data.message || 'Password updated successfully');
       setShowForgotForm(false);
@@ -122,7 +115,6 @@ const LoginForm = () => {
         </Title>
 
         {!showForgotForm ? (
-          // LOGIN FORM
           <Form name="login" layout="vertical" onFinish={onFinish}>
             <Form.Item
               label="Username"
@@ -148,7 +140,6 @@ const LoginForm = () => {
               </Button>
             </Form.Item>
 
-            {/* "Forgot Password?" always visible */}
             <div style={{ textAlign: 'right' }}>
               <Button type="link" onClick={handleForgotPasswordClick}>
                 Forgot Password?
@@ -156,7 +147,6 @@ const LoginForm = () => {
             </div>
           </Form>
         ) : (
-          // FORGOT PASSWORD FORM
           <Form name="forgotForm" layout="vertical" onFinish={onForgotFinish}>
             <Form.Item
               label="New Password"
@@ -203,3 +193,5 @@ const LoginForm = () => {
 };
 
 export default LoginForm;
+
+
