@@ -81,7 +81,7 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ NO SESSION CREATION HERE.
+	// ✅ Ensure no session is created here.
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("%s registered successfully", newUser.Username),

@@ -29,7 +29,7 @@ const RegisterForm = () => {
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get(`${BASE_URL}/admin-exists`, { withCredentials: true });
+        const res = await axios.get(`${BASE_URL}/admin-exists`);
         setAdminExists(res.data.exists);
       } catch (error) {
         message.error('Failed to check admin status.');
@@ -42,7 +42,7 @@ const RegisterForm = () => {
 
   const onFinish = async (values) => {
     try {
-      const res = await axios.post('http://localhost:8080/register', values, { withCredentials: true });
+      const res = await axios.post(`${BASE_URL}/register`, values);
       message.success(res.data.message);
       navigate('/login');
     } catch (error) {

@@ -236,8 +236,8 @@ func main() {
 	// Add session middleware
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/admin-exists" {
-				// Skip session validation for this endpoint
+			// Skip session validation for specific endpoints
+			if r.URL.Path == "/admin-exists" || r.URL.Path == "/register" {
 				next.ServeHTTP(w, r)
 				return
 			}
