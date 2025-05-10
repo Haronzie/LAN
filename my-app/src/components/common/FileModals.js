@@ -8,12 +8,12 @@ const { Dragger } = Upload;
 /**
  * Create Folder Modal
  */
-export const CreateFolderModal = ({ 
-  visible, 
-  onCancel, 
-  onOk, 
-  folderName, 
-  setFolderName 
+export const CreateFolderModal = ({
+  visible,
+  onCancel,
+  onOk,
+  folderName,
+  setFolderName
 }) => {
   return (
     <Modal
@@ -39,12 +39,12 @@ export const CreateFolderModal = ({
 /**
  * Rename Modal
  */
-export const RenameModal = ({ 
-  visible, 
-  onCancel, 
-  onOk, 
-  newName, 
-  setNewName 
+export const RenameModal = ({
+  visible,
+  onCancel,
+  onOk,
+  newName,
+  setNewName
 }) => {
   return (
     <Modal
@@ -70,13 +70,13 @@ export const RenameModal = ({
 /**
  * Move Modal with TreeSelect
  */
-export const MoveModal = ({ 
-  visible, 
-  onCancel, 
-  onOk, 
-  destination, 
-  setDestination, 
-  treeData 
+export const MoveModal = ({
+  visible,
+  onCancel,
+  onOk,
+  destination,
+  setDestination,
+  treeData
 }) => {
   return (
     <Modal
@@ -106,11 +106,11 @@ export const MoveModal = ({
 /**
  * Move Modal with Main Folder Selection
  */
-export const MainFolderMoveModal = ({ 
-  visible, 
-  onCancel, 
-  onOk, 
-  selectedMainFolder, 
+export const MainFolderMoveModal = ({
+  visible,
+  onCancel,
+  onOk,
+  selectedMainFolder,
   setSelectedMainFolder,
   setMoveDestination
 }) => {
@@ -145,13 +145,13 @@ export const MainFolderMoveModal = ({
 /**
  * Upload Modal
  */
-export const UploadModal = ({ 
-  visible, 
-  onCancel, 
-  onOk, 
-  files, 
+export const UploadModal = ({
+  visible,
+  onCancel,
+  onOk,
+  files,
   setFiles,
-  currentPath 
+  currentPath
 }) => {
   return (
     <Modal
@@ -198,11 +198,11 @@ export const UploadModal = ({
 /**
  * Copy Modal
  */
-export const CopyModal = ({ 
-  visible, 
-  onCancel, 
-  onOk, 
-  newName, 
+export const CopyModal = ({
+  visible,
+  onCancel,
+  onOk,
+  newName,
   setNewName,
   selectedDestination,
   setSelectedDestination,
@@ -247,10 +247,10 @@ export const CopyModal = ({
 /**
  * File Info Modal
  */
-export const FileInfoModal = ({ 
-  visible, 
-  onCancel, 
-  fileInfo 
+export const FileInfoModal = ({
+  visible,
+  onCancel,
+  fileInfo
 }) => {
   return (
     <Modal

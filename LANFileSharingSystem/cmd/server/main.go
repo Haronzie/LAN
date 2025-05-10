@@ -140,9 +140,8 @@ func runMigrations(databaseURL string) {
 		os.Exit(1)
 	}
 
-	// 2. Adjust the path to point to the correct `internal/migrations` directory
-	projectRoot := filepath.Join(wd, "..", "..") // Navigate up to the project root
-	migrationsDir := filepath.Join(projectRoot, "internal", "migrations")
+	// 2. Directly use the internal/migrations directory relative to the current working directory
+	migrationsDir := filepath.Join(wd, "internal", "migrations")
 
 	// 3. Convert Windows backslashes to forward slashes
 	slashPath := filepath.ToSlash(migrationsDir)

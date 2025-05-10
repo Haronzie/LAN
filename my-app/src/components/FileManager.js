@@ -32,6 +32,15 @@ import {
   FileOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons';
+// Import common modals
+import {
+  CreateFolderModal,
+  RenameModal,
+  MoveModal,
+  MainFolderMoveModal,
+  UploadModal,
+  CopyModal
+} from './common/FileModals';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
@@ -57,13 +66,13 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
       try {
         const response = await axios.get(`${BASE_URL}/users?search=${value}`, { withCredentials: true });
         const data = response.data || [];
-  
+
         // ✅ filter out self here too if not done in map stage
         const currentUser = (localStorage.getItem('username') || '').toLowerCase();
         const filtered = data.filter(u => u.username.toLowerCase() !== currentUser);
-  
+
         setOptions(filtered);
-  
+
         // ✅ Auto-select the top user if one exists
         if (filtered.length > 0) {
           onUserSelect(filtered[0].username);
@@ -76,7 +85,7 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
     }, 500),
     []
   );
-  
+
 
   const handleSearch = (inputValue) => {
     fetchUserOptions(inputValue);
@@ -144,6 +153,8 @@ const FileManager = () => {
   const [selectedDestination, setSelectedDestination] = useState('');
   const [targetUsername, setTargetUsername] = useState('');
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [selectedMainFolder, setSelectedMainFolder] = useState('');
+  const [subFolders, setSubFolders] = useState([]);
 
   const navigate = useNavigate();
   const isRoot = currentPath === '';
@@ -169,29 +180,95 @@ const FileManager = () => {
     }
   };
 
+
+// fetch subfolders
+  useEffect(() => {
+    const fetchSubFolders = async () => {
+      if (!selectedMainFolder) {
+        setSubFolders([]);
+        return;
+      }
+
+      try {
+        const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(selectedMainFolder)}`, {
+          withCredentials: true
+        });
+        setSubFolders(res.data.filter(item => item.type === 'directory'));
+      } catch (error) {
+        console.error('Error fetching subfolders:', error);
+        setSubFolders([]);
+      }
+    };
+
+    fetchSubFolders();
+  }, [selectedMainFolder]);
+
   const fetchItems = async () => {
     setLoading(true);
     try {
       console.log("📂 Fetching files in:", currentPath);
       const directoryParam = encodeURIComponent(currentPath);
-      const [filesRes, dirsRes] = await Promise.all([
-        axios.get(`${BASE_URL}/files?directory=${directoryParam}`, { withCredentials: true }),
-        axios.get(`${BASE_URL}/directory/list?directory=${directoryParam}`, { withCredentials: true })
-      ]);
-  
-      // Fix: Ensure `filesRes.data` and `dirsRes.data` are properly handled.
-      const files = (filesRes.data || []).map(f => ({
-        name: f.name,
-        type: 'file',
-        size: f.size,
-        formattedSize: formatFileSize(f.size),
-        contentType: f.contentType,
-        uploader: f.uploader,
-        id: f.id
-      }));
+      console.log("Request URL for files:", `${BASE_URL}/files?directory=${directoryParam}`);
+      console.log("Request URL for directories:", `${BASE_URL}/directory/list?directory=${directoryParam}`);
 
-      const directories = dirsRes.data || [];
-      setItems([...directories, ...files]);
+      let filesRes, dirsRes;
+
+      try {
+        filesRes = await axios.get(`${BASE_URL}/files?directory=${directoryParam}`, {
+          withCredentials: true
+        });
+        console.log("Files response status:", filesRes.status);
+        console.log("Files response data:", filesRes.data);
+      } catch (fileError) {
+        console.error("Error fetching files:", fileError);
+        filesRes = { data: [] };
+      }
+
+      try {
+        dirsRes = await axios.get(`${BASE_URL}/directory/list?directory=${directoryParam}`, {
+          withCredentials: true
+        });
+        console.log("Directories response status:", dirsRes.status);
+        console.log("Directories response data:", dirsRes.data);
+      } catch (dirError) {
+        console.error("Error fetching directories:", dirError);
+        dirsRes = { data: [] };
+      }
+
+      // Fix: Ensure `filesRes.data` and `dirsRes.data` are properly handled.
+      console.log("Processing files data:", filesRes.data);
+
+      const files = Array.isArray(filesRes.data) ? filesRes.data.map(f => {
+        console.log("Processing file:", f);
+        return {
+          name: f.name,
+          type: 'file',
+          size: f.size || 0,
+          formattedSize: formatFileSize(f.size || 0),
+          contentType: f.contentType,
+          uploader: f.uploader,
+          id: f.id
+        };
+      }) : [];
+
+      console.log("Processed files:", files);
+
+      const directories = Array.isArray(dirsRes.data) ? dirsRes.data.map(d => {
+        // Ensure each directory has the required properties
+        return {
+          name: d.name,
+          type: 'directory',
+          parent: d.parent,
+          created_by: d.created_by,
+          created_at: d.created_at
+        };
+      }) : [];
+      console.log("Processed directories:", directories);
+
+      const combinedItems = [...directories, ...files];
+      console.log("Combined items to display:", combinedItems);
+
+      setItems(combinedItems);
     } catch (error) {
       if (error.response?.status === 401) {
         message.error('Session expired. Redirecting to login...');
@@ -205,37 +282,71 @@ const FileManager = () => {
     }
   };
 
-  const fetchFolderTree = async () => {
-    try {
-      const res = await axios.get(`${BASE_URL}/directory/tree`, { withCredentials: true });
-      let data = res.data || [];
-  
-      const fixedFolders = ['Operation', 'Research', 'Training'];
-  
-      // Ensure fixed folders are present
-      const existingTitles = new Set(data.map(d => d.title));
-      fixedFolders.forEach(folder => {
-        if (!existingTitles.has(folder)) {
-          data.push({
-            title: folder,
-            value: folder,
-            key: folder,
-            children: []
-          });
-        }
-      });
-  
-      setFolderTreeData(data);
-    } catch (error) {
-      console.error('Error fetching folder tree:', error);
-      setFolderTreeData([
-        { title: 'Operation', value: 'Operation', key: 'Operation', children: [] },
-        { title: 'Research', value: 'Research', key: 'Research', children: [] },
-        { title: 'Training', value: 'Training', key: 'Training', children: [] },
-      ]);
-    }
-  };
-  
+  // Fetch folder tree
+const fetchFolderTree = async () => {
+  setLoading(true);
+  try {
+    const res = await axios.get(`${BASE_URL}/directory/tree`, {
+      withCredentials: true
+    });
+    let data = res.data || [];
+
+    // Ensure fixed folders are present at root level
+    const fixedFolders = ['Operation', 'Research', 'Training'];
+    const existingTitles = new Set(data.map(d => d.title || d.name));
+
+    fixedFolders.forEach(folder => {
+      if (!existingTitles.has(folder)) {
+        data.push({
+          title: folder,
+          value: folder,
+          key: folder,
+          children: []
+        });
+      }
+    });
+
+    // Recursively process children to ensure proper structure
+    const processNode = (node) => {
+      return {
+        title: node.title || node.name,
+        value: node.value || path.join(node.parent || '', node.name),
+        key: node.key || node.value || path.join(node.parent || '', node.name),
+        children: node.children ? node.children.map(processNode) : []
+      };
+    };
+
+    const processedData = data.map(processNode);
+    setFolderTreeData(processedData);
+  } catch (error) {
+    console.error('Error fetching folder tree:', error);
+    message.error('Failed to load folder structure');
+    // Fallback with just the main directories
+    setFolderTreeData([
+      {
+        title: 'Operation',
+        value: 'Operation',
+        key: 'Operation',
+        children: []
+      },
+      {
+        title: 'Research',
+        value: 'Research',
+        key: 'Research',
+        children: []
+      },
+      {
+        title: 'Training',
+        value: 'Training',
+        key: 'Training',
+        children: []
+      },
+    ]);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     fetchFolderTree();
@@ -294,15 +405,19 @@ const FileManager = () => {
     const newPath = isRoot ? folderName : path.join(currentPath, folderName);
     setCurrentPath(newPath);
   };
-  
+
   const filteredTreeData = useMemo(() => {
     const disableCurrent = (nodes) => {
-      return nodes.map((node) => ({
-        ...node,
-        disabled: node.value === currentPath,
-        children: node.children ? disableCurrent(node.children) : []
-      }));
+      return nodes.map((node) => {
+        const isCurrent = node.value === currentPath;
+        return {
+          ...node,
+          disabled: isCurrent,
+          children: node.children ? disableCurrent(node.children) : []
+        };
+      });
     };
+
     return disableCurrent(folderTreeData);
   }, [folderTreeData, currentPath]);
 
@@ -331,7 +446,7 @@ const FileManager = () => {
     const updatedFiles = [...selectedFiles];
     updatedFiles.splice(index, 1);
     setSelectedFiles(updatedFiles);
-  };  
+  };
 
   const handleUpload = async () => {
     if (!uploadingFile || uploadingFile.length === 0) {
@@ -355,35 +470,35 @@ const FileManager = () => {
       }
     }
 
-  
+
     if (fileUploadMessage.trim() && !targetUsername) {
       message.error('Please select a valid user to send the file to when including a message.');
       return;
     }
-  
+
     const normalizedPath = currentPath.replace(/\\/g, '/');
-  
+
     const existingFilesRes = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`, {
       withCredentials: true
     });
     const existingFiles = existingFilesRes.data || [];
     const existingNames = existingFiles.map(f => f.name);
-  
+
     if (uploadingFile.length === 1) {
       const file = uploadingFile[0];
       const fileExists = existingNames.includes(file.name);
-  
+
       const uploadSingle = async (overwrite) => {
         const formData = new FormData();
         formData.append('file', file);
         console.log("Sending folder:", normalizedPath);
-        formData.append('directory', normalizedPath.toLowerCase()); // ✅ updated
+        formData.append('directory', normalizedPath); // Fixed: don't force lowercase
         if (overwrite) formData.append('overwrite', 'true');
         if (fileUploadMessage.trim() && targetUsername.trim()) {
           formData.append('message', fileUploadMessage.trim());
           formData.append('receiver', targetUsername.trim());
         }
-  
+
         try {
           await axios.post(`${BASE_URL}/upload`, formData, {
             withCredentials: true,
@@ -395,7 +510,7 @@ const FileManager = () => {
           message.error(`Upload failed for ${file.name}`);
         }
       };
-  
+
       if (fileExists) {
         Modal.confirm({
           title: `A file named '${file.name}' already exists.`,
@@ -413,15 +528,15 @@ const FileManager = () => {
     } else {
       const formData = new FormData();
       uploadingFile.forEach((file) => formData.append('files', file));
-      formData.append('directory', normalizedPath.to); // ✅ updated
-      formData.append('container', normalizedPath.split('/')[0] || 'operation'); // ✅ updated
+      formData.append('directory', normalizedPath); // Fixed: removed .to property
+      formData.append('container', normalizedPath.split('/')[0] || 'operation');
       formData.append('overwrite', 'false');
       formData.append('skip', 'false');
       if (fileUploadMessage.trim() && targetUsername.trim()) {
         formData.append('message', fileUploadMessage.trim());
         formData.append('receiver', targetUsername.trim());
       }
-  
+
       try {
         const res = await axios.post(`${BASE_URL}/bulk-upload`, formData, {
           withCredentials: true,
@@ -431,32 +546,32 @@ const FileManager = () => {
         const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
         const skipped = results.filter(r => r.status === 'skipped').length;
         const failed = results.filter(r => r.status.startsWith('error')).length;
-  
+
         message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
       } catch (error) {
         console.error('Bulk upload failed:', error);
         message.error('Bulk upload failed');
       }
     }
-  
+
     setUploadModalVisible(false);
     setUploadingFile([]);
     setFileUploadMessage('');
     setTargetUsername('');
     fetchItems();
   };
-  
-  
-  
+
+
+
   const uploadFile = async (formData, isOverwrite) => {
     try {
       const res = await axios.post(`${BASE_URL}/upload`, formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-  
+
       const { message: uploadMsg, file_id } = res.data;
-  
+
       if (fileUploadMessage.trim() && targetUsername.trim()) {
         try {
           await axios.post(`${BASE_URL}/file/message`, {
@@ -464,14 +579,14 @@ const FileManager = () => {
             receiver: targetUsername.trim(),
             message: fileUploadMessage.trim()
           }, { withCredentials: true });
-  
+
           message.success(`Message sent to ${targetUsername}`);
         } catch (msgErr) {
           console.error('Message upload failed:', msgErr);
           message.error('Failed to send message to user');
         }
       }
-  
+
       message.success(uploadMsg || 'File uploaded');
       setUploadModalVisible(false);
       setUploadingFile(null);
@@ -590,10 +705,10 @@ const FileManager = () => {
       message.error('No item selected to copy');
       return;
     }
-  
+
     try {
       const targetDir = selectedDestination || currentPath;
-  
+
       if (copyItem.type === 'directory') {
         await axios.post(`${BASE_URL}/directory/copy`, {
           source_name: copyItem.name,
@@ -601,22 +716,22 @@ const FileManager = () => {
           new_name: copyNewName,
           destination_parent: targetDir
         }, { withCredentials: true });
-  
+
         message.success(`Directory '${copyItem.name}' copied as '${copyNewName}'`);
         fetchFolderTree();
-  
+
       } else {
         const res = await axios.post(`${BASE_URL}/copy-file`, {
           source_file: copyItem.name,
           new_file_name: copyNewName,
           destination_folder: targetDir
         }, { withCredentials: true });
-  
+
         const finalName = res.data.final_name || copyNewName;
-  
+
         message.success(`File '${copyItem.name}' copied as '${finalName}'`);
       }
-  
+
       setCopyModalVisible(false);
       setCopyItem(null);
       setCopyNewName('');
@@ -634,28 +749,34 @@ const FileManager = () => {
   };
 
   const handleMoveConfirm = async () => {
-    if (!moveDestination?.trim()) {
-      message.error('Please select a destination folder');
+    if (!selectedMainFolder) {
+      message.error('Please select a main folder');
       return;
     }
-  
+
     if (!moveItem) {
       message.error('No item selected to move');
       return;
     }
-  
+
     try {
+      // The destination is either:
+      // - Just the main folder (e.g. "Training")
+      // - Or main folder + subfolder (e.g. "Training/Subfolder")
+      const destination = moveDestination || selectedMainFolder;
+
       if (moveItem.type === 'file') {
-        const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
-          withCredentials: true
-        });
-  
+        const res = await axios.get(
+          `${BASE_URL}/files?directory=${encodeURIComponent(destination)}`,
+          { withCredentials: true }
+        );
+
         const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
         const nameExists = existingNames.includes(moveItem.name);
-  
+
         if (nameExists) {
           const conflictModal = Modal.info({
-            title: `A file named '${moveItem.name}' already exists in '${moveDestination}'`,
+            title: `A file named '${moveItem.name}' already exists in '${destination}'`,
             icon: <ExclamationCircleOutlined />,
             closable: true,
             width: 600,
@@ -674,8 +795,8 @@ const FileManager = () => {
                     style={{ flex: 1 }}
                     onClick={async () => {
                       try {
-                        await finalizeMove(true);
-                        setMoveModalVisible(false); 
+                        await finalizeMove(true, destination);
+                        setMoveModalVisible(false);
                         conflictModal.destroy();
                       } catch (err) {
                         console.error('Replace failed:', err);
@@ -685,7 +806,7 @@ const FileManager = () => {
                   >
                     Replace
                   </Button>
-  
+
                   <Button
                     style={{ flex: 1 }}
                     onClick={() => {
@@ -696,14 +817,14 @@ const FileManager = () => {
                   >
                     Skip
                   </Button>
-  
+
                   <Button
                     type="default"
                     style={{ flex: 1 }}
                     onClick={async () => {
                       try {
-                        await finalizeMove(false);
-                        setMoveModalVisible(false); 
+                        await finalizeMove(false, destination);
+                        setMoveModalVisible(false);
                         conflictModal.destroy();
                       } catch (err) {
                         console.error('Keep both failed:', err);
@@ -719,19 +840,19 @@ const FileManager = () => {
             okButtonProps: { style: { display: 'none' } },
             cancelButtonProps: { style: { display: 'none' } },
           });
-  
+
           return;
         }
       }
-  
-      await finalizeMove(false);
+
+      await finalizeMove(false, destination);
     } catch (err) {
       console.error('Move error:', err);
       message.error('Error checking for conflict or moving file');
     }
   };
-  
-  const finalizeMove = async (overwrite) => {
+
+  const finalizeMove = async (overwrite, destination) => {
     try {
       if (moveItem.type === 'directory') {
         await axios.post(
@@ -739,47 +860,39 @@ const FileManager = () => {
           {
             name: moveItem.name,
             old_parent: currentPath,
-            new_parent: moveDestination
+            new_parent: destination
           },
           { withCredentials: true }
         );
       } else {
-
-        console.log('Moving file with:', {
-          id: moveItem.id,
-          filename: moveItem.name,
-          old_parent: currentPath,
-          new_parent: moveDestination,
-          overwrite
-        });
-        
         await axios.post(
-          `${BASE_URL}/move-file`,
+          `${BASE_URL}/file/move`,
           {
             id: moveItem.id,
-            filename: moveItem.name,
             old_parent: currentPath,
-            new_parent: moveDestination,
+            new_parent: destination,
+            filename: moveItem.name,
             overwrite,
           },
           { withCredentials: true }
-        );        
+        );
       }
-  
-      message.success(`Moved '${moveItem.name}' successfully`);
-  
+
+      message.success(`Moved '${moveItem.name}' to ${destination} successfully`);
       setMoveModalVisible(false);
+      setSelectedMainFolder('');
       setMoveDestination('');
       setMoveItem(null);
-  
-      fetchItems();  // Stay in current folder
+
+      fetchItems();
       fetchFolderTree();
     } catch (err) {
       console.error('Move error:', err);
-      message.error(err.response?.data?.error || 'Error moving item');
+      console.error('Error details:', err.response?.data);
+      message.error(err.response?.data?.message || err.response?.data?.error || 'Error moving item');
     }
   };
-  
+
 
   const columns = [
     {
@@ -935,42 +1048,25 @@ const FileManager = () => {
           scroll={{ y: '49vh' }}  // for content scrolling on table
         />
 
-        <Modal
-          title="Create New Folder"
+        {/* Create Folder Modal */}
+        <CreateFolderModal
           visible={createFolderModal}
-          onOk={handleCreateFolder}
           onCancel={() => setCreateFolderModal(false)}
-          okText="Create"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Folder Name" required>
-              <Input
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="e.g. Reports2025"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          onOk={handleCreateFolder}
+          folderName={newFolderName}
+          setFolderName={setNewFolderName}
+        />
 
-        <Modal
-          title="Rename Item"
+        {/* Rename Modal */}
+        <RenameModal
           visible={renameModalVisible}
-          onOk={handleRenameConfirm}
           onCancel={() => setRenameModalVisible(false)}
-          okText="Rename"
-        >
-          <Form layout="vertical">
-            <Form.Item label="New Name" required>
-              <Input
-                value={renameNewName}
-                onChange={(e) => setRenameNewName(e.target.value)}
-                placeholder="Enter new name"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          onOk={handleRenameConfirm}
+          newName={renameNewName}
+          setNewName={setRenameNewName}
+        />
 
+        {/* Upload Modal - Custom implementation due to additional fields */}
         <Modal
           title="Upload File"
           visible={uploadModalVisible}
@@ -984,7 +1080,7 @@ const FileManager = () => {
             setUploadingFile(fileList);
             return false;
           }}
-          
+
           showUploadList={{
             showRemoveIcon: true,
             removeIcon: <DeleteOutlined style={{ color: 'red' }} />, // You can style this
@@ -1002,12 +1098,12 @@ const FileManager = () => {
             const formData = new FormData();
             formData.append('file', file);
             formData.append('directory', currentPath.replace(/\\/g, '/')); // ✅ Normalize path
-          
+
             if (fileUploadMessage.trim() && targetUsername.trim()) {
               formData.append('message', fileUploadMessage.trim());
               formData.append('receiver', targetUsername.trim());
             }
-          
+
             try {
               await axios.post(`${BASE_URL}/upload`, formData, {
                 withCredentials: true,
@@ -1025,7 +1121,7 @@ const FileManager = () => {
               onError(err);
             }
           }}
-          
+
         >
           <p className="ant-upload-drag-icon">
             <UploadOutlined />
@@ -1069,7 +1165,7 @@ const FileManager = () => {
   validateStatus={fileUploadMessage.trim() && !targetUsername ? 'error' : ''}
   help={fileUploadMessage.trim() && !targetUsername ? 'Please select a user when including a message.' : ''}
 >
-  <UserSearchSelect 
+  <UserSearchSelect
     value={targetUsername}
     onUserSelect={(value) => setTargetUsername(value)}
     required={!!fileUploadMessage.trim()}
@@ -1078,56 +1174,30 @@ const FileManager = () => {
 
         </Modal>
 
-        <Modal
-          title="Copy Item"
+        {/* Copy Modal */}
+        <CopyModal
           visible={copyModalVisible}
-          onOk={handleCopyConfirm}
           onCancel={() => setCopyModalVisible(false)}
-          okText="Copy"
-        >
-          <Form layout="vertical">
-            <Form.Item label="New Name" required>
-              <Input
-                value={copyNewName}
-                onChange={(e) => setCopyNewName(e.target.value)}
-                placeholder="Enter new name"
-              />
-            </Form.Item>
-            <Form.Item label="Destination Folder (Optional)">
-              <TreeSelect
-                style={{ width: '100%' }}
-                treeData={folderTreeData}
-                placeholder="Select folder or leave blank"
-                value={selectedDestination}
-                onChange={(val) => setSelectedDestination(val)}
-                treeDefaultExpandAll
-                allowClear
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          onOk={handleCopyConfirm}
+          newName={copyNewName}
+          setNewName={setCopyNewName}
+          selectedDestination={moveDestination}
+          setSelectedDestination={setMoveDestination}
+          folderOptions={filteredTreeData.map(folder => ({
+            label: folder.title,
+            value: folder.value
+          }))}
+        />
 
-        <Modal
-          title="Move Item"
+        {/* Move Modal */}
+        <MainFolderMoveModal
           visible={moveModalVisible}
-          onOk={handleMoveConfirm}
           onCancel={() => setMoveModalVisible(false)}
-          okText="Move"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Destination Folder" required>
-              <TreeSelect
-                style={{ width: '100%' }}
-                treeData={filteredTreeData}
-                placeholder="Select destination folder"
-                value={moveDestination}
-                onChange={(val) => setMoveDestination(val)}
-                treeDefaultExpandAll
-                allowClear
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          onOk={handleMoveConfirm}
+          selectedMainFolder={selectedMainFolder}
+          setSelectedMainFolder={setSelectedMainFolder}
+          setMoveDestination={setMoveDestination}
+        />
       </Content>
     </Layout>
   );
