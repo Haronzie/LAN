@@ -7,14 +7,10 @@ import {
   Input,
   Row,
   Col,
-  Modal,
   Space,
   Tooltip,
-  Form,
-  Select,
-  Card,
   Breadcrumb,
-  TreeSelect
+  Select
 } from 'antd';
 import {
   UploadOutlined,
@@ -28,15 +24,15 @@ import {
   SwapOutlined,
   FileOutlined
 } from '@ant-design/icons';
-import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
+import CommonModals from './common/CommonModals';
 
 const { Content } = Layout;
 const { Option } = Select;
 
-/** 
+/**
  * Helper to format file sizes in human-readable form.
  */
 function formatFileSize(size) {
@@ -59,20 +55,140 @@ const ResearchDashboard = () => {
   const [directories, setDirectories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Define fetchItems and fetchDirectories first
+  const fetchDirectories = async () => {
+    try {
+      const res = await axios.get('/directory/tree?container=research', { withCredentials: true });
+      setDirectories(res.data || []);
+    } catch (error) {
+      console.error('Error fetching directories:', error);
+    }
+  };
+
+  const fetchItems = async () => {
+    setLoading(true);
+    try {
+      const dirParam = encodeURIComponent(currentPath);
+
+      // 1. Fetch folders
+      const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true });
+      const folders = (dirRes.data || []).map((folder) => ({
+        id: `folder-${folder.name}`,
+        name: folder.name,
+        type: 'directory',
+        created_by: folder.created_by || '',
+      }));
+
+      // 2. Fetch files
+      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
+      const files = (fileRes.data || []).map((file) => ({
+        id: file.id,
+        name: file.name,
+        type: 'file',
+        size: file.size,
+        formattedSize: formatFileSize(file.size),
+        uploader: file.uploader,
+      }));
+
+      // 3. Merge and sort
+      const sortedItems = [...folders, ...files].sort((a, b) => a.name.localeCompare(b.name));
+      setItems(sortedItems);
+    } catch (error) {
+      console.error('Error loading items:', error);
+      message.error('Failed to fetch files or folders.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // State for modals
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [renameNewName, setRenameNewName] = useState('');
+
   const [copyModalVisible, setCopyModalVisible] = useState(false);
   const [copyItem, setCopyItem] = useState(null);
   const [copyNewName, setCopyNewName] = useState('');
   const [selectedDestination, setSelectedDestination] = useState('');
+
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
+
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState([]);
+
+  // Handler functions for opening modals
+  const handleRename = (record) => {
+    const isOwner =
+      record.type === 'directory'
+        ? record.created_by === currentUser
+        : record.uploader === currentUser;
+    if (!isOwner) {
+      message.error('Only the owner can rename this item.');
+      return;
+    }
+    setSelectedItem(record);
+    setRenameNewName(record.name);
+    setRenameModalVisible(true);
+  };
+
+  const handleCopy = (record) => {
+    // condition in naming the copied file
+    let baseName = record.name;
+    let extension = '';
+    const dotIndex = record.name.lastIndexOf('.');
+    if (dotIndex !== -1) {
+      baseName = record.name.substring(0, dotIndex);
+      extension = record.name.substring(dotIndex);
+    }
+
+    let suggestedName = record.name;
+    const destination = selectedDestination || currentPath;
+    const existingNames = items
+      .filter(item => item.parent === destination)
+      .map(item => item.name);
+
+    if (existingNames.includes(record.name)) {
+      let counter = 1;
+      let newName;
+      do {
+        newName = `${baseName}(${counter})${extension}`;
+        counter++;
+      } while (existingNames.includes(newName));
+      suggestedName = newName;
+    }
+    setCopyItem(record);
+    setCopyNewName(suggestedName);
+    setCopyModalVisible(true);
+  };
+
+  const handleMove = (record) => {
+    const isOwner =
+      record.type === 'directory'
+        ? record.created_by === currentUser
+        : record.uploader === currentUser;
+    if (!isOwner) {
+      message.error('Only the owner can move this item.');
+      return;
+    }
+    setMoveItem(record);
+    setMoveDestination(currentPath);
+    setMoveModalVisible(true);
+  };
+
+  const handleOpenUploadModal = () => {
+    if (!currentPath) {
+      message.error("Please select or create a folder first.");
+      return;
+    }
+    setUploadingFiles([]);
+    setUploadModalVisible(true);
+  };
 
 
   // ----------------------------------
@@ -87,64 +203,27 @@ const ResearchDashboard = () => {
     // eslint-disable-next-line
   }, []);
 
-  const fetchDirectories = async () => {
-    try {
-      const res = await axios.get('/directory/tree?container=research', { withCredentials: true });
-      setDirectories(res.data || []);
-    } catch (error) {
-      console.error('Error fetching directories:', error);
-    }
-  };
-
-  // ----------------------------------
-  // Fetch items (directories + files)
-  // ----------------------------------
-  const fetchItems = async () => {
-    setLoading(true);
-    try {
-      const dirParam = encodeURIComponent(currentPath);
-  
-      // 1. Fetch folders
-      const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true });
-      const folders = (dirRes.data || []).map((folder) => ({
-        id: `folder-${folder.name}`,
-        name: folder.name,
-        type: 'directory',
-        created_by: folder.created_by || '',
-      }));
-  
-      // 2. Fetch files
-      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
-      const files = (fileRes.data || []).map((file) => ({
-        id: file.id,
-        name: file.name,
-        type: 'file',
-        size: file.size,
-        formattedSize: formatFileSize(file.size),
-        uploader: file.uploader,
-      }));
-  
-      // 3. Merge and sort
-      const sortedItems = [...folders, ...files].sort((a, b) => a.name.localeCompare(b.name));
-      setItems(sortedItems);
-    } catch (error) {
-      console.error('Error loading items:', error);
-      message.error('Failed to fetch files or folders.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-
+  // Fetch items when currentPath changes
   useEffect(() => {
     fetchItems();
     // eslint-disable-next-line
   }, [currentPath]);
 
-  // Filter items by search term
+  // First filter items based on search term
   const filteredItems = items.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Then sort: directories first (in ascending order), then files (in ascending order)
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    // If types are different (directory vs file)
+    if (a.type !== b.type) {
+      // Directories come before files
+      return a.type === 'directory' ? -1 : 1;
+    }
+    // If types are the same, sort alphabetically by name
+    return a.name.localeCompare(b.name);
+  });
 
   // ----------------------------------
   // Navigation & Breadcrumb
@@ -200,6 +279,7 @@ const ResearchDashboard = () => {
       setCreateFolderModal(false);
       setNewFolderName('');
       fetchItems();
+      fetchDirectories();
     } catch (error) {
       console.error('Create folder error:', error);
       message.error(error.response?.data?.error || 'Error creating folder');
@@ -214,21 +294,21 @@ const ResearchDashboard = () => {
       message.error('Please select one or more files first');
       return;
     }
-  
+
     const normalizedPath = currentPath.replace(/\\/g, '/').toLowerCase();
-  
+
     try {
       if (uploadingFiles.length === 1) {
         const formData = new FormData();
         formData.append('file', uploadingFiles[0]);
         formData.append('directory', normalizedPath);
         formData.append('container', 'research');
-  
+
         await axios.post('/upload', formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-  
+
         message.success('File uploaded successfully');
       } else {
         const formData = new FormData();
@@ -237,20 +317,20 @@ const ResearchDashboard = () => {
         formData.append('container', 'research');
         formData.append('overwrite', 'false');
         formData.append('skip', 'false');
-  
+
         const res = await axios.post('/bulk-upload', formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-  
+
         const results = res.data || [];
         const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
         const skipped = results.filter(r => r.status === 'skipped').length;
         const failed = results.filter(r => r.status.startsWith('error')).length;
-  
+
         message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
       }
-  
+
       setUploadModalVisible(false);
       setUploadingFiles([]);
       fetchItems(); // refresh file list
@@ -259,17 +339,7 @@ const ResearchDashboard = () => {
       message.error(error.response?.data?.error || 'Upload failed');
     }
   };
-  
-  
-  const handleOpenUploadModal = () => {
-    if (!currentPath) {
-      message.error("Please select or create a folder first.");
-      return;
-    }
-    setUploadingFiles([]);
-    setUploadModalVisible(true);
-  };
-   
+
 
   // ----------------------------------
   // Delete
@@ -306,20 +376,6 @@ const ResearchDashboard = () => {
   // ----------------------------------
   // Rename
   // ----------------------------------
-  const handleRename = (record) => {
-    const isOwner =
-      record.type === 'directory'
-        ? record.created_by === currentUser
-        : record.uploader === currentUser;
-    if (!isOwner) {
-      message.error('Only the owner can rename this item.');
-      return;
-    }
-    setSelectedItem(record);
-    setRenameNewName(record.name);
-    setRenameModalVisible(true);
-  };
-
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
       message.error('New name cannot be empty');
@@ -353,6 +409,7 @@ const ResearchDashboard = () => {
       setRenameModalVisible(false);
       setSelectedItem(null);
       fetchItems();
+      fetchDirectories();
     } catch (error) {
       console.error('Rename error:', error);
       message.error(error.response?.data?.error || 'Error renaming item');
@@ -362,36 +419,6 @@ const ResearchDashboard = () => {
   // ----------------------------------
   // Copy
   // ----------------------------------
-  const handleCopy = (record) => {
-      // condition in naming the copied file
-      let baseName = record.name;
-      let extension = '';
-      const dotIndex = record.name.lastIndexOf('.');
-      if (dotIndex !== -1) {
-        baseName = record.name.substring(0, dotIndex);
-        extension = record.name.substring(dotIndex);
-      }
-  
-      let suggestedName = record.name;
-      const destination = selectedDestination || currentPath;
-      const existingNames = items
-        .filter(item => item.parent === destination)
-        .map(item => item.name);
-  
-      if (existingNames.includes(record.name)) {
-        let counter = 1;
-        let newName;
-        do {
-          newName = `${baseName}(${counter})${extension}`;
-          counter++;
-        } while (existingNames.includes(newName));
-        suggestedName = newName;
-      }
-    setCopyItem(record);
-    setCopyNewName(suggestedName);
-    setCopyModalVisible(true);
-  };
-
   const handleCopyConfirm = async () => {
     if (!copyNewName.trim()) {
       message.error('New name cannot be empty');
@@ -441,20 +468,6 @@ const ResearchDashboard = () => {
   // ----------------------------------
   // Move
   // ----------------------------------
-  const handleMove = (record) => {
-    const isOwner =
-      record.type === 'directory'
-        ? record.created_by === currentUser
-        : record.uploader === currentUser;
-    if (!isOwner) {
-      message.error('Only the owner can move this item.');
-      return;
-    }
-    setMoveItem(record);
-    setMoveDestination(currentPath);
-    setMoveModalVisible(true);
-  };
-
   const handleMoveConfirm = async () => {
     if (!moveDestination.trim()) {
       message.error('Please select a destination folder');
@@ -493,6 +506,7 @@ const ResearchDashboard = () => {
       setMoveItem(null);
       setMoveDestination('');
       fetchItems();
+      fetchDirectories();
     } catch (error) {
       console.error('Move error:', error);
       message.error(error.response?.data?.error || 'Error moving item');
@@ -503,7 +517,7 @@ const ResearchDashboard = () => {
   // View File
   // ----------------------------------
   const handleViewFile = (record) => {
-    const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(
+    const previewUrl = `/preview?directory=${encodeURIComponent(
       currentPath
     )}&filename=${encodeURIComponent(record.name)}`;
     window.open(previewUrl, '_blank');
@@ -518,10 +532,7 @@ const ResearchDashboard = () => {
       dataIndex: 'name',
       key: 'name',
 
-      // sort in ascending order
-      sorter: (a, b) => a.name.localeCompare(b.name),
-      defaultSortOrder: 'ascend',
-      sortDirections: [],
+      // Removed sorting from column as we're handling it in sortedItems
 
       render: (name, record) => {
         if (record.type === 'directory') {
@@ -600,13 +611,13 @@ const ResearchDashboard = () => {
   // Download Helpers (open in new tab)
   // ----------------------------------
   const handleDownload = (fileName) => {
-    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+    const downloadUrl = `/download?filename=${encodeURIComponent(fileName)}`;
     window.open(downloadUrl, '_blank');
   };
 
   const handleDownloadFolder = (folderName) => {
     const folderPath = path.join(currentPath, folderName);
-    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
+    const downloadUrl = `/download-folder?directory=${encodeURIComponent(folderPath)}`;
     window.open(downloadUrl, '_blank');
   };
 
@@ -648,153 +659,56 @@ const ResearchDashboard = () => {
         <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
         <Table
           columns={columns}
-          dataSource={filteredItems}
+          dataSource={sortedItems}
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
           pagination={false}
           scroll={{ y: '49vh' }}  // for content scrolling on table
         />
 
-        {/* Create Folder Modal */}
-        <Modal
-          title="Create New Folder"
-          visible={createFolderModal}
-          onOk={handleCreateFolder}
-          onCancel={() => setCreateFolderModal(false)}
-          okText="Create"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Folder Name" required>
-              <Input
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="e.g. ProjectX"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+        {/* Use the CommonModals component */}
+        <CommonModals
+          // Create Folder Modal props
+          createFolderModal={createFolderModal}
+          setCreateFolderModal={setCreateFolderModal}
+          newFolderName={newFolderName}
+          setNewFolderName={setNewFolderName}
+          handleCreateFolder={handleCreateFolder}
 
-        {/* Rename Modal */}
-        <Modal
-          title="Rename Item"
-          visible={renameModalVisible}
-          onOk={handleRenameConfirm}
-          onCancel={() => setRenameModalVisible(false)}
-          okText="Rename"
-        >
-          <Form layout="vertical">
-            <Form.Item label="New Name" required>
-              <Input
-                value={renameNewName}
-                onChange={(e) => setRenameNewName(e.target.value)}
-                placeholder="Enter new name"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          // Rename Modal props
+          renameModalVisible={renameModalVisible}
+          setRenameModalVisible={setRenameModalVisible}
+          renameNewName={renameNewName}
+          setRenameNewName={setRenameNewName}
+          handleRenameConfirm={handleRenameConfirm}
 
-        {/* Copy Modal */}
-        <Modal
-          title="Copy Item"
-          visible={copyModalVisible}
-          onOk={handleCopyConfirm}
-          onCancel={() => setCopyModalVisible(false)}
-          okText="Copy"
-        >
-          <Form layout="vertical">
-            <Form.Item label="New Name" required>
-              <Input
-                value={copyNewName}
-                onChange={(e) => setCopyNewName(e.target.value)}
-                placeholder="Enter new name"
-              />
-            </Form.Item>
-            <Form.Item label="Destination Folder (Optional)">
-              <Select
-                style={{ width: '100%' }}
-                placeholder="Select a folder or leave blank"
-                value={selectedDestination}
-                onChange={(val) => setSelectedDestination(val)}
-                allowClear
-              >
-                {items
-                  .filter((item) => item.type === 'directory')
-                  .map((folder) => {
-                    const folderPath = path.join(currentPath, folder.name);
-                    return (
-                      <Option key={folderPath} value={folderPath}>
-                        {folder.name}
-                      </Option>
-                    );
-                  })}
-              </Select>
-            </Form.Item>
-          </Form>
-        </Modal>
+          // Copy Modal props
+          copyModalVisible={copyModalVisible}
+          setCopyModalVisible={setCopyModalVisible}
+          copyNewName={copyNewName}
+          setCopyNewName={setCopyNewName}
+          selectedDestination={selectedDestination}
+          setSelectedDestination={setSelectedDestination}
+          handleCopyConfirm={handleCopyConfirm}
+          directoryItems={items}
+          currentPath={currentPath}
 
-        {/* Move Modal */}
-        <Modal
-          title="Move Item"
-          visible={moveModalVisible}
-          onOk={handleMoveConfirm}
-          onCancel={() => setMoveModalVisible(false)}
-          okText="Move"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Destination Folder" required>
-              <TreeSelect
-                style={{ width: '100%' }}
-                treeData={directories}
-                placeholder="Select destination folder"
-                value={moveDestination}
-                onChange={(val) => setMoveDestination(val)}
-                treeDefaultExpandAll
-                allowClear
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          // Move Modal props
+          moveModalVisible={moveModalVisible}
+          setMoveModalVisible={setMoveModalVisible}
+          moveDestination={moveDestination}
+          setMoveDestination={setMoveDestination}
+          handleMoveConfirm={handleMoveConfirm}
+          directories={directories}
 
-        {/* Upload Modal */}
-        <Modal
-          title="Upload Files"
-          visible={uploadModalVisible}
-          onOk={handleModalUpload}
-          onCancel={() => {
-            setUploadModalVisible(false);
-            setUploadingFiles([]);
-          }}
-          okText="Upload"
-          okButtonProps={{ disabled: uploadingFiles.length === 0 }}
-        >
-          <p>Target Folder: {currentPath}</p>
-          <Form layout="vertical">
-            <Form.Item>
-              <Dragger
-                multiple
-                fileList={uploadingFiles}
-                beforeUpload={(file, fileList) => {
-                  setUploadingFiles(fileList);
-                  return false; // Don't auto upload
-                }}
-                showUploadList={{ showRemoveIcon: true, showPreviewIcon: false }}
-                onRemove={(file) => {
-                  setUploadingFiles(prev => prev.filter(f => f.uid !== file.uid));
-                }}
-                customRequest={({ onSuccess }) => {
-                  setTimeout(() => {
-                    onSuccess("ok");
-                  }, 0);
-                }}
-                style={{ padding: '12px 0' }}
-              >
-                <p className="ant-upload-drag-icon"><UploadOutlined /></p>
-                <p className="ant-upload-text">Click or drag files here to upload</p>
-                <p className="ant-upload-hint">You can select multiple files</p>
-              </Dragger>
-            </Form.Item>
-          </Form>
-        </Modal>
+          // Upload Modal props
+          uploadModalVisible={uploadModalVisible}
+          setUploadModalVisible={setUploadModalVisible}
+          uploadingFiles={uploadingFiles}
+          setUploadingFiles={setUploadingFiles}
+          handleModalUpload={handleModalUpload}
+          container="research"
+        />
       </Content>
     </Layout>
   );

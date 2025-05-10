@@ -140,10 +140,44 @@ func runMigrations(databaseURL string) {
 		os.Exit(1)
 	}
 
-	// 2. From cmd/server, go up two levels into internal/migrations
+	// 2. Construct the path to migrations directory
+	// If running from LANFileSharingSystem directory
 	migrationsDir := filepath.Clean(
-		filepath.Join(wd, "..", "..", "internal", "migrations"),
+		filepath.Join(wd, "internal", "migrations"),
 	)
+
+	// Check if the migrations directory exists
+	logger.WithField("function", "runMigrations").
+		WithField("checking_path", migrationsDir).
+		Debug("Checking if migrations directory exists")
+
+	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+		// If not, try going up one level (in case running from cmd/server)
+		logger.WithField("function", "runMigrations").
+			WithField("status", "not_found").
+			Debug("Migrations directory not found, trying parent directory")
+
+		migrationsDir = filepath.Clean(
+			filepath.Join(wd, "..", "internal", "migrations"),
+		)
+
+		logger.WithField("function", "runMigrations").
+			WithField("alternate_path", migrationsDir).
+			Debug("Trying alternate migrations path")
+	} else {
+		logger.WithField("function", "runMigrations").
+			WithField("status", "found").
+			Debug("Migrations directory found")
+	}
+
+	// Final check to ensure the migrations directory exists
+	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+		logger.WithField("errorCode", "MIG_INIT_ERR").
+			WithField("path", migrationsDir).
+			WithError(err).
+			Error("migrations directory not found after all attempts")
+		os.Exit(1)
+	}
 
 	// 3. Convert to forward-slashes
 	slashPath := filepath.ToSlash(migrationsDir)

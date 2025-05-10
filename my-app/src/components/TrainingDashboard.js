@@ -36,6 +36,7 @@ import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
+import CommonModals from './common/CommonModals';
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -139,7 +140,7 @@ const TrainingDashboard = () => {
         formattedSize: formatFileSize(f.size),
         uploader: f.uploader
       }));
-      
+
       setItems([...fetchedDirs, ...fetchedFiles]);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
@@ -155,13 +156,25 @@ const TrainingDashboard = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
-  
+
+  // First filter items based on search term
   const filteredItems = items.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
-  
- 
+
+  // Then sort: directories first (in ascending order), then files (in ascending order)
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    // If types are different (directory vs file)
+    if (a.type !== b.type) {
+      // Directories come before files
+      return a.type === 'directory' ? -1 : 1;
+    }
+    // If types are the same, sort alphabetically by name
+    return a.name.localeCompare(b.name);
+  });
+
+
+
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
       message.error('Folder name cannot be empty');
@@ -264,7 +277,7 @@ const TrainingDashboard = () => {
       message.error('Please select one or more files first');
       return;
     }
-  
+
     try {
       const formData = new FormData();
       uploadingFiles.forEach(file => formData.append('files', file)); // multiple files
@@ -272,19 +285,19 @@ const TrainingDashboard = () => {
       formData.append('container', 'training');
       formData.append('overwrite', 'false');
       formData.append('skip', 'false');
-  
+
       const res = await axios.post('/bulk-upload', formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-  
+
       const results = res.data || [];
       const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
       const skipped = results.filter(r => r.status === 'skipped').length;
       const failed = results.filter(r => r.status.startsWith('error')).length;
-  
+
       message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
-  
+
       setUploadModalVisible(false);
       setUploadingFiles([]);
       fetchItems();
@@ -292,7 +305,7 @@ const TrainingDashboard = () => {
       console.error('Upload error:', error);
       message.error('Upload failed');
     }
-  };  
+  };
 
   const handleDelete = async (record) => {
     const isOwner =
@@ -405,13 +418,13 @@ const TrainingDashboard = () => {
         baseName = record.name.substring(0, dotIndex);
         extension = record.name.substring(dotIndex);
       }
-  
+
       let suggestedName = record.name;
       const destination = selectedDestination || currentPath;
       const existingNames = items
         .filter(item => item.parent === destination)
         .map(item => item.name);
-  
+
       if (existingNames.includes(record.name)) {
         let counter = 1;
         let newName;
@@ -552,10 +565,7 @@ const TrainingDashboard = () => {
       dataIndex: 'name',
       key: 'name',
 
-      // sort in ascending order
-      sorter: (a, b) => a.name.localeCompare(b.name),
-      defaultSortOrder: 'ascend',
-      sortDirections: [],
+      // Removed sorting from column as we're handling it in sortedItems
 
       render: (name, record) => {
         if (record.type === 'directory') {
@@ -591,7 +601,7 @@ const TrainingDashboard = () => {
             : record.uploader === currentUser;
         const canManageAccess =
           record.type === 'file' && record.confidential && (isOwner || isAdmin);
-        
+
         return (
           <Space>
             {/* View File (if user has access) */}
@@ -680,155 +690,56 @@ const TrainingDashboard = () => {
         <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
         <Table
           columns={columns}
-          dataSource={filteredItems}
+          dataSource={sortedItems}
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
           pagination={false}
           scroll={{ y: '49vh' }}  // for content scrolling on table
         />
 
-        {/* Create Folder Modal */}
-        <Modal
-          title="Create New Folder"
-          visible={createFolderModal}
-          onOk={handleCreateFolder}
-          onCancel={() => setCreateFolderModal(false)}
-          okText="Create"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Folder Name" required>
-              <Input
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="e.g. TrainingData"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+        {/* Use the CommonModals component */}
+        <CommonModals
+          // Create Folder Modal props
+          createFolderModal={createFolderModal}
+          setCreateFolderModal={setCreateFolderModal}
+          newFolderName={newFolderName}
+          setNewFolderName={setNewFolderName}
+          handleCreateFolder={handleCreateFolder}
 
-        {/* Rename Modal */}
-        <Modal
-          title="Rename Item"
-          visible={renameModalVisible}
-          onOk={handleRenameConfirm}
-          onCancel={() => setRenameModalVisible(false)}
-          okText="Rename"
-        >
-          <Form layout="vertical">
-            <Form.Item label="New Name" required>
-              <Input
-                value={renameNewName}
-                onChange={(e) => setRenameNewName(e.target.value)}
-                placeholder="Enter new name"
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          // Rename Modal props
+          renameModalVisible={renameModalVisible}
+          setRenameModalVisible={setRenameModalVisible}
+          renameNewName={renameNewName}
+          setRenameNewName={setRenameNewName}
+          handleRenameConfirm={handleRenameConfirm}
 
-        {/* Copy Modal */}
-        <Modal
-          title="Copy Item"
-          visible={copyModalVisible}
-          onOk={handleCopyConfirm}
-          onCancel={() => setCopyModalVisible(false)}
-          okText="Copy"
-        >
-          <Form layout="vertical">
-            <Form.Item label="New Name" required>
-              <Input
-                value={copyNewName}
-                onChange={(e) => setCopyNewName(e.target.value)}
-                placeholder="Enter new name"
-              />
-            </Form.Item>
-            <Form.Item label="Destination Folder (Optional)">
-              <Select
-                style={{ width: '100%' }}
-                placeholder="Select folder or leave blank"
-                value={selectedDestination}
-                onChange={(val) => setSelectedDestination(val)}
-                allowClear
-              >
-                {items
-                  .filter((item) => item.type === 'directory')
-                  .map((folder) => {
-                    const folderPath = path.join(currentPath, folder.name);
-                    return (
-                      <Option key={folderPath} value={folderPath}>
-                        {folder.name}
-                      </Option>
-                    );
-                  })}
-              </Select>
-            </Form.Item>
-          </Form>
-        </Modal>
+          // Copy Modal props
+          copyModalVisible={copyModalVisible}
+          setCopyModalVisible={setCopyModalVisible}
+          copyNewName={copyNewName}
+          setCopyNewName={setCopyNewName}
+          selectedDestination={selectedDestination}
+          setSelectedDestination={setSelectedDestination}
+          handleCopyConfirm={handleCopyConfirm}
+          directoryItems={items}
+          currentPath={currentPath}
 
-        {/* Move Modal */}
-        <Modal
-          title="Move Item"
-          visible={moveModalVisible}
-          onOk={handleMoveConfirm}
-          onCancel={() => setMoveModalVisible(false)}
-          okText="Move"
-        >
-          <Form layout="vertical">
-            <Form.Item label="Destination Folder" required>
-              <TreeSelect
-                style={{ width: '100%' }}
-                treeData={directories}
-                placeholder="Select destination folder"
-                value={moveDestination}
-                onChange={(val) => setMoveDestination(val)}
-                treeDefaultExpandAll
-                allowClear
-              />
-            </Form.Item>
-          </Form>
-        </Modal>
+          // Move Modal props
+          moveModalVisible={moveModalVisible}
+          setMoveModalVisible={setMoveModalVisible}
+          moveDestination={moveDestination}
+          setMoveDestination={setMoveDestination}
+          handleMoveConfirm={handleMoveConfirm}
+          directories={directories}
 
-        {/* Upload Modal */}
-        <Modal
-        title="Upload File(s)"
-        visible={uploadModalVisible}
-        onOk={handleModalUpload}
-        onCancel={() => {
-          setUploadModalVisible(false);
-          setUploadingFiles([]);
-        }}
-        okText="Upload"
-        okButtonProps={{ disabled: uploadingFiles.length === 0 }}
-      >
-        <p>Target Folder: {currentPath || '(none)'}</p>
-        <Form layout="vertical">
-          <Form.Item>
-            <Dragger
-              multiple
-              fileList={uploadingFiles}
-              beforeUpload={(file, fileList) => {
-                setUploadingFiles(fileList);
-                return false; // don't upload automatically
-              }}
-              showUploadList={{ showRemoveIcon: true, showPreviewIcon: false }}
-              onRemove={(file) => {
-                setUploadingFiles(prev => prev.filter(f => f.uid !== file.uid));
-              }}
-              customRequest={({ onSuccess }) => {
-                setTimeout(() => {
-                  onSuccess("ok");
-                }, 0);
-              }}
-              style={{ padding: '12px 0' }}
-            >
-              <p className="ant-upload-drag-icon">
-                <UploadOutlined />
-              </p>
-              <p className="ant-upload-text">Click or drag files here to upload</p>
-              <p className="ant-upload-hint">Supports multiple files</p>
-            </Dragger>
-          </Form.Item>
-        </Form>
-      </Modal>
+          // Upload Modal props
+          uploadModalVisible={uploadModalVisible}
+          setUploadModalVisible={setUploadModalVisible}
+          uploadingFiles={uploadingFiles}
+          setUploadingFiles={setUploadingFiles}
+          handleModalUpload={handleModalUpload}
+          container="training"
+        />
       </Content>
     </Layout>
   );
