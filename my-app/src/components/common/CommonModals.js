@@ -17,14 +17,14 @@ const CommonModals = ({
   newFolderName,
   setNewFolderName,
   handleCreateFolder,
-  
+
   // Rename Modal props
   renameModalVisible,
   setRenameModalVisible,
   renameNewName,
   setRenameNewName,
   handleRenameConfirm,
-  
+
   // Copy Modal props
   copyModalVisible,
   setCopyModalVisible,
@@ -35,15 +35,19 @@ const CommonModals = ({
   handleCopyConfirm,
   directoryItems,
   currentPath,
-  
+
   // Move Modal props
   moveModalVisible,
   setMoveModalVisible,
   moveDestination,
   setMoveDestination,
   handleMoveConfirm,
-  directories,
-  
+  selectedMainFolder,
+  selectedSubFolder,
+  subFolders,
+  handleMainFolderChange,
+  handleSubFolderChange,
+
   // Upload Modal props
   uploadModalVisible,
   setUploadModalVisible,
@@ -140,17 +144,37 @@ const CommonModals = ({
         okText="Move"
       >
         <Form layout="vertical">
-          <Form.Item label="Destination Folder" required>
-            <TreeSelect
+          <Form.Item label="Main Folder" required>
+            <Select
               style={{ width: '100%' }}
-              treeData={directories}
-              placeholder="Select destination folder"
-              value={moveDestination}
-              onChange={(val) => setMoveDestination(val)}
-              treeDefaultExpandAll
+              placeholder="Select main folder"
+              value={selectedMainFolder}
+              onChange={handleMainFolderChange}
               allowClear
-            />
+            >
+              <Option value="Operation">Operation</Option>
+              <Option value="Research">Research</Option>
+              <Option value="Training">Training</Option>
+            </Select>
           </Form.Item>
+
+          {selectedMainFolder && (
+            <Form.Item label="Destination Folder">
+              <Select
+                style={{ width: '100%' }}
+                placeholder="Select destination folder (optional)"
+                value={selectedSubFolder}
+                onChange={handleSubFolderChange}
+                allowClear
+              >
+                {subFolders.map(folder => (
+                  <Option key={folder.path} value={folder.name}>
+                    {folder.name}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
         </Form>
       </Modal>
 

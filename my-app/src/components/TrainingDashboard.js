@@ -87,6 +87,9 @@ const TrainingDashboard = () => {
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
+  const [selectedMainFolder, setSelectedMainFolder] = useState('');
+  const [selectedSubFolder, setSelectedSubFolder] = useState('');
+  const [subFolders, setSubFolders] = useState([]);
 
   // Directory tree for moving files/folders
   const [directories, setDirectories] = useState([]);
@@ -488,6 +491,51 @@ const TrainingDashboard = () => {
   // ----------------------------------
   // Move
   // ----------------------------------
+  const fetchSubFolders = async (mainFolder) => {
+    try {
+      const res = await axios.get(`/directory/list?directory=${encodeURIComponent(mainFolder)}`,
+        { withCredentials: true }
+      );
+
+      // Filter to only include directories
+      const folders = (res.data || [])
+        .filter(item => item.type === 'directory')
+        .map(folder => ({
+          name: folder.name,
+          path: `${mainFolder}/${folder.name}`
+        }));
+
+      setSubFolders(folders);
+    } catch (error) {
+      console.error('Error fetching subfolders:', error);
+      message.error('Failed to load subfolders');
+      setSubFolders([]);
+    }
+  };
+
+  const handleMainFolderChange = (value) => {
+    setSelectedMainFolder(value);
+    setSelectedSubFolder('');
+    setMoveDestination(value); // Set the destination to the main folder by default
+
+    if (value) {
+      fetchSubFolders(value);
+    } else {
+      setSubFolders([]);
+    }
+  };
+
+  const handleSubFolderChange = (value) => {
+    setSelectedSubFolder(value);
+    if (value) {
+      // Combine main folder and subfolder for the full path
+      setMoveDestination(`${selectedMainFolder}/${value}`);
+    } else {
+      // If no subfolder is selected, use just the main folder
+      setMoveDestination(selectedMainFolder);
+    }
+  };
+
   const handleMove = (record) => {
     const isOwner =
       record.type === 'directory'
@@ -498,7 +546,10 @@ const TrainingDashboard = () => {
       return;
     }
     setMoveItem(record);
-    setMoveDestination(currentPath);
+    setMoveDestination('');
+    setSelectedMainFolder('');
+    setSelectedSubFolder('');
+    setSubFolders([]);
     setMoveModalVisible(true);
   };
 
@@ -730,7 +781,11 @@ const TrainingDashboard = () => {
           moveDestination={moveDestination}
           setMoveDestination={setMoveDestination}
           handleMoveConfirm={handleMoveConfirm}
-          directories={directories}
+          selectedMainFolder={selectedMainFolder}
+          selectedSubFolder={selectedSubFolder}
+          subFolders={subFolders}
+          handleMainFolderChange={handleMainFolderChange}
+          handleSubFolderChange={handleSubFolderChange}
 
           // Upload Modal props
           uploadModalVisible={uploadModalVisible}

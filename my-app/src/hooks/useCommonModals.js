@@ -26,6 +26,9 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [moveItem, setMoveItem] = useState(null);
   const [moveDestination, setMoveDestination] = useState('');
+  const [selectedMainFolder, setSelectedMainFolder] = useState('');
+  const [selectedSubFolder, setSelectedSubFolder] = useState('');
+  const [subFolders, setSubFolders] = useState([]);
 
   // Upload Modal state
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
@@ -166,7 +169,58 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
   const handleMove = (record) => {
     setMoveItem(record);
     setMoveDestination('');
+    setSelectedMainFolder('');
+    setSelectedSubFolder('');
+    setSubFolders([]);
     setMoveModalVisible(true);
+  };
+
+  // Function to fetch subfolders when a main folder is selected
+  const fetchSubFolders = async (mainFolder) => {
+    try {
+      const res = await axios.get(`/directory/list?directory=${encodeURIComponent(mainFolder)}`,
+        { withCredentials: true }
+      );
+
+      // Filter to only include directories
+      const folders = (res.data || [])
+        .filter(item => item.type === 'directory')
+        .map(folder => ({
+          name: folder.name,
+          path: `${mainFolder}/${folder.name}`
+        }));
+
+      setSubFolders(folders);
+    } catch (error) {
+      console.error('Error fetching subfolders:', error);
+      message.error('Failed to load subfolders');
+      setSubFolders([]);
+    }
+  };
+
+  // Handle main folder selection
+  const handleMainFolderChange = (value) => {
+    setSelectedMainFolder(value);
+    setSelectedSubFolder('');
+    setMoveDestination(value); // Set the destination to the main folder by default
+
+    if (value) {
+      fetchSubFolders(value);
+    } else {
+      setSubFolders([]);
+    }
+  };
+
+  // Handle subfolder selection
+  const handleSubFolderChange = (value) => {
+    setSelectedSubFolder(value);
+    if (value) {
+      // Combine main folder and subfolder for the full path
+      setMoveDestination(`${selectedMainFolder}/${value}`);
+    } else {
+      // If no subfolder is selected, use just the main folder
+      setMoveDestination(selectedMainFolder);
+    }
   };
 
   const handleMoveConfirm = async (currentPath) => {
@@ -281,11 +335,13 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
     renameModalVisible, setRenameModalVisible, selectedItem, setSelectedItem, renameNewName, setRenameNewName,
     copyModalVisible, setCopyModalVisible, copyItem, setCopyItem, copyNewName, setCopyNewName, selectedDestination, setSelectedDestination,
     moveModalVisible, setMoveModalVisible, moveItem, setMoveItem, moveDestination, setMoveDestination,
+    selectedMainFolder, setSelectedMainFolder, selectedSubFolder, setSelectedSubFolder, subFolders,
     uploadModalVisible, setUploadModalVisible, uploadingFiles, setUploadingFiles,
-    
+
     // Handlers
-    handleCreateFolder, handleRename, handleRenameConfirm, 
+    handleCreateFolder, handleRename, handleRenameConfirm,
     handleCopy, handleCopyConfirm, handleMove, handleMoveConfirm,
+    handleMainFolderChange, handleSubFolderChange,
     handleOpenUploadModal, handleModalUpload
   };
 };
