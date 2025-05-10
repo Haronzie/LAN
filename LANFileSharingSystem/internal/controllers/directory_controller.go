@@ -545,39 +545,33 @@ func (dc *DirectoryController) Tree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dirs, err := dc.getAllDirectories()
+	// Fetch the folder tree from the database
+	folderTree, err := dc.App.GetFolderTree()
 	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error fetching directories from DB")
+		models.RespondError(w, http.StatusInternalServerError, "Error fetching folder tree")
 		return
 	}
 
-	parentMap := make(map[string][]string)
-	for _, d := range dirs {
-		parentMap[d.Parent] = append(parentMap[d.Parent], d.Name)
+	// Ensure the fixed folders are included
+	fixedFolders := []string{"Operation", "Research", "Training"}
+	existingFolders := make(map[string]bool)
+	for _, folder := range folderTree {
+		existingFolders[folder.Title] = true
 	}
-	tree := buildTree("", parentMap)
-	models.RespondJSON(w, http.StatusOK, tree)
-}
 
-func buildTree(parent string, parentMap map[string][]string) []TreeNode {
-	var result []TreeNode
-	children := parentMap[parent]
-	for _, childName := range children {
-		var fullPath string
-		if parent == "" {
-			fullPath = childName
-		} else {
-			fullPath = filepath.Join(parent, childName)
+	for _, fixedFolder := range fixedFolders {
+		if !existingFolders[fixedFolder] {
+			folderTree = append(folderTree, models.Folder{
+				Title:    fixedFolder,
+				Value:    fixedFolder,
+				Key:      fixedFolder,
+				Children: []models.Folder{},
+			})
 		}
-		childNodes := buildTree(fullPath, parentMap)
-		node := TreeNode{
-			Title:    childName,
-			Value:    fullPath,
-			Children: childNodes,
-		}
-		result = append(result, node)
 	}
-	return result
+
+	// Return the updated folder tree
+	models.RespondJSON(w, http.StatusOK, folderTree)
 }
 
 func (dc *DirectoryController) getAllDirectories() ([]DirectoryData, error) {

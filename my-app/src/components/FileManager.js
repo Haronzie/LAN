@@ -282,71 +282,37 @@ const FileManager = () => {
     }
   };
 
-  // Fetch folder tree
-const fetchFolderTree = async () => {
-  setLoading(true);
-  try {
-    const res = await axios.get(`${BASE_URL}/directory/tree`, {
-      withCredentials: true
-    });
-    let data = res.data || [];
+  const fetchFolderTree = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/directory/tree`, { withCredentials: true });
+      let data = res.data || [];
 
-    // Ensure fixed folders are present at root level
-    const fixedFolders = ['Operation', 'Research', 'Training'];
-    const existingTitles = new Set(data.map(d => d.title || d.name));
+      const fixedFolders = ['Operation', 'Research', 'Training'];
 
-    fixedFolders.forEach(folder => {
-      if (!existingTitles.has(folder)) {
-        data.push({
-          title: folder,
-          value: folder,
-          key: folder,
-          children: []
-        });
-      }
-    });
+      // Ensure fixed folders are present
+      const existingTitles = new Set(data.map(d => d.title));
+      fixedFolders.forEach(folder => {
+        if (!existingTitles.has(folder)) {
+          data.push({
+            title: folder,
+            value: folder,
+            key: folder,
+            children: []
+          });
+        }
+      });
 
-    // Recursively process children to ensure proper structure
-    const processNode = (node) => {
-      return {
-        title: node.title || node.name,
-        value: node.value || path.join(node.parent || '', node.name),
-        key: node.key || node.value || path.join(node.parent || '', node.name),
-        children: node.children ? node.children.map(processNode) : []
-      };
-    };
-
-    const processedData = data.map(processNode);
-    setFolderTreeData(processedData);
-  } catch (error) {
-    console.error('Error fetching folder tree:', error);
-    message.error('Failed to load folder structure');
-    // Fallback with just the main directories
-    setFolderTreeData([
-      {
-        title: 'Operation',
-        value: 'Operation',
-        key: 'Operation',
-        children: []
-      },
-      {
-        title: 'Research',
-        value: 'Research',
-        key: 'Research',
-        children: []
-      },
-      {
-        title: 'Training',
-        value: 'Training',
-        key: 'Training',
-        children: []
-      },
-    ]);
-  } finally {
-    setLoading(false);
-  }
-};
-
+      setFolderTreeData(data);
+    } catch (error) {
+      console.error('Error fetching folder tree:', error);
+      setFolderTreeData([
+        { title: 'Operation', value: 'Operation', key: 'Operation', children: [] },
+        { title: 'Research', value: 'Research', key: 'Research', children: [] },
+        { title: 'Training', value: 'Training', key: 'Training', children: [] },
+      ]);
+    }
+  };
+  
 
   useEffect(() => {
     fetchFolderTree();
