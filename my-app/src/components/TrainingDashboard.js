@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Layout,
   Table,
@@ -16,7 +16,8 @@ import {
   Breadcrumb,
   Checkbox,
   TreeSelect,
-  Spin
+  Spin,
+
 } from 'antd';
 import {
   UploadOutlined,
@@ -30,12 +31,14 @@ import {
   SwapOutlined,
   ArrowLeftOutlined,
   LockOutlined,
-  FileOutlined
+  FileOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
+import debounce from 'lodash.debounce';
 import CommonModals from './common/CommonModals';
 
 const { Content } = Layout;
@@ -67,6 +70,9 @@ const TrainingDashboard = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // Create folder modal
   const [createFolderModal, setCreateFolderModal] = useState(false);
@@ -159,14 +165,88 @@ const TrainingDashboard = () => {
     // eslint-disable-next-line
   }, [currentPath]);
 
+  // Auto-refresh items periodically, but only when no modals are open
+  useEffect(() => {
+    // Refresh the file list every 10 seconds
+    const interval = setInterval(() => {
+      // Only auto-refresh if we're not in the middle of an operation
+      if (!moveModalVisible && !copyModalVisible && !renameModalVisible && !createFolderModal && !uploadModalVisible) {
+        fetchItems();
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line
+  }, [currentPath, moveModalVisible, copyModalVisible, renameModalVisible, createFolderModal, uploadModalVisible]);
 
-  // First filter items based on search term
-  const filteredItems = items.filter((item) =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
+
+  // Perform global search across all subfolders
+  const performSearch = async (query) => {
+    if (!query.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      return;
+    }
+
+    setSearchLoading(true);
+    setIsSearching(true);
+
+    try {
+      // Build the search URL with the main folder parameter for Training
+      const searchUrl = `/search?q=${encodeURIComponent(query)}&main_folder=Training`;
+
+      const response = await axios.get(searchUrl, { withCredentials: true });
+
+      // Format the search results
+      const formattedResults = (response.data || []).map(item => ({
+        ...item,
+        formattedSize: formatFileSize(item.size || 0),
+      }));
+
+      setSearchResults(formattedResults);
+      console.log(`🔍 Search found ${formattedResults.length} results`);
+    } catch (error) {
+      console.error('Search error:', error);
+      message.error('Error performing search');
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Debounce the search to avoid too many requests
+  const debouncedSearch = useCallback(
+    debounce((query) => {
+      performSearch(query);
+    }, 500),
+    [currentPath]
   );
 
+  // Update search when search term changes
+  useEffect(() => {
+    if (searchTerm.trim()) {
+      debouncedSearch(searchTerm);
+    } else {
+      setIsSearching(false);
+      setSearchResults([]);
+    }
+  }, [searchTerm, debouncedSearch]);
+
+  // Navigate to the folder containing a search result
+  const navigateToFolder = (directory) => {
+    setSearchTerm('');
+    setIsSearching(false);
+    setCurrentPath(directory);
+  };
+
+  // If we're searching, use search results, otherwise show all items or filter by search term
+  const displayItems = isSearching
+    ? searchResults
+    : searchTerm.trim()
+      ? items.filter((item) => (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
+      : items;
+
   // Then sort: directories first (in ascending order), then files (in ascending order)
-  const sortedItems = [...filteredItems].sort((a, b) => {
+  const sortedItems = [...displayItems].sort((a, b) => {
     // If types are different (directory vs file)
     if (a.type !== b.type) {
       // Directories come before files
@@ -342,14 +422,14 @@ const TrainingDashboard = () => {
   // ----------------------------------
   // Download
   // ----------------------------------
-  const handleDownload = (fileName) => {
-    const downloadUrl = `http://localhost:8080/download?filename=${encodeURIComponent(fileName)}`;
+  const handleDownload = (fileName, directory) => {
+    const downloadUrl = `/download?directory=${encodeURIComponent(directory || currentPath)}&filename=${encodeURIComponent(fileName)}`;
     window.open(downloadUrl, '_blank');
   };
 
   const handleDownloadFolder = (folderName) => {
     const folderPath = path.join(currentPath, folderName);
-    const downloadUrl = `http://localhost:8080/download-folder?directory=${encodeURIComponent(folderPath)}`;
+    const downloadUrl = `/download-folder?directory=${encodeURIComponent(folderPath)}`;
     window.open(downloadUrl, '_blank');
   };
 
@@ -536,7 +616,7 @@ const TrainingDashboard = () => {
     }
   };
 
-  const handleMove = (record) => {
+  const handleMove = async (record) => {
     const isOwner =
       record.type === 'directory'
         ? record.created_by === currentUser
@@ -545,6 +625,27 @@ const TrainingDashboard = () => {
       message.error('Only the owner can move this item.');
       return;
     }
+
+    // For files, verify the file still exists before showing the move modal
+    if (record.type === 'file') {
+      try {
+        const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+        const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+        const fileExists = (checkRes.data || []).some(f =>
+          f.name === record.name && (f.directory === currentPath || f.directory === undefined)
+        );
+
+        if (!fileExists) {
+          message.error('This file no longer exists. Please refresh the page.');
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking file existence:', err);
+        // Continue anyway, the handleMoveConfirm function will do another check
+      }
+    }
+
     setMoveItem(record);
     setMoveDestination('');
     setSelectedMainFolder('');
@@ -562,7 +663,29 @@ const TrainingDashboard = () => {
       message.error('No item selected to move');
       return;
     }
+
     try {
+      if (moveItem.type === 'file') {
+        // First, verify the file exists by trying to get its metadata
+        try {
+          const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+          const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+          const fileExists = (checkRes.data || []).some(f =>
+            f.name === moveItem.name && (f.directory === currentPath || f.directory === undefined)
+          );
+
+          if (!fileExists) {
+            throw new Error("Source file not found. It may have been deleted or moved.");
+          }
+        } catch (checkErr) {
+          console.error('File existence check failed:', checkErr);
+          message.error('Could not verify file existence. Please refresh and try again.');
+          setMoveModalVisible(false);
+          return;
+        }
+      }
+
       if (moveItem.type === 'directory') {
         await axios.post(
           '/directory/move',
@@ -575,13 +698,22 @@ const TrainingDashboard = () => {
           { withCredentials: true }
         );
       } else {
+        console.log('Moving file with:', {
+          id: moveItem.id.toString(),
+          filename: moveItem.name,
+          old_parent: currentPath,
+          new_parent: moveDestination,
+          overwrite: false
+        });
+
         await axios.post(
-          '/file/move',
+          '/move-file',
           {
+            id: moveItem.id.toString(),
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
-            container: 'training'
+            overwrite: false
           },
           { withCredentials: true }
         );
@@ -593,7 +725,15 @@ const TrainingDashboard = () => {
       fetchItems();
     } catch (error) {
       console.error('Move error:', error);
-      message.error(error.response?.data?.error || 'Error moving item');
+
+      // Handle specific error cases
+      if (error.response?.data?.error === "Source file does not exist on disk") {
+        message.error('The file no longer exists on the server. Please refresh the page.');
+      } else {
+        message.error(error.response?.data?.error || 'Error moving item');
+      }
+
+      setMoveModalVisible(false);
     }
   };
 
@@ -601,10 +741,18 @@ const TrainingDashboard = () => {
   // View File
   // ----------------------------------
   const handleViewFile = (record) => {
-    const previewUrl = `http://localhost:8080/preview?directory=${encodeURIComponent(
-      currentPath
-    )}&filename=${encodeURIComponent(record.name)}`;
-    window.open(previewUrl, '_blank');
+    if (isSearching) {
+      // For search results, we need to use the directory from the result
+      const encodedDir = encodeURIComponent(record.directory || '');
+      const encodedFile = encodeURIComponent(record.name.trim());
+      const previewUrl = `/preview?directory=${encodedDir}&filename=${encodedFile}`;
+      window.open(previewUrl, '_blank');
+    } else {
+      const previewUrl = `/preview?directory=${encodeURIComponent(
+        currentPath
+      )}&filename=${encodeURIComponent(record.name)}`;
+      window.open(previewUrl, '_blank');
+    }
   };
 
   // ----------------------------------
@@ -630,6 +778,27 @@ const TrainingDashboard = () => {
         return name;
       }
     },
+    // If we're showing search results, add a Location column
+    ...(isSearching ? [{
+      title: 'Location',
+      key: 'location',
+      render: (_, record) => {
+        const directory = record.directory || '';
+        return (
+          <Space>
+            <span>{directory}</span>
+            <Button
+              type="link"
+              size="small"
+              onClick={() => navigateToFolder(directory)}
+              icon={<ArrowLeftOutlined />}
+            >
+              Go to folder
+            </Button>
+          </Space>
+        );
+      }
+    }] : []),
     {
       title: 'Type',
       dataIndex: 'type',
@@ -664,7 +833,13 @@ const TrainingDashboard = () => {
             {/* Download (show lock if no access) */}
             {record.type === 'file' && (
   <Tooltip title="Download">
-    <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
+    <Button
+      icon={<DownloadOutlined />}
+      onClick={() => isSearching
+        ? handleDownload(record.name, record.directory)
+        : handleDownload(record.name)
+      }
+    />
   </Tooltip>
 )}
             {record.type === 'directory' && (
@@ -730,15 +905,55 @@ const TrainingDashboard = () => {
             </Button>
           </Col>
           <Col>
-            <Input
-              placeholder="Search..."
+            <Tooltip title="Refresh Files">
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  setLoading(true);
+                  fetchItems();
+                  message.success('File list refreshed');
+                }}
+                loading={loading}
+              />
+            </Tooltip>
+          </Col>
+          <Col style={{ width: '50%' }}>
+            <Input.Search
+              placeholder={isSearching
+                ? "Search in Training..."
+                : currentPath
+                  ? `Search in ${currentPath}...`
+                  : "Search in Training..."}
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSearchTerm(value);
+                // If search is cleared, immediately reset search state
+                if (!value.trim()) {
+                  setIsSearching(false);
+                  setSearchResults([]);
+                }
+              }}
+              onSearch={(value) => {
+                if (value.trim()) {
+                  performSearch(value);
+                } else {
+                  setIsSearching(false);
+                  setSearchResults([]);
+                }
+              }}
+              loading={searchLoading}
               allowClear
+              enterButton
             />
           </Col>
         </Row>
-        <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
+
+
+
+        {!isSearching && (
+          <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
+        )}
         <Table
           columns={columns}
           dataSource={sortedItems}

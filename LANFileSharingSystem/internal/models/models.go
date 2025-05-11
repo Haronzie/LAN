@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"LANFileSharingSystem/internal/ws"
@@ -88,7 +89,7 @@ type FileRecord struct {
 	ContentType string                 `json:"content_type"`
 	Uploader    string                 `json:"uploader"`
 	Metadata    map[string]interface{} `json:"metadata"` // 👈 dynamic field
-	CreatedAt   time.Time `json:"created_at"`
+	CreatedAt   time.Time              `json:"created_at"`
 }
 
 // -------------------------------------
@@ -438,8 +439,8 @@ func (app *App) DeleteDirectoryRecord(name string) error {
 func (app *App) UpdateDirectoryRecord(oldName, newName string) error {
 	// 1. Rename the directory record itself
 	_, err := app.DB.Exec(`
-        UPDATE directories 
-        SET directory_name = $1, updated_at = CURRENT_TIMESTAMP 
+        UPDATE directories
+        SET directory_name = $1, updated_at = CURRENT_TIMESTAMP
         WHERE directory_name = $2
     `, newName, oldName)
 	if err != nil {
@@ -507,7 +508,6 @@ func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 	}
 	return results, nil
 }
-
 
 // DirectoryExists checks if a directory with the given name exists under the specified parent.
 func (app *App) DirectoryExists(name, parent string) (bool, error) {
@@ -790,11 +790,18 @@ func (app *App) DeleteFileVersions(fileID int) error {
 }
 func (app *App) GetFileRecordByPath(filePath string) (FileRecord, error) {
 	var fr FileRecord
+
+	// Normalize the path for case-insensitive comparison
+	normalizedPath := strings.ToLower(strings.TrimSpace(filePath))
+
+	// Log the search path for debugging
+	log.Printf("Searching for file with path: '%s' (normalized: '%s')", filePath, normalizedPath)
+
 	err := app.DB.QueryRow(`
         SELECT id, file_name, file_path, size, content_type, uploader
         FROM files
-        WHERE file_path = $1
-    `, filePath).Scan(
+        WHERE LOWER(file_path) = LOWER($1)
+    `, normalizedPath).Scan(
 		&fr.ID,
 		&fr.FileName,
 		&fr.FilePath,
@@ -802,6 +809,13 @@ func (app *App) GetFileRecordByPath(filePath string) (FileRecord, error) {
 		&fr.ContentType,
 		&fr.Uploader,
 	)
+
+	if err != nil {
+		log.Printf("Error finding file with path '%s': %v", normalizedPath, err)
+	} else {
+		log.Printf("Found file record: %+v", fr)
+	}
+
 	return fr, err
 }
 func (app *App) UpdateFileMetadata(fileID int, newSize int64, newContentType string) error {
@@ -849,13 +863,13 @@ func (app *App) DeleteFileVersionsInFolder(folderPath string) error {
 
 func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 	rows, err := app.DB.Query(`
-		SELECT 
-			id, 
+		SELECT
+			id,
 			user_username,
 			username_at_action,   -- <-- NEW
-			file_id, 
-			action, 
-			details, 
+			file_id,
+			action,
+			details,
 			created_at
 		FROM audit_logs
 		ORDER BY created_at DESC
@@ -959,7 +973,7 @@ func (app *App) ListAllFiles() ([]FileRecord, error) {
 
 // GetFileRecordByID retrieves a file record by its ID.
 func (app *App) GetFileRecordByID(fileID int) (FileRecord, error) {
-	query := "SELECT id, file_name, directory, file_path, size, content_type, uploader, FROM files WHERE id = $1"
+	query := "SELECT id, file_name, directory, file_path, size, content_type, uploader FROM files WHERE id = $1"
 	log.Printf("Executing query: %s with fileID: %d", query, fileID)
 	row := app.DB.QueryRow(query, fileID)
 
@@ -1020,8 +1034,8 @@ func (app *App) GetFirstAdmin() (User, error) {
 func (app *App) IsUserAdmin(username string) (bool, error) {
 	var role string
 	err := app.DB.QueryRow(`
-        SELECT role 
-        FROM users 
+        SELECT role
+        FROM users
         WHERE username = $1
     `, username).Scan(&role)
 	if err != nil {
@@ -1033,25 +1047,37 @@ func (app *App) IsUserAdmin(username string) (bool, error) {
 // RevokeAdmin sets a user's role to 'user'.
 func (app *App) RevokeAdmin(username string) error {
 	_, err := app.DB.Exec(`
-        UPDATE users 
-        SET role = 'user', updated_at = CURRENT_TIMESTAMP 
+        UPDATE users
+        SET role = 'user', updated_at = CURRENT_TIMESTAMP
         WHERE username = $1
     `, username)
 	return err
 }
 func (app *App) DeleteFileRecordByPath(filePath string) (int, error) {
 	var fileID int
-	err := app.DB.QueryRow("SELECT id FROM files WHERE file_path = $1", filePath).Scan(&fileID)
+
+	// Normalize the path for case-insensitive comparison
+	normalizedPath := strings.ToLower(strings.TrimSpace(filePath))
+
+	// Log the delete path for debugging
+	log.Printf("Attempting to delete file with path: '%s' (normalized: '%s')", filePath, normalizedPath)
+
+	err := app.DB.QueryRow("SELECT id FROM files WHERE LOWER(file_path) = LOWER($1)", normalizedPath).Scan(&fileID)
 	if err != nil {
 		log.Printf("Error retrieving file ID for path '%s': %v", filePath, err)
 		return 0, err
 	}
 
-	_, err = app.DB.Exec("DELETE FROM files WHERE file_path = $1", filePath)
+	log.Printf("Found file ID %d for path '%s', proceeding with deletion", fileID, filePath)
+
+	result, err := app.DB.Exec("DELETE FROM files WHERE id = $1", fileID)
 	if err != nil {
-		log.Printf("Error deleting file with path '%s': %v", filePath, err)
+		log.Printf("Error deleting file with ID %d: %v", fileID, err)
 		return 0, err
 	}
+
+	rowsAffected, _ := result.RowsAffected()
+	log.Printf("Deleted %d rows for file ID %d", rowsAffected, fileID)
 
 	return fileID, nil
 }

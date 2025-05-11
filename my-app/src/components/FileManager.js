@@ -30,9 +30,10 @@ import {
   SwapOutlined,
   ArrowLeftOutlined,
   FileOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom'; // Uncomment if navigation is needed
 import axios from 'axios';
 import path from 'path-browserify';
 import debounce from 'lodash.debounce';
@@ -127,6 +128,9 @@ const FileManager = () => {
   const [loading, setLoading] = useState(false);
   const [currentPath, setCurrentPath] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
@@ -147,9 +151,9 @@ const FileManager = () => {
   const [folderTreeData, setFolderTreeData] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState('');
   const [targetUsername, setTargetUsername] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState([]);
+  // const [selectedFiles, setSelectedFiles] = useState([]); // Uncomment if needed for future enhancements
 
-  const navigate = useNavigate();
+  // const navigate = useNavigate(); // Uncomment if navigation is needed
   const isRoot = currentPath === '';
 
   const generateSuggestedName = async (baseName, extension, destinationPath) => {
@@ -265,9 +269,15 @@ const FileManager = () => {
   }, [currentPath]);
 
   useEffect(() => {
-    const interval = setInterval(fetchItems, 10000);
+    // Refresh the file list every 10 seconds
+    const interval = setInterval(() => {
+      // Only auto-refresh if we're not in the middle of an operation
+      if (!moveModalVisible && !copyModalVisible && !renameModalVisible && !createFolderModal && !uploadModalVisible) {
+        fetchItems();
+      }
+    }, 10000);
     return () => clearInterval(interval);
-  }, [currentPath]);
+  }, [currentPath, moveModalVisible, copyModalVisible, renameModalVisible, createFolderModal, uploadModalVisible]);
 
   useEffect(() => {
     const updateSuggestedName = async () => {
@@ -283,13 +293,90 @@ const FileManager = () => {
     updateSuggestedName();
   }, [selectedDestination]);
 
-  // First filter items based on search term
-  const filteredItems = items.filter((item) =>
-    (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  // Perform global search across all subfolders
+  const performSearch = async (query) => {
+    if (!query.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      return;
+    }
+
+    setSearchLoading(true);
+    setIsSearching(true);
+
+    try {
+      // Get the main folder from the current path (if we're in a subfolder)
+      const mainFolder = currentPath.split('/')[0] || '';
+
+      // Build the search URL with the main folder parameter if we're in a specific folder
+      const searchUrl = mainFolder
+        ? `${BASE_URL}/search?q=${encodeURIComponent(query)}&main_folder=${encodeURIComponent(mainFolder)}`
+        : `${BASE_URL}/search?q=${encodeURIComponent(query)}`;
+
+      const response = await axios.get(searchUrl, { withCredentials: true });
+
+      // Format the search results
+      const formattedResults = (response.data || []).map(item => ({
+        ...item,
+        formattedSize: formatFileSize(item.size || 0),
+      }));
+
+      // Sort the results: directories first (in ascending order), then files (in ascending order)
+      const sortedResults = [...formattedResults].sort((a, b) => {
+        // If types are different (directory vs file)
+        if (a.type !== b.type) {
+          // Directories come before files
+          return a.type === 'directory' ? -1 : 1;
+        }
+        // If types are the same, sort alphabetically by name
+        return a.name.localeCompare(b.name);
+      });
+
+      setSearchResults(sortedResults);
+      console.log(`🔍 Search found ${sortedResults.length} results`);
+    } catch (error) {
+      console.error('Search error:', error);
+      message.error('Error performing search');
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Debounce the search to avoid too many requests
+  const debouncedSearch = useCallback(
+    debounce((query) => {
+      performSearch(query);
+    }, 500),
+    [currentPath]
   );
 
+  // Update search when search term changes
+  useEffect(() => {
+    if (searchTerm.trim()) {
+      debouncedSearch(searchTerm);
+    } else {
+      setIsSearching(false);
+      setSearchResults([]);
+    }
+  }, [searchTerm, debouncedSearch]);
+
+  // Navigate to the folder containing a search result
+  const navigateToFolder = (directory) => {
+    setSearchTerm('');
+    setIsSearching(false);
+    setCurrentPath(directory);
+  };
+
+  // If we're searching, use search results, otherwise show all items or filter by search term
+  const displayItems = isSearching
+    ? searchResults
+    : searchTerm.trim()
+      ? items.filter((item) => (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
+      : items;
+
   // Then sort: directories first (in ascending order), then files (in ascending order)
-  const sortedItems = [...filteredItems].sort((a, b) => {
+  const sortedItems = [...displayItems].sort((a, b) => {
     // If types are different (directory vs file)
     if (a.type !== b.type) {
       // Directories come before files
@@ -326,16 +413,17 @@ const FileManager = () => {
     setCurrentPath(newPath);
   };
 
-  const filteredTreeData = useMemo(() => {
-    const disableCurrent = (nodes) => {
-      return nodes.map((node) => ({
-        ...node,
-        disabled: node.value === currentPath,
-        children: node.children ? disableCurrent(node.children) : []
-      }));
-    };
-    return disableCurrent(folderTreeData);
-  }, [folderTreeData, currentPath]);
+  // This function is currently not used but might be useful for future enhancements
+  // const filteredTreeData = useMemo(() => {
+  //   const disableCurrent = (nodes) => {
+  //     return nodes.map((node) => ({
+  //       ...node,
+  //       disabled: node.value === currentPath,
+  //       children: node.children ? disableCurrent(node.children) : []
+  //     }));
+  //   };
+  //   return disableCurrent(folderTreeData);
+  // }, [folderTreeData, currentPath]);
 
   const handleGoUp = () => {
     if (isRoot) return;
@@ -358,11 +446,12 @@ const FileManager = () => {
     setUploadModalVisible(true);
   };
 
-  const handleRemoveFile = (index) => {
-    const updatedFiles = [...selectedFiles];
-    updatedFiles.splice(index, 1);
-    setSelectedFiles(updatedFiles);
-  };
+  // This function is currently not used but might be needed for future enhancements
+  // const handleRemoveFile = (index) => {
+  //   const updatedFiles = [...selectedFiles];
+  //   updatedFiles.splice(index, 1);
+  //   setSelectedFiles(updatedFiles);
+  // };
 
   const handleUpload = async () => {
     if (!uploadingFile || uploadingFile.length === 0) {
@@ -477,43 +566,42 @@ const FileManager = () => {
     fetchItems();
   };
 
+  // This function is currently not used but might be needed for future enhancements
+  // const uploadFile = async (formData, isOverwrite) => {
+  //   try {
+  //     const res = await axios.post(`${BASE_URL}/upload`, formData, {
+  //       withCredentials: true,
+  //       headers: { 'Content-Type': 'multipart/form-data' }
+  //     });
 
+  //     const { message: uploadMsg, file_id } = res.data;
 
-  const uploadFile = async (formData, isOverwrite) => {
-    try {
-      const res = await axios.post(`${BASE_URL}/upload`, formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+  //     if (fileUploadMessage.trim() && targetUsername.trim()) {
+  //       try {
+  //         await axios.post(`${BASE_URL}/file/message`, {
+  //           file_id,
+  //           receiver: targetUsername.trim(),
+  //           message: fileUploadMessage.trim()
+  //         }, { withCredentials: true });
 
-      const { message: uploadMsg, file_id } = res.data;
+  //         message.success(`Message sent to ${targetUsername}`);
+  //       } catch (msgErr) {
+  //         console.error('Message upload failed:', msgErr);
+  //         message.error('Failed to send message to user');
+  //       }
+  //     }
 
-      if (fileUploadMessage.trim() && targetUsername.trim()) {
-        try {
-          await axios.post(`${BASE_URL}/file/message`, {
-            file_id,
-            receiver: targetUsername.trim(),
-            message: fileUploadMessage.trim()
-          }, { withCredentials: true });
-
-          message.success(`Message sent to ${targetUsername}`);
-        } catch (msgErr) {
-          console.error('Message upload failed:', msgErr);
-          message.error('Failed to send message to user');
-        }
-      }
-
-      message.success(uploadMsg || 'File uploaded');
-      setUploadModalVisible(false);
-      setUploadingFile(null);
-      setFileUploadMessage('');
-      setTargetUsername('');
-      fetchItems();
-    } catch (error) {
-      console.error('Upload failed:', error);
-      message.error(error.response?.data?.error || 'Upload error');
-    }
-  };
+  //     message.success(uploadMsg || 'File uploaded');
+  //     setUploadModalVisible(false);
+  //     setUploadingFile(null);
+  //     setFileUploadMessage('');
+  //     setTargetUsername('');
+  //     fetchItems();
+  //   } catch (error) {
+  //     console.error('Upload failed:', error);
+  //     message.error(error.response?.data?.error || 'Upload error');
+  //   }
+  // };
 
   const handleDelete = async (record) => {
     try {
@@ -664,13 +752,14 @@ const FileManager = () => {
         { withCredentials: true }
       );
 
-      // Filter to only include directories
+      // Filter to only include directories and sort them alphabetically
       const folders = (res.data || [])
         .filter(item => item.type === 'directory')
         .map(folder => ({
           name: folder.name,
           path: `${mainFolder}/${folder.name}`
-        }));
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
 
       setSubFolders(folders);
     } catch (error) {
@@ -703,7 +792,27 @@ const FileManager = () => {
     }
   };
 
-  const handleMove = (record) => {
+  const handleMove = async (record) => {
+    // For files, verify the file still exists before showing the move modal
+    if (record.type === 'file') {
+      try {
+        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
+        const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+        const fileExists = (checkRes.data || []).some(f =>
+          f.name === record.name && (f.directory === currentPath || f.directory === undefined)
+        );
+
+        if (!fileExists) {
+          message.error('This file no longer exists. Please refresh the page.');
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking file existence:', err);
+        // Continue anyway, the finalizeMove function will do another check
+      }
+    }
+
     setMoveItem(record);
     setMoveDestination('');
     setSelectedMainFolder('');
@@ -823,6 +932,24 @@ const FileManager = () => {
           { withCredentials: true }
         );
       } else {
+        // First, verify the file exists by trying to get its metadata
+        try {
+          const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
+          const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+          const fileExists = (checkRes.data || []).some(f =>
+            f.name === moveItem.name && f.directory === currentPath
+          );
+
+          if (!fileExists) {
+            throw new Error("Source file not found. It may have been deleted or moved.");
+          }
+        } catch (checkErr) {
+          console.error('File existence check failed:', checkErr);
+          message.error('Could not verify file existence. Please refresh and try again.');
+          setMoveModalVisible(false);
+          return;
+        }
 
         console.log('Moving file with:', {
           id: moveItem.id,
@@ -855,93 +982,163 @@ const FileManager = () => {
       fetchFolderTree();
     } catch (err) {
       console.error('Move error:', err);
-      message.error(err.response?.data?.error || 'Error moving item');
+
+      // Handle specific error cases
+      if (err.response?.data?.error === "Source file does not exist on disk") {
+        message.error('The file no longer exists on the server. Please refresh the page.');
+      } else {
+        message.error(err.response?.data?.error || 'Error moving item');
+      }
+
+      setMoveModalVisible(false);
     }
   };
 
 
-  const columns = [
-    {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
+  const columns = useMemo(() => {
+    // Base columns that are always shown
+    const baseColumns = [
+      {
+        title: 'Name',
+        dataIndex: 'name',
+        key: 'name',
+        render: (name, record) => {
+          if (record.type === 'directory') {
+            return (
+              <Space>
+                <FolderOpenOutlined />
+                <a onClick={() => handleFolderClick(record.name)}>{name}</a>
+              </Space>
+            );
+          }
+          return name;
+        }
+      },
+      {
+        title: 'Type',
+        dataIndex: 'type',
+        key: 'type',
+        render: (type) => (type === 'directory' ? 'Folder' : 'File')
+      },
+      {
+        title: 'Size',
+        dataIndex: 'formattedSize',
+        key: 'size',
+        render: (size, record) => (record.type === 'directory' ? '--' : size)
+      }
+    ];
 
-      // Removed sorting from column as we're handling it in sortedItems
-
-      render: (name, record) => {
-        if (record.type === 'directory') {
+    // If we're showing search results, add a Location column
+    if (isSearching) {
+      baseColumns.splice(1, 0, {
+        title: 'Location',
+        key: 'location',
+        render: (_, record) => {
+          const directory = record.directory || '';
           return (
             <Space>
-              <FolderOpenOutlined />
-              <a onClick={() => handleFolderClick(record.name)}>{name}</a>
+              <span>{directory}</span>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => navigateToFolder(directory)}
+                icon={<ArrowLeftOutlined />}
+              >
+                Go to folder
+              </Button>
             </Space>
           );
         }
-        return name;
-      }
-    },
-    {
-      title: 'Type',
-      dataIndex: 'type',
-      key: 'type',
-      render: (type) => (type === 'directory' ? 'Folder' : 'File')
-    },
-    {
-      title: 'Size',
-      dataIndex: 'formattedSize',
-      key: 'size',
-      render: (size, record) => (record.type === 'directory' ? '--' : size)
-    },
-    {
+      });
+    }
+
+    // Add the Actions column
+    baseColumns.push({
       title: 'Actions',
       key: 'actions',
       render: (record) => {
+        // For search results, we need to adjust some actions
+        const isSearchResult = isSearching;
+
         return (
           <Space>
             {record.type === 'file' && (
               <Tooltip title="View File">
-                <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
+                <Button
+                  icon={<FileOutlined />}
+                  onClick={() => {
+                    if (isSearchResult) {
+                      // For search results, we need to use the directory from the result
+                      const encodedDir = encodeURIComponent(record.directory || '');
+                      const encodedFile = encodeURIComponent(record.name.trim());
+                      const previewUrl = `${BASE_URL}/preview?directory=${encodedDir}&filename=${encodedFile}`;
+                      window.open(previewUrl, '_blank');
+                    } else {
+                      handleViewFile(record);
+                    }
+                  }}
+                />
               </Tooltip>
             )}
 
             {record.type === 'file' && (
               <Tooltip title="Download">
-                <Button icon={<DownloadOutlined />} onClick={() => handleDownload(record.name)} />
+                <Button
+                  icon={<DownloadOutlined />}
+                  onClick={() => {
+                    if (isSearchResult) {
+                      // For search results, we need to use the directory from the result
+                      const encodedDir = encodeURIComponent(record.directory || '');
+                      const encodedFile = encodeURIComponent(record.name.trim());
+                      const downloadUrl = `${BASE_URL}/download?directory=${encodedDir}&filename=${encodedFile}`;
+                      window.open(downloadUrl, '_blank');
+                    } else {
+                      handleDownload(record.name);
+                    }
+                  }}
+                />
               </Tooltip>
             )}
+
             {record.type === 'directory' && (
               <Tooltip title="Download Folder">
                 <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
               </Tooltip>
             )}
 
-            <Tooltip title="Rename">
-              <Button
-                icon={<EditOutlined />}
-                onClick={() => {
-                  setSelectedItem(record);
-                  setRenameNewName(record.name);
-                  setRenameModalVisible(true);
-                }}
-              />
-            </Tooltip>
+            {!isSearchResult && (
+              <>
+                <Tooltip title="Rename">
+                  <Button
+                    icon={<EditOutlined />}
+                    onClick={() => {
+                      setSelectedItem(record);
+                      setRenameNewName(record.name);
+                      setRenameModalVisible(true);
+                    }}
+                  />
+                </Tooltip>
 
-            <Tooltip title="Copy">
-              <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
-            </Tooltip>
+                <Tooltip title="Copy">
+                  <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
+                </Tooltip>
 
-            <Tooltip title="Move">
-              <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
-            </Tooltip>
+                <Tooltip title="Move">
+                  <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
+                </Tooltip>
 
-            <Tooltip title="Delete">
-              <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
-            </Tooltip>
+                <Tooltip title="Delete">
+                  <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+                </Tooltip>
+              </>
+            )}
           </Space>
         );
       }
-    }
-  ];
+    });
+
+    return baseColumns;
+  }, [isSearching, currentPath]);
 
   const segments = getPathSegments(currentPath);
   const breadcrumbItems = [
@@ -980,27 +1177,81 @@ const FileManager = () => {
         )}
 
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          {!isRoot && (
+          {!isRoot && !isSearching && (
             <Col>
               <Button icon={<ArrowUpOutlined />} onClick={handleGoUp}>
                 Go Up
               </Button>
             </Col>
           )}
+          {isSearching && (
+            <Col>
+              <Button
+                icon={<ArrowLeftOutlined />}
+                onClick={() => {
+                  setSearchTerm('');
+                  setIsSearching(false);
+                }}
+              >
+                Back to Browsing
+              </Button>
+            </Col>
+          )}
           <Col>
-            <Button icon={<FolderAddOutlined />} onClick={() => setCreateFolderModal(true)}>
+            <Button
+              icon={<FolderAddOutlined />}
+              onClick={() => setCreateFolderModal(true)}
+              disabled={isSearching}
+            >
               Create Folder
             </Button>
           </Col>
           <Col>
-            <Input
-              placeholder="Search..."
+            <Tooltip title="Refresh Files">
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  setLoading(true);
+                  fetchItems();
+                  message.success('File list refreshed');
+                }}
+                loading={loading}
+              />
+            </Tooltip>
+          </Col>
+          <Col style={{ width: '50%' }}>
+            <Input.Search
+              placeholder={isSearching
+                ? "Search files..."
+                : currentPath
+                  ? `Search in ${currentPath}...`
+                  : "Search files..."}
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSearchTerm(value);
+                // If search is cleared, immediately reset search state
+                if (!value.trim()) {
+                  setIsSearching(false);
+                  setSearchResults([]);
+                }
+              }}
+              onSearch={(value) => {
+                if (value.trim()) {
+                  performSearch(value);
+                } else {
+                  setIsSearching(false);
+                  setSearchResults([]);
+                }
+              }}
+              loading={searchLoading}
               allowClear
+              enterButton
             />
           </Col>
         </Row>
+
+
 
         <Table
           columns={columns}

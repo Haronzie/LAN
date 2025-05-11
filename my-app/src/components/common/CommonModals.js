@@ -61,7 +61,7 @@ const CommonModals = ({
       {/* Create Folder Modal */}
       <Modal
         title="Create New Folder"
-        visible={createFolderModal}
+        open={createFolderModal}
         onOk={handleCreateFolder}
         onCancel={() => setCreateFolderModal(false)}
         okText="Create"
@@ -80,7 +80,7 @@ const CommonModals = ({
       {/* Rename Modal */}
       <Modal
         title="Rename Item"
-        visible={renameModalVisible}
+        open={renameModalVisible}
         onOk={handleRenameConfirm}
         onCancel={() => setRenameModalVisible(false)}
         okText="Rename"
@@ -99,7 +99,7 @@ const CommonModals = ({
       {/* Copy Modal */}
       <Modal
         title="Copy Item"
-        visible={copyModalVisible}
+        open={copyModalVisible}
         onOk={handleCopyConfirm}
         onCancel={() => setCopyModalVisible(false)}
         okText="Copy"
@@ -138,7 +138,7 @@ const CommonModals = ({
       {/* Move Modal */}
       <Modal
         title="Move Item"
-        visible={moveModalVisible}
+        open={moveModalVisible}
         onOk={handleMoveConfirm}
         onCancel={() => setMoveModalVisible(false)}
         okText="Move"
@@ -152,9 +152,12 @@ const CommonModals = ({
               onChange={handleMainFolderChange}
               allowClear
             >
-              <Option value="Operation">Operation</Option>
-              <Option value="Research">Research</Option>
-              <Option value="Training">Training</Option>
+              {/* Sort main folders alphabetically */}
+              {['Operation', 'Research', 'Training'].sort().map(folder => (
+                <Option key={folder} value={folder}>
+                  {folder}
+                </Option>
+              ))}
             </Select>
           </Form.Item>
 
@@ -167,11 +170,14 @@ const CommonModals = ({
                 onChange={handleSubFolderChange}
                 allowClear
               >
-                {subFolders.map(folder => (
-                  <Option key={folder.path} value={folder.name}>
-                    {folder.name}
-                  </Option>
-                ))}
+                {/* Sort subfolders alphabetically */}
+                {subFolders
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(folder => (
+                    <Option key={folder.path} value={folder.name}>
+                      {folder.name}
+                    </Option>
+                  ))}
               </Select>
             </Form.Item>
           )}
@@ -181,7 +187,7 @@ const CommonModals = ({
       {/* Upload Modal */}
       <Modal
         title="Upload Files"
-        visible={uploadModalVisible}
+        open={uploadModalVisible}
         onOk={handleModalUpload}
         onCancel={() => {
           setUploadModalVisible(false);

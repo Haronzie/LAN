@@ -245,13 +245,22 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
           { withCredentials: true }
         );
       } else {
+        console.log('Moving file with:', {
+          id: moveItem.id.toString(),
+          filename: moveItem.name,
+          old_parent: currentPath,
+          new_parent: moveDestination,
+          overwrite: false
+        });
+
         await axios.post(
-          '/file/move',
+          '/move-file',
           {
+            id: moveItem.id.toString(),
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
-            container
+            overwrite: false
           },
           { withCredentials: true }
         );

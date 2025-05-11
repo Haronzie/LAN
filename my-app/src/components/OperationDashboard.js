@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Layout,
   Table,
@@ -17,7 +17,8 @@ import {
   Checkbox,
   TreeSelect,
   Badge,
-  Spin
+  Spin,
+
 } from 'antd';
 import {
   Upload,
@@ -27,17 +28,20 @@ import {
   FolderOpenOutlined,
   FolderAddOutlined,
   ArrowUpOutlined,
+  ArrowLeftOutlined,
   EditOutlined,
   CopyOutlined,
   SwapOutlined,
   FileOutlined,
   FileTextOutlined,
-  FolderOutlined
+  FolderOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import path from 'path-browserify';
+import debounce from 'lodash.debounce';
 import { MoreOutlined } from '@ant-design/icons';
 import CommonModals from './common/CommonModals';
 
@@ -56,6 +60,9 @@ const OperationDashboard = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [renameModalVisible, setRenameModalVisible] = useState(false);
@@ -252,13 +259,97 @@ const OperationDashboard = () => {
     fetchItems();
   }, [currentPath]);
 
-  // First filter items based on search term
-  const filteredItems = items.filter(item =>
-    (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  // Auto-refresh items periodically, but only when no modals are open
+  useEffect(() => {
+    // Refresh the file list every 10 seconds
+    const interval = setInterval(() => {
+      // Only auto-refresh if we're not in the middle of an operation
+      if (!moveModalVisible && !copyModalVisible && !renameModalVisible && !createFolderModal && !uploadModalVisible && !infoModalVisible) {
+        fetchItems();
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [currentPath, moveModalVisible, copyModalVisible, renameModalVisible, createFolderModal, uploadModalVisible, infoModalVisible]);
+
+  // Perform global search across all subfolders
+  const performSearch = async (query) => {
+    if (!query.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      return;
+    }
+
+    setSearchLoading(true);
+    setIsSearching(true);
+
+    try {
+      // Build the search URL with the main folder parameter for Operation
+      const searchUrl = `/search?q=${encodeURIComponent(query)}&main_folder=Operation`;
+
+      const response = await axios.get(searchUrl, { withCredentials: true });
+
+      // Format the search results
+      const formattedResults = (response.data || []).map(item => ({
+        ...item,
+        formattedSize: formatFileSize(item.size || 0),
+      }));
+
+      // Sort the results: directories first (in ascending order), then files (in ascending order)
+      const sortedResults = [...formattedResults].sort((a, b) => {
+        // If types are different (directory vs file)
+        if (a.type !== b.type) {
+          // Directories come before files
+          return a.type === 'directory' ? -1 : 1;
+        }
+        // If types are the same, sort alphabetically by name
+        return a.name.localeCompare(b.name);
+      });
+
+      setSearchResults(sortedResults);
+      console.log(`🔍 Search found ${sortedResults.length} results`);
+    } catch (error) {
+      console.error('Search error:', error);
+      message.error('Error performing search');
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Debounce the search to avoid too many requests
+  const debouncedSearch = useCallback(
+    debounce((query) => {
+      performSearch(query);
+    }, 500),
+    [currentPath]
   );
 
+  // Update search when search term changes
+  useEffect(() => {
+    if (searchTerm.trim()) {
+      debouncedSearch(searchTerm);
+    } else {
+      setIsSearching(false);
+      setSearchResults([]);
+    }
+  }, [searchTerm, debouncedSearch]);
+
+  // Navigate to the folder containing a search result
+  const navigateToFolder = (directory) => {
+    setSearchTerm('');
+    setIsSearching(false);
+    setCurrentPath(directory);
+  };
+
+  // If we're searching, use search results, otherwise show all items or filter by search term
+  const displayItems = isSearching
+    ? searchResults
+    : searchTerm.trim()
+      ? items.filter((item) => (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
+      : items;
+
   // Then sort: directories first (in ascending order), then files (in ascending order)
-  const sortedItems = [...filteredItems].sort((a, b) => {
+  const sortedItems = [...displayItems].sort((a, b) => {
     // If types are different (directory vs file)
     if (a.type !== b.type) {
       // Directories come before files
@@ -412,8 +503,8 @@ const OperationDashboard = () => {
     }
   };
 
-  const handleDownload = (fileName) => {
-    const downloadUrl = `/download?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(fileName)}`;
+  const handleDownload = (fileName, directory) => {
+    const downloadUrl = `/download?directory=${encodeURIComponent(directory || currentPath)}&filename=${encodeURIComponent(fileName)}`;
     window.open(downloadUrl, '_blank');
   };
 
@@ -424,8 +515,16 @@ const OperationDashboard = () => {
   };
 
   const handleViewFile = (file) => {
-    const previewUrl = `/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
-    window.open(previewUrl, '_blank');
+    if (isSearching) {
+      // For search results, we need to use the directory from the result
+      const encodedDir = encodeURIComponent(file.directory || '');
+      const encodedFile = encodeURIComponent(file.name.trim());
+      const previewUrl = `/preview?directory=${encodedDir}&filename=${encodedFile}`;
+      window.open(previewUrl, '_blank');
+    } else {
+      const previewUrl = `/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
+      window.open(previewUrl, '_blank');
+    }
   };
 
   const handleRename = (record) => {
@@ -563,13 +662,14 @@ const OperationDashboard = () => {
         { withCredentials: true }
       );
 
-      // Filter to only include directories
+      // Filter to only include directories and sort them alphabetically
       const folders = (res.data || [])
         .filter(item => item.type === 'directory')
         .map(folder => ({
           name: folder.name,
           path: `${mainFolder}/${folder.name}`
-        }));
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
 
       setSubFolders(folders);
     } catch (error) {
@@ -602,7 +702,7 @@ const OperationDashboard = () => {
     }
   };
 
-  const handleMove = (record) => {
+  const handleMove = async (record) => {
     const isOwner = record.type === 'directory'
       ? record.created_by === currentUser
       : record.uploader === currentUser;
@@ -610,6 +710,27 @@ const OperationDashboard = () => {
       message.error('Only the owner can move this item.');
       return;
     }
+
+    // For files, verify the file still exists before showing the move modal
+    if (record.type === 'file') {
+      try {
+        const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+        const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+        const fileExists = (checkRes.data || []).some(f =>
+          f.name === record.name && (f.directory === currentPath || f.directory === undefined)
+        );
+
+        if (!fileExists) {
+          message.error('This file no longer exists. Please refresh the page.');
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking file existence:', err);
+        // Continue anyway, the handleMoveConfirm function will do another check
+      }
+    }
+
     setMoveItem(record);
     setMoveDestination('');
     setSelectedMainFolder('');
@@ -627,7 +748,29 @@ const OperationDashboard = () => {
       message.error('No item selected to move');
       return;
     }
+
     try {
+      if (moveItem.type === 'file') {
+        // First, verify the file exists by trying to get its metadata
+        try {
+          const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+          const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+          const fileExists = (checkRes.data || []).some(f =>
+            f.name === moveItem.name && (f.directory === currentPath || f.directory === undefined)
+          );
+
+          if (!fileExists) {
+            throw new Error("Source file not found. It may have been deleted or moved.");
+          }
+        } catch (checkErr) {
+          console.error('File existence check failed:', checkErr);
+          message.error('Could not verify file existence. Please refresh and try again.');
+          setMoveModalVisible(false);
+          return;
+        }
+      }
+
       if (moveItem.type === 'directory') {
         await axios.post(
           '/directory/move',
@@ -640,13 +783,22 @@ const OperationDashboard = () => {
           { withCredentials: true }
         );
       } else {
+        console.log('Moving file with:', {
+          id: moveItem.id.toString(),
+          filename: moveItem.name,
+          old_parent: currentPath,
+          new_parent: moveDestination,
+          overwrite: false
+        });
+
         await axios.post(
-          '/file/move',
+          '/move-file',
           {
+            id: moveItem.id.toString(),
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
-            container: 'operation',
+            overwrite: false
           },
           { withCredentials: true }
         );
@@ -659,7 +811,15 @@ const OperationDashboard = () => {
       fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Move error:', error);
-      message.error(error.response?.data?.error || 'Error moving item');
+
+      // Handle specific error cases
+      if (error.response?.data?.error === "Source file does not exist on disk") {
+        message.error('The file no longer exists on the server. Please refresh the page.');
+      } else {
+        message.error(error.response?.data?.error || 'Error moving item');
+      }
+
+      setMoveModalVisible(false);
     }
   };
 
@@ -682,6 +842,27 @@ const OperationDashboard = () => {
         </Space>
       ),
     },
+    // If we're showing search results, add a Location column
+    ...(isSearching ? [{
+      title: 'Location',
+      key: 'location',
+      render: (_, record) => {
+        const directory = record.directory || '';
+        return (
+          <Space>
+            <span>{directory}</span>
+            <Button
+              type="link"
+              size="small"
+              onClick={() => navigateToFolder(directory)}
+              icon={<ArrowLeftOutlined />}
+            >
+              Go to folder
+            </Button>
+          </Space>
+        );
+      }
+    }] : []),
     {
       title: 'Type',
       dataIndex: 'type',
@@ -712,7 +893,9 @@ const OperationDashboard = () => {
             <Tooltip title={record.type === 'directory' ? 'Download Folder' : 'Download File'}>
               <Button icon={<DownloadOutlined />} onClick={() => record.type === 'directory'
                 ? handleDownloadFolder(record.name)
-                : handleDownload(record.name)}
+                : isSearching
+                  ? handleDownload(record.name, record.directory)
+                  : handleDownload(record.name)}
               />
             </Tooltip>
             {isOwner && (
@@ -865,16 +1048,55 @@ const OperationDashboard = () => {
             </Button>
           </Col>
           <Col>
-            <Input
-              placeholder="Search..."
+            <Tooltip title="Refresh Files">
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  setLoading(true);
+                  fetchItems();
+                  message.success('File list refreshed');
+                }}
+                loading={loading}
+              />
+            </Tooltip>
+          </Col>
+          <Col style={{ width: '50%' }}>
+            <Input.Search
+              placeholder={isSearching
+                ? "Search in Operation..."
+                : currentPath
+                  ? `Search in ${currentPath}...`
+                  : "Search in Operation..."}
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSearchTerm(value);
+                // If search is cleared, immediately reset search state
+                if (!value.trim()) {
+                  setIsSearching(false);
+                  setSearchResults([]);
+                }
+              }}
+              onSearch={(value) => {
+                if (value.trim()) {
+                  performSearch(value);
+                } else {
+                  setIsSearching(false);
+                  setSearchResults([]);
+                }
+              }}
+              loading={searchLoading}
               allowClear
+              enterButton
             />
           </Col>
         </Row>
 
-        <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
+
+
+        {!isSearching && (
+          <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
+        )}
 
         <Table
           columns={columns}
@@ -932,7 +1154,7 @@ const OperationDashboard = () => {
           selectedDestination={selectedDestination}
           setSelectedDestination={setSelectedDestination}
           handleCopyConfirm={handleCopyConfirm}
-          directoryItems={filteredItems}
+          directoryItems={displayItems}
           currentPath={currentPath}
 
           // Move Modal props

@@ -370,11 +370,41 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	relativePath := filepath.Join(req.Directory, req.Filename)
+	// Normalize the path components
+	cleanDir := strings.ToLower(strings.Trim(filepath.Clean(req.Directory), `/\`))
+	cleanName := strings.Trim(filepath.Clean(req.Filename), `/\`)
+	relativePath := filepath.Join(cleanDir, cleanName)
+
+	log.Printf("🗑 Attempting to delete file: '%s' from directory: '%s' (path: '%s')",
+		req.Filename, req.Directory, relativePath)
 
 	fr, err := fc.App.GetFileRecordByPath(relativePath)
 	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "File not found in database")
+		log.Printf("❌ Error finding file record for path '%s': %v", relativePath, err)
+
+		// Try to find by filename as a fallback
+		rows, queryErr := fc.App.DB.Query("SELECT id, file_name, file_path FROM files WHERE file_name = $1", cleanName)
+		if queryErr == nil {
+			defer rows.Close()
+
+			var possibleFiles []string
+			for rows.Next() {
+				var id int
+				var name, path string
+				if scanErr := rows.Scan(&id, &name, &path); scanErr == nil {
+					possibleFiles = append(possibleFiles, fmt.Sprintf("ID: %d, Name: %s, Path: %s", id, name, path))
+				}
+			}
+
+			if len(possibleFiles) > 0 {
+				errorMsg := fmt.Sprintf("File not found at path '%s'. Similar files found: %s",
+					relativePath, strings.Join(possibleFiles, "; "))
+				models.RespondError(w, http.StatusNotFound, errorMsg)
+				return
+			}
+		}
+
+		models.RespondError(w, http.StatusNotFound, fmt.Sprintf("File '%s' not found in database", req.Filename))
 		return
 	}
 
@@ -382,13 +412,18 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	fc.App.LogAudit(user.Username, fr.ID, "DELETE", fmt.Sprintf("File '%s' deleted", fr.FileName))
 
 	fullPath := filepath.Join("Cdrrmo", fr.FilePath)
+	log.Printf("🗑 Deleting file from disk: '%s'", fullPath)
+
 	if removeErr := os.Remove(fullPath); removeErr != nil && !os.IsNotExist(removeErr) {
+		log.Printf("❌ Error removing file from disk: %v", removeErr)
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file from local storage")
 		return
 	}
 
-	fileID, err := fc.App.DeleteFileRecordByPath(relativePath)
+	log.Printf("🗑 Deleting file record from database: '%s'", fr.FilePath)
+	fileID, err := fc.App.DeleteFileRecordByPath(fr.FilePath) // Use the path from the found record
 	if err != nil {
+		log.Printf("❌ Error deleting file record: %v", err)
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file record from database")
 		return
 	}
@@ -397,9 +432,9 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Warning: could not delete file versions for ID %d: %v\n", fileID, delVerErr)
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file '%s'.", user.Username, relativePath))
+	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file '%s'.", user.Username, fr.FileName))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("File '%s' deleted successfully", relativePath),
+		"message": fmt.Sprintf("File '%s' deleted successfully", fr.FileName),
 	})
 }
 
@@ -1391,36 +1426,51 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusBadRequest, "Search query is required")
 		return
 	}
-	dir := strings.TrimSpace(r.URL.Query().Get("dir"))
+
+	// Get the main folder to search in (if specified)
+	mainFolder := strings.TrimSpace(r.URL.Query().Get("main_folder"))
+
 	// Build SQL filter
 	pattern := "%" + q + "%"
 	var rows *sql.Rows
 	var err error
 
-	if dir != "" {
-		// restrict to a directory
+	if mainFolder != "" {
+		// Search in a specific main folder and all its subfolders
+		log.Printf("🔍 Searching for '%s' in main folder '%s' and all its subfolders", q, mainFolder)
+
+		// Use LIKE pattern to match the main folder and any subfolder
+		folderPattern := mainFolder + "%"
+
 		rows, err = fc.App.DB.Query(
 			`SELECT id, file_name, directory, content_type, size, file_path
              FROM files
-             WHERE directory ILIKE $1 AND (
-                   LOWER(file_name) LIKE $2 OR
-                   LOWER(file_path) LIKE $2
+             WHERE (
+                 -- Match the directory exactly or any subdirectory
+                 directory = $1 OR
+                 directory LIKE $2 OR
+                 file_path LIKE $2
+             ) AND (
+                 -- Match the search term in filename or path
+                 LOWER(file_name) LIKE $3 OR
+                 LOWER(file_path) LIKE $3
              )
-             ORDER BY file_name`,
-			dir, pattern,
+             ORDER BY directory, file_name`,
+			mainFolder, folderPattern, pattern,
 		)
 	} else {
-		// search everywhere
+		// Search everywhere
+		log.Printf("🔍 Searching for '%s' across all folders", q)
 		rows, err = fc.App.DB.Query(
 			`SELECT id, file_name, directory, content_type, size, file_path
              FROM files
              WHERE LOWER(file_name) LIKE $1 OR
-                   LOWER(directory) LIKE $1 OR
                    LOWER(file_path) LIKE $1
              ORDER BY directory, file_name`,
 			pattern,
 		)
 	}
+
 	if err != nil {
 		log.Printf("❌ Search query failed: %v", err)
 		models.RespondError(w, http.StatusInternalServerError, "Search failed")
@@ -1439,15 +1489,29 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&id, &name, &d, &ct, &size, &path); err != nil {
 			continue
 		}
+
+		// Extract parent folder for better organization in results
+		parentFolder := d
+		if parentFolder == "" && path != "" {
+			// If directory is empty but we have a path, extract the directory from the path
+			parentFolder = filepath.Dir(path)
+			if parentFolder == "." {
+				parentFolder = ""
+			}
+		}
+
 		results = append(results, map[string]interface{}{
-			"id":          id,
-			"name":        name,
-			"directory":   d,
-			"contentType": ct,
-			"size":        size,
-			"path":        path,
+			"id":           id,
+			"name":         name,
+			"directory":    d,
+			"parentFolder": parentFolder,
+			"contentType":  ct,
+			"size":         size,
+			"path":         path,
+			"type":         "file", // Add type to distinguish from directories in frontend
 		})
 	}
 
+	log.Printf("🔍 Search found %d results", len(results))
 	models.RespondJSON(w, http.StatusOK, results)
 }
