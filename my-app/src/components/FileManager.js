@@ -31,12 +31,16 @@ import {
   ArrowLeftOutlined,
   FileOutlined,
   ExclamationCircleOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  MoreOutlined
 } from '@ant-design/icons';
 // import { useNavigate } from 'react-router-dom'; // Uncomment if navigation is needed
 import axios from 'axios';
 import path from 'path-browserify';
 import debounce from 'lodash.debounce';
+import BatchActionsMenu from './common/BatchActionsMenu';
+import SelectionHeader from './common/SelectionHeader';
+import { batchDelete, batchDownload } from '../utils/batchOperations';
 import CommonModals from './common/CommonModals';
 
 const { Content } = Layout;
@@ -135,6 +139,9 @@ const FileManager = () => {
   const [newFolderName, setNewFolderName] = useState('');
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFile, setUploadingFile] = useState([]);
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
   const [fileUploadMessage, setFileUploadMessage] = useState('');
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -151,10 +158,17 @@ const FileManager = () => {
   const [folderTreeData, setFolderTreeData] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState('');
   const [targetUsername, setTargetUsername] = useState('');
+  const [selectedFileInfo, setSelectedFileInfo] = useState(null);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
   // const [selectedFiles, setSelectedFiles] = useState([]); // Uncomment if needed for future enhancements
 
   // const navigate = useNavigate(); // Uncomment if navigation is needed
   const isRoot = currentPath === '';
+  // Check if we're inside a subfolder (not just at the root level or main folder level)
+  const isInsideMainFolder = currentPath.includes('/');
+
+  // Get the main folder from the current path (if we're in a folder)
+  const mainFolder = currentPath.split('/')[0] || '';
 
   const generateSuggestedName = async (baseName, extension, destinationPath) => {
     try {
@@ -305,8 +319,7 @@ const FileManager = () => {
     setIsSearching(true);
 
     try {
-      // Get the main folder from the current path (if we're in a subfolder)
-      const mainFolder = currentPath.split('/')[0] || '';
+      // Use the mainFolder variable we defined earlier
 
       // Build the search URL with the main folder parameter if we're in a specific folder
       const searchUrl = mainFolder
@@ -534,7 +547,7 @@ const FileManager = () => {
       const formData = new FormData();
       uploadingFile.forEach((file) => formData.append('files', file));
       formData.append('directory', normalizedPath.to); // ✅ updated
-      formData.append('container', normalizedPath.split('/')[0] || 'operation'); // ✅ updated
+      formData.append('container', mainFolder || 'operation'); // ✅ updated using mainFolder variable
       formData.append('overwrite', 'false');
       formData.append('skip', 'false');
       if (fileUploadMessage.trim() && targetUsername.trim()) {
@@ -994,6 +1007,70 @@ const FileManager = () => {
     }
   };
 
+  // Batch operations handlers
+  const handleBatchDelete = () => {
+    if (selectedRows.length === 0) return;
+
+    Modal.confirm({
+      title: 'Delete Multiple Items',
+      content: `Are you sure you want to delete ${selectedRows.length} selected item(s)?`,
+      okText: 'Yes',
+      okType: 'danger',
+      cancelText: 'No',
+      onOk: async () => {
+        await batchDelete(selectedRows, currentPath, null, () => {
+          fetchItems();
+          fetchFolderTree();
+          setSelectedRowKeys([]);
+          setSelectedRows([]);
+        });
+      }
+    });
+  };
+
+  const handleBatchDownload = () => {
+    if (selectedRows.length === 0) return;
+    batchDownload(selectedRows, currentPath, BASE_URL);
+  };
+
+  const handleBatchCopy = () => {
+    if (selectedRows.length === 0) return;
+    message.info('Multiple copy functionality coming soon');
+    // Future implementation for batch copy
+  };
+
+  const handleBatchMove = () => {
+    if (selectedRows.length === 0) return;
+    message.info('Multiple move functionality coming soon');
+    // Future implementation for batch move
+  };
+
+  // Toggle selection mode
+  const handleToggleSelectionMode = () => {
+    // Only allow selection mode when not at root level
+    if (!isRoot) {
+      setSelectionMode(true);
+    } else {
+      message.info('Please navigate to a folder before selecting items.');
+    }
+  };
+
+  // Cancel selection mode
+  const handleCancelSelection = () => {
+    setSelectionMode(false);
+    setSelectedRowKeys([]);
+    setSelectedRows([]);
+  };
+
+  // Only enable row selection when not at root level
+  const rowSelection = (selectionMode && !isRoot) ? {
+    selectedRowKeys,
+    onChange: (keys, rows) => {
+      setSelectedRowKeys(keys);
+      setSelectedRows(rows);
+    }
+  } : null;
+
 
   const columns = useMemo(() => {
     // Base columns that are always shown
@@ -1108,28 +1185,46 @@ const FileManager = () => {
 
             {!isSearchResult && (
               <>
-                <Tooltip title="Rename">
-                  <Button
-                    icon={<EditOutlined />}
-                    onClick={() => {
-                      setSelectedItem(record);
-                      setRenameNewName(record.name);
-                      setRenameModalVisible(true);
-                    }}
-                  />
-                </Tooltip>
+                {/* Hide action buttons at root level and main folder level */}
+                {isInsideMainFolder && (
+                  <>
+                    <Tooltip title="Rename">
+                      <Button
+                        icon={<EditOutlined />}
+                        onClick={() => {
+                          setSelectedItem(record);
+                          setRenameNewName(record.name);
+                          setRenameModalVisible(true);
+                        }}
+                      />
+                    </Tooltip>
 
-                <Tooltip title="Copy">
-                  <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
-                </Tooltip>
+                    <Tooltip title="Copy">
+                      <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
+                    </Tooltip>
 
-                <Tooltip title="Move">
-                  <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
-                </Tooltip>
+                    <Tooltip title="Move">
+                      <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
+                    </Tooltip>
 
-                <Tooltip title="Delete">
-                  <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
-                </Tooltip>
+                    <Tooltip title="Delete">
+                      <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+                    </Tooltip>
+                  </>
+                )}
+
+                {/* Only show the three-dots menu when inside a main folder (not at root level) */}
+                {isInsideMainFolder && (
+                  <Tooltip title="More Info">
+                    <Button
+                      icon={<MoreOutlined />}
+                      onClick={() => {
+                        setSelectedFileInfo(record);
+                        setInfoModalVisible(true);
+                      }}
+                    />
+                  </Tooltip>
+                )}
               </>
             )}
           </Space>
@@ -1219,7 +1314,7 @@ const FileManager = () => {
               />
             </Tooltip>
           </Col>
-          <Col style={{ width: '50%' }}>
+          <Col style={{ width: '40%' }}>
             <Input.Search
               placeholder={isSearching
                 ? "Search files..."
@@ -1249,9 +1344,37 @@ const FileManager = () => {
               enterButton
             />
           </Col>
+          {/* Only show the batch actions menu when inside a main folder (not at root level) */}
+          {!isRoot && (
+            <Col style={{ marginLeft: 'auto' }}>
+              <BatchActionsMenu
+                selectedItems={selectedRows}
+                onDelete={handleBatchDelete}
+                onCopy={handleBatchCopy}
+                onMove={handleBatchMove}
+                onDownload={handleBatchDownload}
+                selectionMode={selectionMode}
+                onToggleSelectionMode={handleToggleSelectionMode}
+                onCancelSelection={handleCancelSelection}
+              />
+            </Col>
+          )}
         </Row>
 
 
+
+
+
+        {selectionMode && selectedRows.length > 0 && (
+          <SelectionHeader
+            selectedItems={selectedRows}
+            onDelete={handleBatchDelete}
+            onCopy={handleBatchCopy}
+            onMove={handleBatchMove}
+            onDownload={handleBatchDownload}
+            onCancelSelection={handleCancelSelection}
+          />
+        )}
 
         <Table
           columns={columns}
@@ -1260,6 +1383,7 @@ const FileManager = () => {
           loading={loading}
           pagination={false}
           scroll={{ y: '49vh' }}  // for content scrolling on table
+          rowSelection={rowSelection}
         />
 
         {/* Use the CommonModals component for standard modals */}
@@ -1309,6 +1433,31 @@ const FileManager = () => {
           handleModalUpload={handleUpload}
           container=""
         />
+
+        {/* File Information Modal */}
+        <Modal
+          title="File Information"
+          open={infoModalVisible}
+          onCancel={() => setInfoModalVisible(false)}
+          footer={null}
+        >
+          {selectedFileInfo ? (
+            <div>
+              <p><strong>Name:</strong> {selectedFileInfo.name}</p>
+              <p><strong>Type:</strong> {selectedFileInfo.type === 'directory' ? 'Folder' : 'File'}</p>
+              <p><strong>Size:</strong> {selectedFileInfo.formattedSize || '--'}</p>
+              <p><strong>Uploader:</strong> {selectedFileInfo.uploader || 'N/A'}</p>
+              {selectedFileInfo.contentType && (
+                <p><strong>Content Type:</strong> {selectedFileInfo.contentType}</p>
+              )}
+              {selectedFileInfo.id && (
+                <p><strong>ID:</strong> {selectedFileInfo.id}</p>
+              )}
+            </div>
+          ) : (
+            <p>No information available</p>
+          )}
+        </Modal>
 
         {/* Custom Upload Modal with additional fields */}
         <Modal

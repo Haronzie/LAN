@@ -32,7 +32,8 @@ import {
   ArrowLeftOutlined,
   LockOutlined,
   FileOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  MoreOutlined
 } from '@ant-design/icons';
 import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +41,8 @@ import axios from 'axios';
 import path from 'path-browserify';
 import debounce from 'lodash.debounce';
 import CommonModals from './common/CommonModals';
+import BatchActionsMenu from './common/BatchActionsMenu';
+import { batchDelete, batchDownload } from '../utils/batchOperations';
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -75,6 +78,9 @@ const TrainingDashboard = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
 
   // Create folder modal
   const [createFolderModal, setCreateFolderModal] = useState(false);
@@ -499,6 +505,64 @@ const TrainingDashboard = () => {
     const downloadUrl = `${BASE_URL}/download-folder?directory=${encodedPath}`;
     window.open(downloadUrl, '_blank');
   };
+
+  // Batch operations handlers
+  const handleBatchDelete = () => {
+    if (selectedRows.length === 0) return;
+
+    Modal.confirm({
+      title: 'Delete Multiple Items',
+      content: `Are you sure you want to delete ${selectedRows.length} selected item(s)?`,
+      okText: 'Yes',
+      okType: 'danger',
+      cancelText: 'No',
+      onOk: async () => {
+        await batchDelete(selectedRows, currentPath, 'training', () => {
+          fetchItems();
+          fetchDirectories();
+          setSelectedRowKeys([]);
+          setSelectedRows([]);
+        });
+      }
+    });
+  };
+
+  const handleBatchDownload = () => {
+    if (selectedRows.length === 0) return;
+    batchDownload(selectedRows, currentPath, BASE_URL);
+  };
+
+  const handleBatchCopy = () => {
+    if (selectedRows.length === 0) return;
+    message.info('Multiple copy functionality coming soon');
+    // Future implementation for batch copy
+  };
+
+  const handleBatchMove = () => {
+    if (selectedRows.length === 0) return;
+    message.info('Multiple move functionality coming soon');
+    // Future implementation for batch move
+  };
+
+  // Toggle selection mode
+  const handleToggleSelectionMode = () => {
+    setSelectionMode(true);
+  };
+
+  // Cancel selection mode
+  const handleCancelSelection = () => {
+    setSelectionMode(false);
+    setSelectedRowKeys([]);
+    setSelectedRows([]);
+  };
+
+  const rowSelection = selectionMode ? {
+    selectedRowKeys,
+    onChange: (keys, rows) => {
+      setSelectedRowKeys(keys);
+      setSelectedRows(rows);
+    }
+  } : null;
 
   // ----------------------------------
   // Rename
@@ -984,9 +1048,19 @@ const TrainingDashboard = () => {
         {/* Top Bar */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <h2 style={{ margin: 0 }}></h2>
+            <h2 style={{ margin: 0 }}>Training</h2>
           </Col>
-          <Col>
+          <Col style={{ display: 'flex', alignItems: 'center' }}>
+            <BatchActionsMenu
+              selectedItems={selectedRows}
+              onDelete={handleBatchDelete}
+              onCopy={handleBatchCopy}
+              onMove={handleBatchMove}
+              onDownload={handleBatchDownload}
+              selectionMode={selectionMode}
+              onToggleSelectionMode={handleToggleSelectionMode}
+              onCancelSelection={handleCancelSelection}
+            />
             <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
               Upload File
             </Button>
@@ -1017,7 +1091,7 @@ const TrainingDashboard = () => {
               />
             </Tooltip>
           </Col>
-          <Col style={{ width: '50%' }}>
+          <Col style={{ width: '40%' }}>
             <Input.Search
               placeholder={isSearching
                 ? "Search in Training..."
@@ -1054,6 +1128,10 @@ const TrainingDashboard = () => {
         {!isSearching && (
           <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
         )}
+
+
+
+
         <Table
           columns={columns}
           dataSource={sortedItems}
@@ -1061,6 +1139,7 @@ const TrainingDashboard = () => {
           loading={loading}
           pagination={false}
           scroll={{ y: '49vh' }}  // for content scrolling on table
+          rowSelection={rowSelection}
         />
 
         {/* Use the CommonModals component */}

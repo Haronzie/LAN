@@ -5,10 +5,14 @@ import {
   EditOutlined,
   DeleteOutlined,
   UserDeleteOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  MoreOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import BatchActionsMenu from './common/BatchActionsMenu';
+import SelectionHeader from './common/SelectionHeader';
+import { batchDeleteUsers } from '../utils/batchOperations';
 
 const { Content } = Layout;
 
@@ -32,6 +36,9 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [firstAdmin, setFirstAdmin] = useState(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
 
   // Modal state for adding user
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
@@ -197,7 +204,7 @@ const UserManagement = () => {
       fetchUsers();
     } catch (error) {
       const errMsg = error.response?.data?.error || 'Error updating user';
-      
+
       // Highlight conflict more clearly
       if (errMsg.toLowerCase().includes("already exists")) {
         message.warning(errMsg); // or message.info() for a softer tone
@@ -206,7 +213,7 @@ const UserManagement = () => {
       }
     }
   };
-  
+
 
   // Handler for promoting a user to admin
   const handleAssignAdmin = async (username) => {
@@ -219,6 +226,61 @@ const UserManagement = () => {
       message.error(errMsg);
     }
   };
+
+  // Handler for batch deleting users
+  const handleBatchDeleteUsers = () => {
+    if (selectedRows.length === 0) return;
+
+    // Filter out admins and current user from selection
+    const deletableUsers = selectedRows.filter(user =>
+      user.role !== 'admin' && user.username !== adminName
+    );
+
+    if (deletableUsers.length === 0) {
+      message.warning('None of the selected users can be deleted. Admins and your own account cannot be deleted.');
+      return;
+    }
+
+    if (deletableUsers.length !== selectedRows.length) {
+      message.warning('Some selected users cannot be deleted (admins or your own account) and will be skipped.');
+    }
+
+    Modal.confirm({
+      title: 'Delete Multiple Users',
+      content: `Are you sure you want to delete ${deletableUsers.length} selected user(s)?`,
+      okText: 'Yes',
+      okType: 'danger',
+      cancelText: 'No',
+      onOk: async () => {
+        await batchDeleteUsers(deletableUsers, () => {
+          fetchUsers();
+          setSelectedRowKeys([]);
+          setSelectedRows([]);
+        });
+      }
+    });
+  };
+
+  // Toggle selection mode
+  const handleToggleSelectionMode = () => {
+    setSelectionMode(true);
+  };
+
+  // Cancel selection mode
+  const handleCancelSelection = () => {
+    setSelectionMode(false);
+    setSelectedRowKeys([]);
+    setSelectedRows([]);
+  };
+
+  // Row selection configuration
+  const rowSelection = selectionMode ? {
+    selectedRowKeys,
+    onChange: (keys, rows) => {
+      setSelectedRowKeys(keys);
+      setSelectedRows(rows);
+    }
+  } : null;
 
   // Table columns
   const columns = [
@@ -245,9 +307,9 @@ const UserManagement = () => {
         //    - The current user is the first admin
         //    - The record is an admin
         //    - The record is not the first admin themselves
-        const canRevokeAdmin = firstAdmin && 
-                              firstAdmin.username === adminName && 
-                              record.role === 'admin' && 
+        const canRevokeAdmin = firstAdmin &&
+                              firstAdmin.username === adminName &&
+                              record.role === 'admin' &&
                               record.username !== firstAdmin.username;
 
         return (
@@ -310,12 +372,39 @@ const UserManagement = () => {
             Add User
           </Button>
         </div>
-        <Input
-          placeholder="Search by username"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ width: 300, marginBottom: 16 }}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+          <Input
+            placeholder="Search by username"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ width: 300, marginRight: 16 }}
+          />
+          <BatchActionsMenu
+            selectedItems={selectedRows}
+            onDelete={handleBatchDeleteUsers}
+            showCopy={false}
+            showMove={false}
+            showDownload={false}
+            itemType="user"
+            selectionMode={selectionMode}
+            onToggleSelectionMode={handleToggleSelectionMode}
+            onCancelSelection={handleCancelSelection}
+          />
+        </div>
+
+
+
+        {selectionMode && selectedRows.length > 0 && (
+          <SelectionHeader
+            selectedItems={selectedRows}
+            onDelete={handleBatchDeleteUsers}
+            showCopy={false}
+            showMove={false}
+            showDownload={false}
+            itemType="user"
+            onCancelSelection={handleCancelSelection}
+          />
+        )}
 
         <Table
           columns={columns}
@@ -324,6 +413,7 @@ const UserManagement = () => {
           loading={loading}
           pagination={false}
           scroll={{ y: '60vh' }} // this keeps header fixed, body scrolls
+          rowSelection={rowSelection}
         />
 
         {/* Add User Modal */}
