@@ -47,6 +47,7 @@ import CommonModals from './common/CommonModals';
 
 const { Content } = Layout;
 const { Option } = Select;
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`;
 
 function formatFileSize(size) {
   if (size === 0) return '0 B';
@@ -94,58 +95,107 @@ const OperationDashboard = () => {
     const username = localStorage.getItem('username');
     if (!username) return;
     setCurrentUser(username);
-    const wsInstance = new WebSocket(`ws://localhost:8080/ws?username=${username}`);
-    setWs(wsInstance);
 
-    wsInstance.onopen = () => {
-      console.log('✅ WebSocket connected');
-    };
+    // WebSocket connection with reconnection logic
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectInterval = 3000; // 3 seconds
+    let reconnectTimer = null;
 
-    wsInstance.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log('📬 Message:', data);
+    const connectWebSocket = () => {
+      console.log(`🔄 Attempting to connect WebSocket for user: ${username}`);
 
-      if (data.event === 'new_instruction' && data.receiver === username) {
-        message.open({
-          type: 'info',
-          content: `📬 New instruction for you: "${data.message}"`,
-          duration: 0, // 0 = persist until manually closed
-          key: `instruction-${data.file_id}`, // key prevents stacking if same file gets multiple instructions
-          btn: (
-            <Button
-              type="primary"
-              size="small"
-              onClick={() => {
-                setCurrentPath(data.file_path); // if you're sending path in WS
-                message.destroy(`instruction-${data.file_id}`);
-              }}
-            >
-              View Now
-            </Button>
-          ),
-        });
-
-        fetchItems();
-        fetchAllFilesWithMessages();
+      // Clear any existing WebSocket
+      if (ws) {
+        ws.close();
       }
 
-      if (data.event === 'file_uploaded' && data.file_name) {
-        message.success(`📁 New file uploaded: ${data.file_name}`);
+      const wsInstance = new WebSocket(`ws://localhost:8080/ws?username=${username}`);
+      setWs(wsInstance);
+
+      wsInstance.onopen = () => {
+        console.log('✅ WebSocket connected');
+        reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+
+        // Fetch notifications immediately after connection
         fetchItems();
         fetchAllFilesWithMessages();
+      };
+
+      wsInstance.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('📬 Message received:', data);
+
+          if (data.event === 'new_instruction' && data.receiver === username) {
+            message.open({
+              type: 'info',
+              content: `📬 New instruction for you: "${data.message}"`,
+              duration: 0, // 0 = persist until manually closed
+              key: `instruction-${data.file_id}`, // key prevents stacking if same file gets multiple instructions
+              btn: (
+                <Button
+                  type="primary"
+                  size="small"
+                  onClick={() => {
+                    setCurrentPath(data.file_path); // if you're sending path in WS
+                    message.destroy(`instruction-${data.file_id}`);
+                  }}
+                >
+                  View Now
+                </Button>
+              ),
+            });
+
+            fetchItems();
+            fetchAllFilesWithMessages();
+          }
+
+          if (data.event === 'file_uploaded' && data.file_name) {
+            message.success(`📁 New file uploaded: ${data.file_name}`);
+            fetchItems();
+            fetchAllFilesWithMessages();
+          }
+        } catch (error) {
+          console.error('❌ Error parsing WebSocket message:', error);
+        }
+      };
+
+      wsInstance.onerror = (e) => {
+        console.error('❌ WebSocket error:', e);
+      };
+
+      wsInstance.onclose = (e) => {
+        console.warn(`⚠️ WebSocket closed with code ${e.code}:`, e.reason);
+
+        // Attempt to reconnect if not closing intentionally
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          console.log(`🔄 WebSocket reconnect attempt ${reconnectAttempts}/${maxReconnectAttempts} in ${reconnectInterval}ms`);
+
+          reconnectTimer = setTimeout(() => {
+            connectWebSocket();
+          }, reconnectInterval);
+        } else {
+          console.error('❌ Maximum WebSocket reconnect attempts reached');
+          // Fetch notifications through HTTP as a fallback
+          fetchAllFilesWithMessages();
+        }
+      };
+    };
+
+    // Initial connection
+    connectWebSocket();
+
+    // Cleanup function
+    return () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+      if (ws) {
+        ws.close();
       }
     };
-
-
-    wsInstance.onerror = (e) => {
-      console.error('❌ WebSocket error', e);
-    };
-
-    wsInstance.onclose = () => {
-      console.warn('⚠️ WebSocket closed');
-    };
-
-    return () => wsInstance.close();
   }, []);
 
 
@@ -160,31 +210,20 @@ const OperationDashboard = () => {
 
   const fetchAllFilesWithMessages = async () => {
     try {
-      const res = await axios.get(`/files?directory=${encodeURIComponent(currentPath)}`, { withCredentials: true });
-      const files = res.data || [];
-      setAllFilesWithMessages([]);
+      // First, try to get all files with messages assigned to the current user
+      const filesWithMessagesRes = await axios.get('/files-with-messages', { withCredentials: true });
+      const filesWithMessages = filesWithMessagesRes.data || [];
 
-      const result = [];
+      // Filter to only include files in the current directory or its subdirectories
+      const filteredFiles = filesWithMessages.filter(file => {
+        // Check if the file is in the current directory or a subdirectory
+        return file.directory === currentPath ||
+               file.directory.startsWith(currentPath + '/');
+      });
 
-      for (const file of files) {
-        try {
-          const msgRes = await axios.get(`/file/messages?file_id=${file.id}`, { withCredentials: true });
-          if (msgRes.data?.length) {
-            result.push({
-              id: file.id,
-              name: file.name,
-              directory: file.directory,
-              messages: msgRes.data
-            });
-          }
-        } catch (err) {
-          console.warn(`Skipped file ID ${file.id}: not authorized or no messages`);
-        }
-      }
-
-      setAllFilesWithMessages(result);
+      setAllFilesWithMessages(filteredFiles);
     } catch (error) {
-      console.error('Error fetching file list:', error);
+      console.error('Error fetching files with messages:', error);
       message.error('Failed to load files with instructions');
     }
   };
@@ -503,27 +542,85 @@ const OperationDashboard = () => {
     }
   };
 
-  const handleDownload = (fileName, directory) => {
-    const downloadUrl = `/download?directory=${encodeURIComponent(directory || currentPath)}&filename=${encodeURIComponent(fileName)}`;
-    window.open(downloadUrl, '_blank');
+  const handleDownload = async (fileName, directory) => {
+    try {
+      // Verify file exists before attempting to download
+      const dirToCheck = directory || currentPath;
+      const checkUrl = `/files?directory=${encodeURIComponent(dirToCheck)}`;
+      const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+      const fileExists = (checkRes.data || []).some(f =>
+        f.name === fileName && (f.directory === dirToCheck || f.directory === undefined)
+      );
+
+      if (!fileExists) {
+        message.error('This file no longer exists. Please refresh the page.');
+        return;
+      }
+
+      // Proceed with download if file exists
+      const encodedDir = encodeURIComponent(dirToCheck || '');
+      const encodedFile = encodeURIComponent(fileName.trim());
+      const downloadUrl = `${BASE_URL}/download?directory=${encodedDir}&filename=${encodedFile}`;
+      window.open(downloadUrl, '_blank');
+    } catch (err) {
+      console.error('Error checking file existence before download:', err);
+      message.error('Error verifying file. Please try again or refresh the page.');
+    }
   };
 
   const handleDownloadFolder = (folderName) => {
     const folderPath = path.join(currentPath, folderName);
-    const downloadUrl = `/download-folder?directory=${encodeURIComponent(folderPath)}`;
+    const encodedPath = encodeURIComponent(folderPath.trim());
+    const downloadUrl = `${BASE_URL}/download-folder?directory=${encodedPath}`;
     window.open(downloadUrl, '_blank');
   };
 
-  const handleViewFile = (file) => {
-    if (isSearching) {
-      // For search results, we need to use the directory from the result
-      const encodedDir = encodeURIComponent(file.directory || '');
-      const encodedFile = encodeURIComponent(file.name.trim());
-      const previewUrl = `/preview?directory=${encodedDir}&filename=${encodedFile}`;
-      window.open(previewUrl, '_blank');
-    } else {
-      const previewUrl = `/preview?directory=${encodeURIComponent(currentPath)}&filename=${encodeURIComponent(file.name)}`;
-      window.open(previewUrl, '_blank');
+  const handleViewFile = async (file) => {
+    try {
+      if (isSearching) {
+        // For search results, verify file exists in its directory
+        const dirToCheck = file.directory || '';
+        const checkUrl = `/files?directory=${encodeURIComponent(dirToCheck)}`;
+        const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+        const fileExists = (checkRes.data || []).some(f =>
+          f.name === file.name && (f.directory === dirToCheck || f.directory === undefined)
+        );
+
+        if (!fileExists) {
+          message.error('This file no longer exists. Please refresh the page.');
+          return;
+        }
+
+        // Proceed with preview if file exists
+        const encodedDir = encodeURIComponent(dirToCheck);
+        const encodedFile = encodeURIComponent(file.name.trim());
+        const previewUrl = `${BASE_URL}/preview?directory=${encodedDir}&filename=${encodedFile}`;
+        window.open(previewUrl, '_blank');
+      } else {
+        // For regular file listing, verify file exists in current directory
+        const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+        const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+        const fileExists = (checkRes.data || []).some(f =>
+          f.name === file.name && (f.directory === currentPath || f.directory === undefined)
+        );
+
+        if (!fileExists) {
+          message.error('This file no longer exists. Please refresh the page.');
+          return;
+        }
+
+        // Proceed with preview if file exists
+        const encodedDir = encodeURIComponent(currentPath || '');
+        const encodedFile = encodeURIComponent(file.name.trim());
+        const previewUrl = `${BASE_URL}/preview?directory=${encodedDir}&filename=${encodedFile}`;
+        window.open(previewUrl, '_blank');
+      }
+    } catch (err) {
+      console.error('Error checking file existence before preview:', err);
+      message.error('Error verifying file. Please try again or refresh the page.');
     }
   };
 

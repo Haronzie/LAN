@@ -999,6 +999,33 @@ func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Check if the receiver exists in the database
+	var receiverExists bool
+	err = fc.App.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(username) = LOWER($1))`, msg.Receiver).Scan(&receiverExists)
+	if err != nil {
+		log.Printf("❌ Error checking if receiver exists: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Failed to verify receiver")
+		return
+	}
+
+	if !receiverExists {
+		log.Printf("❌ Receiver '%s' does not exist in the database", msg.Receiver)
+		models.RespondError(w, http.StatusBadRequest, "Receiver does not exist")
+		return
+	}
+
+	// Get the exact username with correct capitalization from the database
+	var exactUsername string
+	err = fc.App.DB.QueryRow(`SELECT username FROM users WHERE LOWER(username) = LOWER($1)`, msg.Receiver).Scan(&exactUsername)
+	if err != nil {
+		log.Printf("❌ Error getting exact username: %v", err)
+		// Continue with the provided username if we can't get the exact one
+	} else {
+		// Use the exact username from the database to ensure correct capitalization
+		msg.Receiver = exactUsername
+		log.Printf("📨 Using exact username from database: '%s'", exactUsername)
+	}
+
 	// retrieve file path for this file ID
 	var filePath string
 	err = fc.App.DB.QueryRow(`SELECT file_path FROM files WHERE id = $1`, msg.FileID).Scan(&filePath)
@@ -1007,14 +1034,19 @@ func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	log.Printf("📨 Sending message to user '%s' for file ID %d", msg.Receiver, msg.FileID)
+
 	_, err = fc.App.DB.Exec(
 		`INSERT INTO file_messages (file_id, sender, receiver, message) VALUES ($1, $2, $3, $4)`,
 		msg.FileID, msg.Sender, msg.Receiver, msg.Message,
 	)
 	if err != nil {
+		log.Printf("❌ Error inserting message into database: %v", err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to send message")
 		return
 	}
+
+	log.Printf("✅ Message successfully inserted into database for user '%s'", msg.Receiver)
 
 	if fc.App.NotificationHub != nil {
 		notification := map[string]string{
@@ -1028,6 +1060,7 @@ func (fc *FileController) SendFileMessage(w http.ResponseWriter, r *http.Request
 
 		notifBytes, _ := json.Marshal(notification)
 		fc.App.NotificationHub.SendToUser(msg.Receiver, notifBytes)
+		log.Printf("📨 Notification sent to user '%s'", msg.Receiver)
 	}
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Instruction sent"})
@@ -1047,6 +1080,8 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	log.Printf("📨 Fetching messages for file ID %d by user '%s'", fileID, user.Username)
+
 	var rows *sql.Rows
 	if user.Role == "admin" {
 		// Admin can see all messages for this file
@@ -1057,16 +1092,17 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 			ORDER BY created_at DESC
 		`, fileID)
 	} else {
-		// Regular users only see messages addressed to them
+		// Regular users only see messages addressed to them - using case-insensitive comparison
 		rows, err = fc.App.DB.Query(`
 			SELECT id, file_id, sender, receiver, message, is_done, created_at
 			FROM file_messages
-			WHERE file_id = $1 AND receiver = $2
+			WHERE file_id = $1 AND LOWER(receiver) = LOWER($2)
 			ORDER BY created_at DESC
 		`, fileID, user.Username)
 	}
 
 	if err != nil {
+		log.Printf("❌ Error fetching messages for file %d: %v", fileID, err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to fetch messages")
 		return
 	}
@@ -1076,11 +1112,13 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 	for rows.Next() {
 		var msg models.FileMessage
 		if err := rows.Scan(&msg.ID, &msg.FileID, &msg.Sender, &msg.Receiver, &msg.Message, &msg.IsDone, &msg.CreatedAt); err != nil {
+			log.Printf("❌ Error scanning message: %v", err)
 			continue
 		}
 		messages = append(messages, msg)
 	}
 
+	log.Printf("📨 Found %d messages for file ID %d", len(messages), fileID)
 	models.RespondJSON(w, http.StatusOK, messages)
 }
 
@@ -1155,25 +1193,31 @@ func (fc *FileController) MarkFileMessageAsDone(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	log.Printf("🔄 Attempting to mark message %d as done by user '%s'", messageID, user.Username)
+
 	var receiver string
 	err = fc.App.DB.QueryRow(`SELECT receiver FROM file_messages WHERE id = $1`, messageID).Scan(&receiver)
 	if err != nil {
+		log.Printf("❌ Message %d not found: %v", messageID, err)
 		models.RespondError(w, http.StatusNotFound, "Message not found")
 		return
 	}
 
-	if user.Username != receiver && user.Role != "admin" {
+	// Case-insensitive comparison for receiver
+	if !strings.EqualFold(user.Username, receiver) && user.Role != "admin" {
+		log.Printf("❌ User '%s' not authorized to update message %d (receiver: '%s')", user.Username, messageID, receiver)
 		models.RespondError(w, http.StatusForbidden, "You are not authorized to update this message")
 		return
 	}
 
 	_, err = fc.App.DB.Exec(`UPDATE file_messages SET is_done = TRUE WHERE id = $1`, messageID)
 	if err != nil {
+		log.Printf("❌ Failed to update message %d status: %v", messageID, err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to update message status")
 		return
 	}
 
-	// ✅ Add this log line
+	log.Printf("✅ User '%s' successfully marked message %d as done", user.Username, messageID)
 	fc.App.LogActivity(fmt.Sprintf("User '%s' marked message %d as done.", user.Username, messageID))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Marked as done"})
@@ -1347,8 +1391,26 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 
 		if status == "uploaded" || status == "overwritten" {
 			if instruction != "" && receiver != "" && fileID > 0 {
-				_, _ = fc.App.DB.Exec(`INSERT INTO file_messages (file_id, sender, receiver, message) VALUES ($1, $2, $3, $4)`,
+				// Get the exact username with correct capitalization from the database
+				var exactUsername string
+				err := fc.App.DB.QueryRow(`SELECT username FROM users WHERE LOWER(username) = LOWER($1)`, receiver).Scan(&exactUsername)
+				if err != nil {
+					log.Printf("❌ Error getting exact username for '%s': %v", receiver, err)
+					// Continue with the provided username if we can't get the exact one
+				} else {
+					// Use the exact username from the database to ensure correct capitalization
+					receiver = exactUsername
+					log.Printf("📨 Using exact username from database: '%s'", exactUsername)
+				}
+
+				_, err = fc.App.DB.Exec(`INSERT INTO file_messages (file_id, sender, receiver, message) VALUES ($1, $2, $3, $4)`,
 					fileID, user.Username, receiver, instruction)
+
+				if err != nil {
+					log.Printf("❌ Error inserting message for bulk upload: %v", err)
+				} else {
+					log.Printf("✅ Message successfully inserted for user '%s' during bulk upload", receiver)
+				}
 
 				if fc.App.NotificationHub != nil {
 					var filePath string
@@ -1363,6 +1425,7 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 					}
 					notifBytes, _ := json.Marshal(notification)
 					fc.App.NotificationHub.SendToUser(receiver, notifBytes)
+					log.Printf("📨 Notification sent to user '%s' during bulk upload", receiver)
 				}
 			}
 		}
@@ -1411,6 +1474,118 @@ func (fc *FileController) CountFilesInMainFolders(w http.ResponseWriter, r *http
 
 	models.RespondJSON(w, http.StatusOK, counts)
 }
+
+// GetFilesWithMessagesForUser retrieves all files that have messages assigned to the current user
+func (fc *FileController) GetFilesWithMessagesForUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	log.Printf("📨 Fetching files with messages for user: '%s'", user.Username)
+
+	// Query to get all files that have messages for this user - using ILIKE for case-insensitive matching
+	rows, err := fc.App.DB.Query(`
+		SELECT f.id, f.file_name, f.directory, f.file_path, f.size, f.content_type, f.uploader, f.created_at
+		FROM files f
+		JOIN file_messages fm ON f.id = fm.file_id
+		WHERE LOWER(fm.receiver) = LOWER($1)
+		GROUP BY f.id
+		ORDER BY f.directory, f.file_name
+	`, user.Username)
+
+	if err != nil {
+		log.Printf("❌ Error fetching files with messages: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving files with messages")
+		return
+	}
+	defer rows.Close()
+
+	var files []map[string]interface{}
+	for rows.Next() {
+		var file models.FileRecord
+		if err := rows.Scan(
+			&file.ID,
+			&file.FileName,
+			&file.Directory,
+			&file.FilePath,
+			&file.Size,
+			&file.ContentType,
+			&file.Uploader,
+			&file.CreatedAt,
+		); err != nil {
+			log.Printf("❌ Error scanning file record: %v", err)
+			continue
+		}
+
+		// Get messages for this file - using ILIKE for case-insensitive matching
+		msgRows, err := fc.App.DB.Query(`
+			SELECT id, file_id, sender, receiver, message, is_done, created_at
+			FROM file_messages
+			WHERE file_id = $1 AND LOWER(receiver) = LOWER($2)
+			ORDER BY created_at DESC
+		`, file.ID, user.Username)
+
+		if err != nil {
+			log.Printf("❌ Error fetching messages for file %d: %v", file.ID, err)
+			continue
+		}
+
+		var messages []models.FileMessage
+		for msgRows.Next() {
+			var msg models.FileMessage
+			if err := msgRows.Scan(
+				&msg.ID,
+				&msg.FileID,
+				&msg.Sender,
+				&msg.Receiver,
+				&msg.Message,
+				&msg.IsDone,
+				&msg.CreatedAt,
+			); err != nil {
+				log.Printf("❌ Error scanning message: %v", err)
+				continue
+			}
+			messages = append(messages, msg)
+		}
+		msgRows.Close()
+
+		files = append(files, map[string]interface{}{
+			"id":          file.ID,
+			"name":        file.FileName,
+			"directory":   file.Directory,
+			"file_path":   file.FilePath,
+			"size":        file.Size,
+			"contentType": file.ContentType,
+			"uploader":    file.Uploader,
+			"created_at":  file.CreatedAt.Format("2006-01-02 15:04:05"),
+			"messages":    messages,
+		})
+	}
+
+	log.Printf("📨 Found %d files with messages for user '%s'", len(files), user.Username)
+
+	// Debug: Check if there are any messages for this user in the database
+	var messageCount int
+	countErr := fc.App.DB.QueryRow(`
+		SELECT COUNT(*) FROM file_messages WHERE LOWER(receiver) = LOWER($1)
+	`, user.Username).Scan(&messageCount)
+
+	if countErr != nil {
+		log.Printf("❌ Error counting messages: %v", countErr)
+	} else {
+		log.Printf("📨 Total message count for user '%s': %d", user.Username, messageCount)
+	}
+
+	models.RespondJSON(w, http.StatusOK, files)
+}
+
 func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")

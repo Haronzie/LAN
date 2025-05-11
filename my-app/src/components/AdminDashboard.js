@@ -16,6 +16,7 @@ import {
 } from '@ant-design/icons';
 import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import axios from 'axios';
+import NotificationDropdown from './common/NotificationDropdown';
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
@@ -35,8 +36,8 @@ const AdminDashboard = () => {
     files: 'File Manager',
     settings: 'Settings'
   };
-  
-  
+
+
   const pageTitle = sectionTitles[currentSection] || 'Dashboard';
 
   useEffect(() => {
@@ -52,7 +53,7 @@ const AdminDashboard = () => {
       message.error('Logout failed.');
     }
   };
-  
+
 
   const toggleSidebar = () => setCollapsed(!collapsed);
 
@@ -175,9 +176,12 @@ const AdminDashboard = () => {
                 style={{ position: 'absolute', left: 16 }}
               />
             )}
-            <Button type="primary" size="small" onClick={handleLogout}>
-              Logout
-            </Button>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <NotificationDropdown />
+              <Button type="primary" size="small" onClick={handleLogout}>
+                Logout
+              </Button>
+            </div>
           </Header>
 
           <Content style={{ margin: 0, padding: 0, overflowY: 'auto' }}>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Button, message, Typography } from 'antd';
-import { 
+import {
   MenuOutlined,
   HomeOutlined,
   DeploymentUnitOutlined,
@@ -10,6 +10,7 @@ import {
   DatabaseOutlined,
   SettingOutlined
 } from '@ant-design/icons';
+import NotificationDropdown from './common/NotificationDropdown';
 import axios from 'axios';
 import UserDashboardHome from './UserDashboardHome';
 import TrainingDashboard from './TrainingDashboard';
@@ -199,6 +200,7 @@ const UserDashboard = () => {
           </div>
 
           <div style={{ flex: 1 }} />
+          <NotificationDropdown />
           <Button type="primary" onClick={handleLogout} style={{ zIndex: 1 }}>
             Logout
           </Button>

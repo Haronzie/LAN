@@ -43,6 +43,7 @@ import CommonModals from './common/CommonModals';
 
 const { Content } = Layout;
 const { Option } = Select;
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`;
 
 /**
  * Helper to format file sizes in human-readable form.
@@ -73,6 +74,7 @@ const TrainingDashboard = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
 
   // Create folder modal
   const [createFolderModal, setCreateFolderModal] = useState(false);
@@ -129,6 +131,46 @@ const TrainingDashboard = () => {
     }
   };
 
+  const fetchAllFilesWithMessages = async () => {
+    try {
+      // First, try to get all files with messages assigned to the current user
+      const filesWithMessagesRes = await axios.get('/files-with-messages', { withCredentials: true });
+      const filesWithMessages = filesWithMessagesRes.data || [];
+
+      // Filter to only include files in the current directory or its subdirectories
+      const filteredFiles = filesWithMessages.filter(file => {
+        // Check if the file is in the current directory or a subdirectory
+        return file.directory === currentPath ||
+               file.directory.startsWith(currentPath + '/');
+      });
+
+      setAllFilesWithMessages(filteredFiles);
+    } catch (error) {
+      console.error('Error fetching files with messages:', error);
+      message.error('Failed to load files with instructions');
+    }
+  };
+
+  const markAsDone = async (messageId, fileId) => {
+    try {
+      await axios.patch(
+        `/file/message/${messageId}/done`,
+        {},
+        { withCredentials: true }
+      );
+      message.success('Marked as done');
+
+      // Refresh both the all files view and individual messages
+      await Promise.all([
+        fetchAllFilesWithMessages(),
+        fetchItems()
+      ]);
+    } catch (err) {
+      console.error('Error marking message as done:', err);
+      message.error('Failed to mark as done');
+    }
+  };
+
   // ----------------------------------
   // Fetch items (directories + files)
   // ----------------------------------
@@ -162,6 +204,7 @@ const TrainingDashboard = () => {
 
   useEffect(() => {
     fetchItems();
+    fetchAllFilesWithMessages();
     // eslint-disable-next-line
   }, [currentPath]);
 
@@ -172,6 +215,7 @@ const TrainingDashboard = () => {
       // Only auto-refresh if we're not in the middle of an operation
       if (!moveModalVisible && !copyModalVisible && !renameModalVisible && !createFolderModal && !uploadModalVisible) {
         fetchItems();
+        fetchAllFilesWithMessages();
       }
     }, 10000);
     return () => clearInterval(interval);
@@ -422,14 +466,37 @@ const TrainingDashboard = () => {
   // ----------------------------------
   // Download
   // ----------------------------------
-  const handleDownload = (fileName, directory) => {
-    const downloadUrl = `/download?directory=${encodeURIComponent(directory || currentPath)}&filename=${encodeURIComponent(fileName)}`;
-    window.open(downloadUrl, '_blank');
+  const handleDownload = async (fileName, directory) => {
+    try {
+      // Verify file exists before attempting to download
+      const dirToCheck = directory || currentPath;
+      const checkUrl = `/files?directory=${encodeURIComponent(dirToCheck)}`;
+      const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+      const fileExists = (checkRes.data || []).some(f =>
+        f.name === fileName && (f.directory === dirToCheck || f.directory === undefined)
+      );
+
+      if (!fileExists) {
+        message.error('This file no longer exists. Please refresh the page.');
+        return;
+      }
+
+      // Proceed with download if file exists
+      const encodedDir = encodeURIComponent(dirToCheck || '');
+      const encodedFile = encodeURIComponent(fileName.trim());
+      const downloadUrl = `${BASE_URL}/download?directory=${encodedDir}&filename=${encodedFile}`;
+      window.open(downloadUrl, '_blank');
+    } catch (err) {
+      console.error('Error checking file existence before download:', err);
+      message.error('Error verifying file. Please try again or refresh the page.');
+    }
   };
 
   const handleDownloadFolder = (folderName) => {
     const folderPath = path.join(currentPath, folderName);
-    const downloadUrl = `/download-folder?directory=${encodeURIComponent(folderPath)}`;
+    const encodedPath = encodeURIComponent(folderPath.trim());
+    const downloadUrl = `${BASE_URL}/download-folder?directory=${encodedPath}`;
     window.open(downloadUrl, '_blank');
   };
 
@@ -740,18 +807,51 @@ const TrainingDashboard = () => {
   // ----------------------------------
   // View File
   // ----------------------------------
-  const handleViewFile = (record) => {
-    if (isSearching) {
-      // For search results, we need to use the directory from the result
-      const encodedDir = encodeURIComponent(record.directory || '');
-      const encodedFile = encodeURIComponent(record.name.trim());
-      const previewUrl = `/preview?directory=${encodedDir}&filename=${encodedFile}`;
-      window.open(previewUrl, '_blank');
-    } else {
-      const previewUrl = `/preview?directory=${encodeURIComponent(
-        currentPath
-      )}&filename=${encodeURIComponent(record.name)}`;
-      window.open(previewUrl, '_blank');
+  const handleViewFile = async (record) => {
+    try {
+      if (isSearching) {
+        // For search results, verify file exists in its directory
+        const dirToCheck = record.directory || '';
+        const checkUrl = `/files?directory=${encodeURIComponent(dirToCheck)}`;
+        const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+        const fileExists = (checkRes.data || []).some(f =>
+          f.name === record.name && (f.directory === dirToCheck || f.directory === undefined)
+        );
+
+        if (!fileExists) {
+          message.error('This file no longer exists. Please refresh the page.');
+          return;
+        }
+
+        // Proceed with preview if file exists
+        const encodedDir = encodeURIComponent(dirToCheck);
+        const encodedFile = encodeURIComponent(record.name.trim());
+        const previewUrl = `${BASE_URL}/preview?directory=${encodedDir}&filename=${encodedFile}`;
+        window.open(previewUrl, '_blank');
+      } else {
+        // For regular file listing, verify file exists in current directory
+        const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+        const checkRes = await axios.get(checkUrl, { withCredentials: true });
+
+        const fileExists = (checkRes.data || []).some(f =>
+          f.name === record.name && (f.directory === currentPath || f.directory === undefined)
+        );
+
+        if (!fileExists) {
+          message.error('This file no longer exists. Please refresh the page.');
+          return;
+        }
+
+        // Proceed with preview if file exists
+        const encodedDir = encodeURIComponent(currentPath || '');
+        const encodedFile = encodeURIComponent(record.name.trim());
+        const previewUrl = `${BASE_URL}/preview?directory=${encodedDir}&filename=${encodedFile}`;
+        window.open(previewUrl, '_blank');
+      }
+    } catch (err) {
+      console.error('Error checking file existence before preview:', err);
+      message.error('Error verifying file. Please try again or refresh the page.');
     }
   };
 

@@ -349,6 +349,7 @@ func main() {
 	router.HandleFunc("/file/message/{id}/done", fileController.MarkFileMessageAsDone).Methods("PATCH")
 	router.HandleFunc("/file/messages", fileController.GetFileMessages).Methods("GET")
 	router.HandleFunc("/file/versions", fileController.GetFileVersions).Methods("GET")
+	router.HandleFunc("/files-with-messages", fileController.GetFilesWithMessagesForUser).Methods("GET")
 
 	// Directory routes
 	router.HandleFunc("/directory/create", directoryController.Create).Methods("POST")
@@ -389,9 +390,10 @@ func main() {
 	// Wrap your router with CORS middleware.
 	corsRouter := handlers.CORS(
 		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
-		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}),
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization", "X-Requested-With"}),
 		handlers.AllowCredentials(),
+		handlers.ExposedHeaders([]string{"Content-Length"}),
 	)(router)
 
 	// Start the HTTP server.
