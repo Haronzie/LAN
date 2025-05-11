@@ -919,6 +919,18 @@ const TrainingDashboard = () => {
     }
   };
 
+  // Handle row click for the entire table row
+  const handleRowClick = (record) => {
+    // If it's a directory, navigate into it
+    if (record.type === 'directory') {
+      handleFolderClick(record.name);
+    }
+    // If it's a file, open it for preview
+    else if (record.type === 'file') {
+      handleViewFile(record);
+    }
+  };
+
   // ----------------------------------
   // Table Columns
   // ----------------------------------
@@ -1140,6 +1152,10 @@ const TrainingDashboard = () => {
           pagination={false}
           scroll={{ y: '49vh' }}  // for content scrolling on table
           rowSelection={rowSelection}
+          onRow={(record) => ({
+            onClick: () => handleRowClick(record),
+            style: { cursor: 'pointer' } // Change cursor to pointer to indicate clickable
+          })}
         />
 
         {/* Use the CommonModals component */}

@@ -688,6 +688,18 @@ const OperationDashboard = () => {
     }
   };
 
+  // Handle row click for the entire table row
+  const handleRowClick = (record) => {
+    // If it's a directory, navigate into it
+    if (record.type === 'directory') {
+      handleFolderClick(record.name);
+    }
+    // If it's a file, open it for preview
+    else if (record.type === 'file') {
+      handleViewFile(record);
+    }
+  };
+
   const handleRename = (record) => {
     const isOwner = record.type === 'directory'
       ? record.created_by === currentUser
@@ -1281,6 +1293,10 @@ const OperationDashboard = () => {
           pagination={false}
           scroll={{ y: '49vh' }}  // for content scrolling on table
           rowSelection={rowSelection}
+          onRow={(record) => ({
+            onClick: () => handleRowClick(record),
+            style: { cursor: 'pointer' } // Change cursor to pointer to indicate clickable
+          })}
         />
         <Modal
           title="File Information"

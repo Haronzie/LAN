@@ -665,6 +665,18 @@ const FileManager = () => {
     window.open(previewUrl, '_blank');
   };
 
+  // Handle row click for the entire table row
+  const handleRowClick = (record) => {
+    // If it's a directory, navigate into it
+    if (record.type === 'directory') {
+      handleFolderClick(record.name);
+    }
+    // If it's a file, open it for preview
+    else if (record.type === 'file') {
+      handleViewFile(record);
+    }
+  };
+
   const handleRenameConfirm = async () => {
     if (!renameNewName.trim()) {
       message.error('New name cannot be empty');
@@ -1292,15 +1304,18 @@ const FileManager = () => {
               </Button>
             </Col>
           )}
-          <Col>
-            <Button
-              icon={<FolderAddOutlined />}
-              onClick={() => setCreateFolderModal(true)}
-              disabled={isSearching}
-            >
-              Create Folder
-            </Button>
-          </Col>
+          {/* Only show the Create Folder button when inside a main folder (not at root level) */}
+          {!isRoot && (
+            <Col>
+              <Button
+                icon={<FolderAddOutlined />}
+                onClick={() => setCreateFolderModal(true)}
+                disabled={isSearching}
+              >
+                Create Folder
+              </Button>
+            </Col>
+          )}
           <Col>
             <Tooltip title="Refresh Files">
               <Button
@@ -1384,6 +1399,10 @@ const FileManager = () => {
           pagination={false}
           scroll={{ y: '49vh' }}  // for content scrolling on table
           rowSelection={rowSelection}
+          onRow={(record) => ({
+            onClick: () => handleRowClick(record),
+            style: { cursor: 'pointer' } // Change cursor to pointer to indicate clickable
+          })}
         />
 
         {/* Use the CommonModals component for standard modals */}
