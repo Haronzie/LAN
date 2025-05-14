@@ -1,0 +1,106 @@
+/* CSS to ensure action buttons are visible on all rows */
+
+/* Column width adjustments */
+/* Name column - 1st column */
+.ant-table-wrapper .ant-table-thead > tr > th:first-child,
+.ant-table-wrapper .ant-table-tbody > tr > td:first-child {
+  min-width: 300px !important;
+  max-width: 300px !important;
+  width: 300px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Type column - 2nd column */
+.ant-table-wrapper .ant-table-thead > tr > th:nth-child(2),
+.ant-table-wrapper .ant-table-tbody > tr > td:nth-child(2) {
+  width: 80px !important;
+  min-width: 80px !important;
+  max-width: 80px !important;
+}
+
+/* Size column - 3rd column */
+.ant-table-wrapper .ant-table-thead > tr > th:nth-child(3),
+.ant-table-wrapper .ant-table-tbody > tr > td:nth-child(3) {
+  width: 100px !important;
+  min-width: 100px !important;
+  max-width: 100px !important;
+}
+
+/* Make sure the action column has enough width */
+.ant-table-wrapper .ant-table-thead > tr > th:last-child,
+.ant-table-wrapper .ant-table-tbody > tr > td:last-child {
+  min-width: 260px !important;
+  width: 260px !important;
+  white-space: nowrap !important;
+  text-align: left !important;
+  padding-right: 8px !important;
+}
+
+/* Ensure buttons are visible and properly aligned */
+.ant-table-wrapper .ant-table-tbody > tr > td:last-child .ant-space {
+  display: flex !important;
+  visibility: visible !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+}
+
+/* Make sure each button is visible */
+.ant-table-wrapper .ant-table-tbody > tr > td:last-child .ant-btn {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  margin-right: 4px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 4px 8px !important;
+}
+
+/* Ensure icons are visible */
+.ant-table-wrapper .ant-table-tbody > tr > td:last-child .anticon {
+  display: inline-flex !important;
+  visibility: visible !important;
+}
+
+/* Make sure the tooltip is visible */
+.ant-tooltip {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Ensure the action column is not hidden */
+.ant-table-cell-scrollbar {
+  box-shadow: none !important;
+}
+
+/* Fix for Ant Design v5 and ensure horizontal scrolling */
+.ant-table-wrapper .ant-table-container {
+  overflow-x: auto !important;
+}
+
+/* Ensure the table has proper layout */
+.ant-table {
+  min-width: 740px !important; /* 300 + 80 + 100 + 260 = 740px */
+  table-layout: fixed !important;
+}
+
+/* Force the action column to be visible */
+.ant-table-wrapper th:last-child,
+.ant-table-wrapper td:last-child {
+  position: sticky !important;
+  right: 0 !important;
+  z-index: 2 !important;
+  background-color: #fff !important;
+}
+
+/* Make sure buttons are visible on hover */
+.ant-table-tbody > tr:hover td:last-child .ant-space {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Ensure action buttons have proper spacing */
+.ant-table-tbody > tr > td:last-child .ant-space-item {
+  margin-right: 4px !important;
+}

@@ -1,0 +1,53 @@
+/* Fix for action buttons visibility */
+.ant-table-cell .ant-space {
+  display: flex !important;
+  visibility: visible !important;
+}
+
+.ant-table-cell .ant-btn {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.ant-table-cell .ant-space-item {
+  display: inline-flex !important;
+  visibility: visible !important;
+}
+
+/* Ensure tooltips are visible */
+.ant-tooltip {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Fix for action column */
+.ant-table-cell:last-child {
+  visibility: visible !important;
+  display: table-cell !important;
+  white-space: nowrap;
+}
+
+/* Ensure buttons have proper spacing */
+.ant-btn {
+  margin-right: 4px;
+}
+
+/* Make sure icons are visible */
+.anticon {
+  display: inline-flex !important;
+  visibility: visible !important;
+}
+
+/* Fix for Ant Design v5 specific issues */
+.ant-table-wrapper .ant-table-tbody > tr > td:last-child {
+  padding-right: 16px !important;
+  min-width: 200px; /* Ensure enough space for action buttons */
+}
+
+/* Ensure action column has enough width */
+.ant-table-wrapper .ant-table-thead > tr > th:last-child {
+  min-width: 200px;
+}

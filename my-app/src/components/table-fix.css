@@ -1,0 +1,82 @@
+/* Table styles to ensure action buttons are visible */
+
+/* Make sure the action column has enough width */
+.ant-table-wrapper .ant-table-thead > tr > th:last-child,
+.ant-table-wrapper .ant-table-tbody > tr > td:last-child {
+  min-width: 300px !important;
+  width: 300px !important;
+  white-space: nowrap !important;
+  text-align: left !important;
+  padding-right: 16px !important;
+}
+
+/* Ensure buttons are visible and properly aligned */
+.ant-table-wrapper .ant-table-tbody > tr > td:last-child .ant-space {
+  display: flex !important;
+  visibility: visible !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+}
+
+/* Make sure each button is visible */
+.ant-table-wrapper .ant-table-tbody > tr > td:last-child .ant-btn {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  margin-right: 8px !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Ensure icons are visible */
+.ant-table-wrapper .ant-table-tbody > tr > td:last-child .anticon {
+  display: inline-flex !important;
+  visibility: visible !important;
+}
+
+/* Make sure the tooltip is visible */
+.ant-tooltip {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Ensure the action column is not hidden */
+.ant-table-cell-scrollbar {
+  box-shadow: none !important;
+}
+
+/* Fix for Ant Design v5 */
+.ant-table-wrapper .ant-table-container {
+  overflow-x: auto !important;
+}
+
+/* Ensure the table has enough width */
+.ant-table {
+  min-width: 800px !important;
+}
+
+/* Specific class for our table with action buttons */
+.action-buttons-table .ant-table-tbody > tr > td:last-child {
+  min-width: 300px !important;
+  width: 300px !important;
+  padding-right: 16px !important;
+  text-align: left !important;
+  overflow: visible !important;
+}
+
+/* Make sure the action buttons are visible */
+.action-buttons-table .ant-table-tbody > tr > td:last-child .ant-space {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  flex-wrap: nowrap !important;
+}
+
+/* Force the action column to be visible */
+.action-buttons-table th:last-child,
+.action-buttons-table td:last-child {
+  position: sticky !important;
+  right: 0 !important;
+  z-index: 2 !important;
+  background-color: #fff !important;
+}

@@ -20,6 +20,8 @@ import {
   Spin,
 
 } from 'antd';
+import './fix-actions.css';
+import './table-fix.css';
 import {
   Upload,
   UploadOutlined,
@@ -45,6 +47,7 @@ import path from 'path-browserify';
 import debounce from 'lodash.debounce';
 import CommonModals from './common/CommonModals';
 import BatchActionsMenu from './common/BatchActionsMenu';
+import ActionButtons from './common/ActionButtons';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
 
 const { Content } = Layout;
@@ -1051,56 +1054,25 @@ const OperationDashboard = () => {
     {
       title: 'Actions',
       key: 'actions',
-      render: (record) => {
-        const isOwner = record.type === 'directory'
-          ? record.created_by === currentUser
-          : record.uploader === currentUser;
-
-        return (
-          <Space>
-            {record.type === 'file' && (
-              <Tooltip title="View File">
-                <Button icon={<FileOutlined />} onClick={() => handleViewFile(record)} />
-              </Tooltip>
-            )}
-            <Tooltip title={record.type === 'directory' ? 'Download Folder' : 'Download File'}>
-              <Button icon={<DownloadOutlined />} onClick={() => record.type === 'directory'
-                ? handleDownloadFolder(record.name)
-                : isSearching
-                  ? handleDownload(record.name, record.directory)
-                  : handleDownload(record.name)}
-              />
-            </Tooltip>
-            {isOwner && (
-              <Tooltip title="Rename">
-                <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
-              </Tooltip>
-            )}
-            <Tooltip title="Copy">
-              <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
-            </Tooltip>
-            {isOwner && (
-              <Tooltip title="Move">
-                <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
-              </Tooltip>
-            )}
-            {isOwner && (
-              <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
-                <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
-              </Tooltip>
-            )}
-            <Tooltip title="More Info">
-            <Button
-              icon={<MoreOutlined />}
-              onClick={() => {
-                setSelectedFileInfo(record);
-                setInfoModalVisible(true);
-              }}
-            />
-          </Tooltip>
-          </Space>
-        );
-      }
+      width: 300, // Set a fixed width for the actions column
+      render: (record) => (
+        <ActionButtons
+          record={record}
+          currentUser={currentUser}
+          isSearching={isSearching}
+          onViewFile={handleViewFile}
+          onDownload={handleDownload}
+          onDownloadFolder={handleDownloadFolder}
+          onRename={handleRename}
+          onCopy={handleCopy}
+          onMove={handleMove}
+          onDelete={handleDelete}
+          onMoreInfo={(record) => {
+            setSelectedFileInfo(record);
+            setInfoModalVisible(true);
+          }}
+        />
+      )
     }
   ];
 
@@ -1291,8 +1263,10 @@ const OperationDashboard = () => {
           rowKey={(record) => (record.id ? record.id : record.name + record.type)}
           loading={loading}
           pagination={false}
-          scroll={{ y: '49vh' }}  // for content scrolling on table
+          scroll={{ y: '49vh', x: '100%' }}  // for content scrolling on table
           rowSelection={rowSelection}
+          className="action-buttons-table"
+          tableLayout="fixed"
           onRow={(record) => ({
             onClick: () => handleRowClick(record),
             style: { cursor: 'pointer' } // Change cursor to pointer to indicate clickable

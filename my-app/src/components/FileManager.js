@@ -42,6 +42,7 @@ import BatchActionsMenu from './common/BatchActionsMenu';
 import SelectionHeader from './common/SelectionHeader';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
 import CommonModals from './common/CommonModals';
+import './action-buttons-fix.css'; // Import CSS to fix action buttons
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -1091,6 +1092,8 @@ const FileManager = () => {
         title: 'Name',
         dataIndex: 'name',
         key: 'name',
+        width: 300, // Fixed width for Name column
+        ellipsis: true, // Add ellipsis for long names
         render: (name, record) => {
           if (record.type === 'directory') {
             return (
@@ -1107,12 +1110,14 @@ const FileManager = () => {
         title: 'Type',
         dataIndex: 'type',
         key: 'type',
+        width: 80, // Reduced width for Type column
         render: (type) => (type === 'directory' ? 'Folder' : 'File')
       },
       {
         title: 'Size',
         dataIndex: 'formattedSize',
         key: 'size',
+        width: 100, // Reduced width for Size column
         render: (size, record) => (record.type === 'directory' ? '--' : size)
       }
     ];
@@ -1197,46 +1202,40 @@ const FileManager = () => {
 
             {!isSearchResult && (
               <>
-                {/* Hide action buttons at root level and main folder level */}
-                {isInsideMainFolder && (
-                  <>
-                    <Tooltip title="Rename">
-                      <Button
-                        icon={<EditOutlined />}
-                        onClick={() => {
-                          setSelectedItem(record);
-                          setRenameNewName(record.name);
-                          setRenameModalVisible(true);
-                        }}
-                      />
-                    </Tooltip>
+                {/* Show action buttons for all folders and files */}
+                <Tooltip title="Rename">
+                  <Button
+                    icon={<EditOutlined />}
+                    onClick={() => {
+                      setSelectedItem(record);
+                      setRenameNewName(record.name);
+                      setRenameModalVisible(true);
+                    }}
+                  />
+                </Tooltip>
 
-                    <Tooltip title="Copy">
-                      <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
-                    </Tooltip>
+                <Tooltip title="Copy">
+                  <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
+                </Tooltip>
 
-                    <Tooltip title="Move">
-                      <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
-                    </Tooltip>
+                <Tooltip title="Move">
+                  <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
+                </Tooltip>
 
-                    <Tooltip title="Delete">
-                      <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
-                    </Tooltip>
-                  </>
-                )}
+                <Tooltip title="Delete">
+                  <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+                </Tooltip>
 
-                {/* Only show the three-dots menu when inside a main folder (not at root level) */}
-                {isInsideMainFolder && (
-                  <Tooltip title="More Info">
-                    <Button
-                      icon={<MoreOutlined />}
-                      onClick={() => {
-                        setSelectedFileInfo(record);
-                        setInfoModalVisible(true);
-                      }}
-                    />
-                  </Tooltip>
-                )}
+                {/* Show the more info button for all items */}
+                <Tooltip title="More Info">
+                  <Button
+                    icon={<MoreOutlined />}
+                    onClick={() => {
+                      setSelectedFileInfo(record);
+                      setInfoModalVisible(true);
+                    }}
+                  />
+                </Tooltip>
               </>
             )}
           </Space>
@@ -1392,6 +1391,7 @@ const FileManager = () => {
         )}
 
         <Table
+          className="action-buttons-table"
           columns={columns}
           dataSource={sortedItems}
           rowKey={(record) => record.id || record.name + record.type}
