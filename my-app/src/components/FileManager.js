@@ -122,6 +122,7 @@ function getPathSegments(p) {
 }
 
 function formatFileSize(size) {
+  if (size === undefined || size === null) return 'Unknown';
   if (size === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(size) / Math.log(1024));
@@ -206,15 +207,21 @@ const FileManager = () => {
       const normalizePath = path => (path || '').replace(/^\/|\/$/g, '').toLowerCase()
 
       .filter(f => normalizePath(f.directory) === normalizePath(currentPath))
-      .map(f => ({
-        name: f.name,
-        type: 'file',
-        size: f.size,
-        formattedSize: formatFileSize(f.size),
-        contentType: f.contentType,
-        uploader: f.uploader,
-        id: f.id
-      }));
+      .map(f => {
+        // Ensure size is a valid number
+        const fileSize = typeof f.size === 'number' ? f.size :
+                        (f.size ? parseInt(f.size, 10) : null);
+
+        return {
+          name: f.name,
+          type: 'file',
+          size: fileSize,
+          formattedSize: formatFileSize(fileSize),
+          contentType: f.contentType,
+          uploader: f.uploader,
+          id: f.id
+        };
+      });
 
 
       let directories = dirsRes.data || [];
@@ -330,10 +337,17 @@ const FileManager = () => {
       const response = await axios.get(searchUrl, { withCredentials: true });
 
       // Format the search results
-      const formattedResults = (response.data || []).map(item => ({
-        ...item,
-        formattedSize: formatFileSize(item.size || 0),
-      }));
+      const formattedResults = (response.data || []).map(item => {
+        // Ensure size is a valid number
+        const fileSize = typeof item.size === 'number' ? item.size :
+                        (item.size ? parseInt(item.size, 10) : null);
+
+        return {
+          ...item,
+          size: fileSize,
+          formattedSize: formatFileSize(fileSize),
+        };
+      });
 
       // Sort the results: directories first (in ascending order), then files (in ascending order)
       const sortedResults = [...formattedResults].sort((a, b) => {
@@ -1118,7 +1132,10 @@ const FileManager = () => {
         dataIndex: 'formattedSize',
         key: 'size',
         width: 100, // Reduced width for Size column
-        render: (size, record) => (record.type === 'directory' ? '--' : size)
+        render: (size, record) => {
+          if (record.type === 'directory') return '--';
+          return size || formatFileSize(record.size) || 'Unknown';
+        }
       }
     ];
 
