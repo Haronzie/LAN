@@ -42,6 +42,7 @@ import path from 'path-browserify';
 import debounce from 'lodash.debounce';
 import CommonModals from './common/CommonModals';
 import BatchActionsMenu from './common/BatchActionsMenu';
+import ActionButtons from './common/ActionButtons';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
 
 const { Content } = Layout;
@@ -52,6 +53,7 @@ const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`
  * Helper to format file sizes in human-readable form.
  */
 function formatFileSize(size) {
+  if (size === undefined || size === null) return 'Unknown';
   if (size === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(size) / Math.log(1024));
@@ -189,14 +191,20 @@ const TrainingDashboard = () => {
       const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
       // 2) Fetch files (including confidential flag and authorized users if available)
       const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
-      const fetchedFiles = (fileRes.data || []).map((f) => ({
-        id: f.id,
-        name: f.name,
-        type: 'file',
-        size: f.size,
-        formattedSize: formatFileSize(f.size),
-        uploader: f.uploader
-      }));
+      const fetchedFiles = (fileRes.data || []).map((f) => {
+        // Ensure size is a valid number
+        const fileSize = typeof f.size === 'number' ? f.size :
+                        (f.size ? parseInt(f.size, 10) : null);
+
+        return {
+          id: f.id,
+          name: f.name,
+          type: 'file',
+          size: fileSize,
+          formattedSize: formatFileSize(fileSize),
+          uploader: f.uploader
+        };
+      });
 
       setItems([...fetchedDirs, ...fetchedFiles]);
     } catch (error) {
@@ -247,10 +255,17 @@ const TrainingDashboard = () => {
       const response = await axios.get(searchUrl, { withCredentials: true });
 
       // Format the search results
-      const formattedResults = (response.data || []).map(item => ({
-        ...item,
-        formattedSize: formatFileSize(item.size || 0),
-      }));
+      const formattedResults = (response.data || []).map(item => {
+        // Ensure size is a valid number
+        const fileSize = typeof item.size === 'number' ? item.size :
+                        (item.size ? parseInt(item.size, 10) : null);
+
+        return {
+          ...item,
+          size: fileSize,
+          formattedSize: formatFileSize(fileSize),
+        };
+      });
 
       setSearchResults(formattedResults);
       console.log(`🔍 Search found ${formattedResults.length} results`);
@@ -982,92 +997,32 @@ const TrainingDashboard = () => {
       title: 'Size',
       dataIndex: 'formattedSize',
       key: 'size',
-      render: (size, record) => (record.type === 'directory' ? '--' : size)
+      render: (size, record) => {
+        if (record.type === 'directory') return '--';
+        return size || formatFileSize(record.size) || 'Unknown';
+      }
     },
     {
       title: 'Actions',
       key: 'actions',
-      render: (record) => {
-        const isOwner =
-          record.type === 'directory'
-            ? record.created_by === currentUser
-            : record.uploader === currentUser;
-        const canManageAccess =
-          record.type === 'file' && record.confidential && (isOwner || isAdmin);
-
-        return (
-          <Space>
-            {/* View File (if user has access) */}
-            {record.type === 'file' && (
-  <Tooltip title="View File">
-    <Button icon={<FileOutlined />} onClick={(e) => {
-      e.stopPropagation(); // Prevent row click event
-      handleViewFile(record);
-    }} />
-  </Tooltip>
-)}
-            {/* Download (show lock if no access) */}
-            {record.type === 'file' && (
-  <Tooltip title="Download">
-    <Button
-      icon={<DownloadOutlined />}
-      onClick={(e) => {
-        e.stopPropagation(); // Prevent row click event
-        isSearching
-          ? handleDownload(record.name, record.directory)
-          : handleDownload(record.name);
-      }}
-    />
-  </Tooltip>
-)}
-            {record.type === 'directory' && (
-              <Tooltip title="Download Folder">
-                <Button
-                  icon={<DownloadOutlined />}
-                  onClick={(e) => {
-                    e.stopPropagation(); // Prevent row click event
-                    handleDownloadFolder(record.name);
-                  }}
-                />
-              </Tooltip>
-            )}
-            {/* Rename (owner only) */}
-            {isOwner && (
-              <Tooltip title="Rename">
-                <Button icon={<EditOutlined />} onClick={(e) => {
-                  e.stopPropagation(); // Prevent row click event
-                  handleRename(record);
-                }} />
-              </Tooltip>
-            )}
-            {/* Copy (allowed for all visible files) */}
-            <Tooltip title="Copy">
-              <Button icon={<CopyOutlined />} onClick={(e) => {
-                e.stopPropagation(); // Prevent row click event
-                handleCopy(record);
-              }} />
-            </Tooltip>
-            {/* Move (owner only) */}
-            {isOwner && (
-              <Tooltip title="Move">
-                <Button icon={<SwapOutlined />} onClick={(e) => {
-                  e.stopPropagation(); // Prevent row click event
-                  handleMove(record);
-                }} />
-              </Tooltip>
-            )}
-            {/* Delete (owner only) */}
-            {isOwner && (
-              <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
-                <Button danger icon={<DeleteOutlined />} onClick={(e) => {
-                  e.stopPropagation(); // Prevent row click event
-                  handleDelete(record);
-                }} />
-              </Tooltip>
-            )}
-          </Space>
-        );
-      }
+      render: (record) => (
+        <ActionButtons
+          record={record}
+          currentUser={currentUser}
+          isSearching={isSearching}
+          onViewFile={handleViewFile}
+          onDownload={handleDownload}
+          onDownloadFolder={handleDownloadFolder}
+          onRename={handleRename}
+          onCopy={handleCopy}
+          onMove={handleMove}
+          onDelete={handleDelete}
+          onMoreInfo={(record) => {
+            // Add more info functionality if needed
+            message.info(`File: ${record.name}`);
+          }}
+        />
+      )
     }
   ];
 
