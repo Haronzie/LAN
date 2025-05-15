@@ -511,7 +511,8 @@ const FileManager = () => {
         const formData = new FormData();
         formData.append('file', file);
         console.log("Sending folder:", normalizedPath);
-        formData.append('directory', normalizedPath.toLowerCase()); // ✅ updated
+        formData.append('directory', normalizedPath); // Fixed: removed toLowerCase()
+        formData.append('container', mainFolder || 'operation'); // Added container parameter
         if (overwrite) formData.append('overwrite', 'true');
         if (fileUploadMessage.trim() && targetUsername.trim()) {
           formData.append('message', fileUploadMessage.trim());
@@ -526,7 +527,8 @@ const FileManager = () => {
           message.success(`${file.name} uploaded`);
         } catch (error) {
           console.error('Upload failed:', error);
-          message.error(`Upload failed for ${file.name}`);
+          const errorMessage = error.response?.data?.error || `Upload failed for ${file.name}`;
+          message.error(errorMessage);
         }
       };
 
@@ -547,7 +549,7 @@ const FileManager = () => {
     } else {
       const formData = new FormData();
       uploadingFile.forEach((file) => formData.append('files', file));
-      formData.append('directory', normalizedPath.to); // ✅ updated
+      formData.append('directory', normalizedPath); // ✅ updated
       formData.append('container', mainFolder || 'operation'); // ✅ updated using mainFolder variable
       formData.append('overwrite', 'false');
       formData.append('skip', 'false');
@@ -569,7 +571,8 @@ const FileManager = () => {
         message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
       } catch (error) {
         console.error('Bulk upload failed:', error);
-        message.error('Bulk upload failed');
+        const errorMessage = error.response?.data?.error || 'Bulk upload failed';
+        message.error(errorMessage);
       }
     }
 
@@ -668,14 +671,11 @@ const FileManager = () => {
 
   // Handle row click for the entire table row
   const handleRowClick = (record) => {
-    // If it's a directory, navigate into it
+    // Only respond to directory clicks
     if (record.type === 'directory') {
       handleFolderClick(record.name);
     }
-    // If it's a file, open it for preview
-    else if (record.type === 'file') {
-      handleViewFile(record);
-    }
+    // Files are handled by their action buttons, not by row clicks
   };
 
   const handleRenameConfirm = async () => {
@@ -1160,7 +1160,8 @@ const FileManager = () => {
               <Tooltip title="View File">
                 <Button
                   icon={<FileOutlined />}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent row click event
                     if (isSearchResult) {
                       // For search results, we need to use the directory from the result
                       const encodedDir = encodeURIComponent(record.directory || '');
@@ -1179,7 +1180,8 @@ const FileManager = () => {
               <Tooltip title="Download">
                 <Button
                   icon={<DownloadOutlined />}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent row click event
                     if (isSearchResult) {
                       // For search results, we need to use the directory from the result
                       const encodedDir = encodeURIComponent(record.directory || '');
@@ -1196,7 +1198,10 @@ const FileManager = () => {
 
             {record.type === 'directory' && (
               <Tooltip title="Download Folder">
-                <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
+                <Button icon={<DownloadOutlined />} onClick={(e) => {
+                  e.stopPropagation(); // Prevent row click event
+                  handleDownloadFolder(record.name);
+                }} />
               </Tooltip>
             )}
 
@@ -1206,7 +1211,8 @@ const FileManager = () => {
                 <Tooltip title="Rename">
                   <Button
                     icon={<EditOutlined />}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent row click event
                       setSelectedItem(record);
                       setRenameNewName(record.name);
                       setRenameModalVisible(true);
@@ -1215,22 +1221,32 @@ const FileManager = () => {
                 </Tooltip>
 
                 <Tooltip title="Copy">
-                  <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
+                  <Button icon={<CopyOutlined />} onClick={(e) => {
+                    e.stopPropagation(); // Prevent row click event
+                    handleCopy(record);
+                  }} />
                 </Tooltip>
 
                 <Tooltip title="Move">
-                  <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
+                  <Button icon={<SwapOutlined />} onClick={(e) => {
+                    e.stopPropagation(); // Prevent row click event
+                    handleMove(record);
+                  }} />
                 </Tooltip>
 
                 <Tooltip title="Delete">
-                  <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+                  <Button danger icon={<DeleteOutlined />} onClick={(e) => {
+                    e.stopPropagation(); // Prevent row click event
+                    handleDelete(record);
+                  }} />
                 </Tooltip>
 
                 {/* Show the more info button for all items */}
                 <Tooltip title="More Info">
                   <Button
                     icon={<MoreOutlined />}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent row click event
                       setSelectedFileInfo(record);
                       setInfoModalVisible(true);
                     }}
@@ -1394,14 +1410,14 @@ const FileManager = () => {
           className="action-buttons-table"
           columns={columns}
           dataSource={sortedItems}
-          rowKey={(record) => record.id || record.name + record.type}
+          rowKey={(record) => `${record.type}-${record.id || record.name}`}
           loading={loading}
           pagination={false}
           scroll={{ y: '49vh' }}  // for content scrolling on table
           rowSelection={rowSelection}
           onRow={(record) => ({
             onClick: () => handleRowClick(record),
-            style: { cursor: 'pointer' } // Change cursor to pointer to indicate clickable
+            style: { cursor: record.type === 'directory' ? 'pointer' : 'default' } // Only show pointer cursor for directories
           })}
         />
 
@@ -1509,7 +1525,9 @@ const FileManager = () => {
           customRequest={async ({ file, onProgress, onSuccess, onError }) => {
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('directory', currentPath.replace(/\\/g, '/')); // ✅ Normalize path
+            const normalizedPath = currentPath.replace(/\\/g, '/');
+            formData.append('directory', normalizedPath); // Normalize path
+            formData.append('container', mainFolder || 'operation'); // Added container parameter
 
             if (fileUploadMessage.trim() && targetUsername.trim()) {
               formData.append('message', fileUploadMessage.trim());
@@ -1529,7 +1547,8 @@ const FileManager = () => {
               fetchItems();
             } catch (err) {
               console.error('Upload error:', err);
-              message.error(`${file.name} upload failed`);
+              const errorMessage = err.response?.data?.error || `${file.name} upload failed`;
+              message.error(errorMessage);
               onError(err);
             }
           }}

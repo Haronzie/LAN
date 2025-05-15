@@ -810,14 +810,11 @@ const ResearchDashboard = () => {
 
   // Handle row click for the entire table row
   const handleRowClick = (record) => {
-    // If it's a directory, navigate into it
+    // Only respond to directory clicks
     if (record.type === 'directory') {
       handleFolderClick(record.name);
     }
-    // If it's a file, open it for preview
-    else if (record.type === 'file') {
-      handleViewFile(record);
-    }
+    // Files are handled by their action buttons, not by row clicks
   };
 
   // ----------------------------------
@@ -904,25 +901,40 @@ const ResearchDashboard = () => {
             )}
             {record.type === 'directory' && (
               <Tooltip title="Download Folder">
-                <Button icon={<DownloadOutlined />} onClick={() => handleDownloadFolder(record.name)} />
+                <Button icon={<DownloadOutlined />} onClick={(e) => {
+                  e.stopPropagation(); // Prevent row click event
+                  handleDownloadFolder(record.name);
+                }} />
               </Tooltip>
             )}
             {isOwner && (
               <Tooltip title="Rename">
-                <Button icon={<EditOutlined />} onClick={() => handleRename(record)} />
+                <Button icon={<EditOutlined />} onClick={(e) => {
+                  e.stopPropagation(); // Prevent row click event
+                  handleRename(record);
+                }} />
               </Tooltip>
             )}
             <Tooltip title="Copy">
-              <Button icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
+              <Button icon={<CopyOutlined />} onClick={(e) => {
+                e.stopPropagation(); // Prevent row click event
+                handleCopy(record);
+              }} />
             </Tooltip>
             {isOwner && (
               <Tooltip title="Move">
-                <Button icon={<SwapOutlined />} onClick={() => handleMove(record)} />
+                <Button icon={<SwapOutlined />} onClick={(e) => {
+                  e.stopPropagation(); // Prevent row click event
+                  handleMove(record);
+                }} />
               </Tooltip>
             )}
             {isOwner && (
               <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
-                <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+                <Button danger icon={<DeleteOutlined />} onClick={(e) => {
+                  e.stopPropagation(); // Prevent row click event
+                  handleDelete(record);
+                }} />
               </Tooltip>
             )}
           </Space>
@@ -1145,7 +1157,7 @@ const ResearchDashboard = () => {
           rowSelection={rowSelection}
           onRow={(record) => ({
             onClick: () => handleRowClick(record),
-            style: { cursor: 'pointer' } // Change cursor to pointer to indicate clickable
+            style: { cursor: record.type === 'directory' ? 'pointer' : 'default' } // Only show pointer cursor for directories
           })}
         />
 

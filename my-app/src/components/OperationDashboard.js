@@ -693,14 +693,11 @@ const OperationDashboard = () => {
 
   // Handle row click for the entire table row
   const handleRowClick = (record) => {
-    // If it's a directory, navigate into it
+    // Only respond to directory clicks
     if (record.type === 'directory') {
       handleFolderClick(record.name);
     }
-    // If it's a file, open it for preview
-    else if (record.type === 'file') {
-      handleViewFile(record);
-    }
+    // Files are handled by their action buttons, not by row clicks
   };
 
   const handleRename = (record) => {
@@ -1269,7 +1266,7 @@ const OperationDashboard = () => {
           tableLayout="fixed"
           onRow={(record) => ({
             onClick: () => handleRowClick(record),
-            style: { cursor: 'pointer' } // Change cursor to pointer to indicate clickable
+            style: { cursor: record.type === 'directory' ? 'pointer' : 'default' } // Only show pointer cursor for directories
           })}
         />
         <Modal

@@ -40,56 +40,73 @@ const ActionButtons = ({
     <Space style={{ display: 'flex', visibility: 'visible' }}>
       {record.type === 'file' && (
         <Tooltip title="View File">
-          <Button 
-            icon={<FileOutlined />} 
-            onClick={() => onViewFile(record)} 
+          <Button
+            icon={<FileOutlined />}
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click event
+              onViewFile(record);
+            }}
             style={buttonStyle}
           />
         </Tooltip>
       )}
       <Tooltip title={record.type === 'directory' ? 'Download Folder' : 'Download File'}>
-        <Button 
-          icon={<DownloadOutlined />} 
-          onClick={() => record.type === 'directory'
-            ? onDownloadFolder(record.name)
-            : isSearching
-              ? onDownload(record.name, record.directory)
-              : onDownload(record.name)
-          }
+        <Button
+          icon={<DownloadOutlined />}
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent row click event
+            record.type === 'directory'
+              ? onDownloadFolder(record.name)
+              : isSearching
+                ? onDownload(record.name, record.directory)
+                : onDownload(record.name);
+          }}
           style={buttonStyle}
         />
       </Tooltip>
       {isOwner && (
         <Tooltip title="Rename">
-          <Button 
-            icon={<EditOutlined />} 
-            onClick={() => onRename(record)} 
+          <Button
+            icon={<EditOutlined />}
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click event
+              onRename(record);
+            }}
             style={buttonStyle}
           />
         </Tooltip>
       )}
       <Tooltip title="Copy">
-        <Button 
-          icon={<CopyOutlined />} 
-          onClick={() => onCopy(record)} 
+        <Button
+          icon={<CopyOutlined />}
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent row click event
+            onCopy(record);
+          }}
           style={buttonStyle}
         />
       </Tooltip>
       {isOwner && (
         <Tooltip title="Move">
-          <Button 
-            icon={<SwapOutlined />} 
-            onClick={() => onMove(record)} 
+          <Button
+            icon={<SwapOutlined />}
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click event
+              onMove(record);
+            }}
             style={buttonStyle}
           />
         </Tooltip>
       )}
       {isOwner && (
         <Tooltip title={record.type === 'directory' ? 'Delete Folder' : 'Delete File'}>
-          <Button 
-            danger 
-            icon={<DeleteOutlined />} 
-            onClick={() => onDelete(record)} 
+          <Button
+            danger
+            icon={<DeleteOutlined />}
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click event
+              onDelete(record);
+            }}
             style={buttonStyle}
           />
         </Tooltip>
@@ -97,7 +114,10 @@ const ActionButtons = ({
       <Tooltip title="More Info">
         <Button
           icon={<MoreOutlined />}
-          onClick={() => onMoreInfo(record)}
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent row click event
+            onMoreInfo(record);
+          }}
           style={buttonStyle}
         />
       </Tooltip>
