@@ -1205,53 +1205,58 @@ const FileManager = () => {
               </Tooltip>
             )}
 
-            {!isSearchResult && (
+            {!isSearchResult && !isRoot && !(record.type === 'directory' && isRoot) && (
               <>
-                {/* Show action buttons for all folders and files */}
-                <Tooltip title="Rename">
-                  <Button
-                    icon={<EditOutlined />}
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent row click event
-                      setSelectedItem(record);
-                      setRenameNewName(record.name);
-                      setRenameModalVisible(true);
-                    }}
-                  />
-                </Tooltip>
+                {/* Show action buttons for all folders and files except main folders */}
+                {/* Check if it's not one of the main folders */}
+                {!(record.type === 'directory' && (record.name === 'Research' || record.name === 'Training' || record.name === 'Operation')) && (
+                  <>
+                    <Tooltip title="Rename">
+                      <Button
+                        icon={<EditOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent row click event
+                          setSelectedItem(record);
+                          setRenameNewName(record.name);
+                          setRenameModalVisible(true);
+                        }}
+                      />
+                    </Tooltip>
 
-                <Tooltip title="Copy">
-                  <Button icon={<CopyOutlined />} onClick={(e) => {
-                    e.stopPropagation(); // Prevent row click event
-                    handleCopy(record);
-                  }} />
-                </Tooltip>
+                    <Tooltip title="Copy">
+                      <Button icon={<CopyOutlined />} onClick={(e) => {
+                        e.stopPropagation(); // Prevent row click event
+                        handleCopy(record);
+                      }} />
+                    </Tooltip>
 
-                <Tooltip title="Move">
-                  <Button icon={<SwapOutlined />} onClick={(e) => {
-                    e.stopPropagation(); // Prevent row click event
-                    handleMove(record);
-                  }} />
-                </Tooltip>
+                    <Tooltip title="Move">
+                      <Button icon={<SwapOutlined />} onClick={(e) => {
+                        e.stopPropagation(); // Prevent row click event
+                        handleMove(record);
+                      }} />
+                    </Tooltip>
 
-                <Tooltip title="Delete">
-                  <Button danger icon={<DeleteOutlined />} onClick={(e) => {
-                    e.stopPropagation(); // Prevent row click event
-                    handleDelete(record);
-                  }} />
-                </Tooltip>
+                    <Tooltip title="Delete">
+                      <Button danger icon={<DeleteOutlined />} onClick={(e) => {
+                        e.stopPropagation(); // Prevent row click event
+                        handleDelete(record);
+                      }} />
+                    </Tooltip>
 
-                {/* Show the more info button for all items */}
-                <Tooltip title="More Info">
-                  <Button
-                    icon={<MoreOutlined />}
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent row click event
-                      setSelectedFileInfo(record);
-                      setInfoModalVisible(true);
-                    }}
-                  />
-                </Tooltip>
+                    {/* Show the more info button for all items */}
+                    <Tooltip title="More Info">
+                      <Button
+                        icon={<MoreOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent row click event
+                          setSelectedFileInfo(record);
+                          setInfoModalVisible(true);
+                        }}
+                      />
+                    </Tooltip>
+                  </>
+                )}
               </>
             )}
           </Space>
