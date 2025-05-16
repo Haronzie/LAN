@@ -12,11 +12,17 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: "postgres://postgres:myung@postgres:5432/Cdrrmo?sslmode=disable"
+    volumes:
+      - ./LANFileSharingSystem:/app
+    working_dir: /app
+    command: go run ./cmd/server
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - cdrrmo-network
 
   frontend:
     build:
@@ -29,6 +35,8 @@ services:
         condition: service_healthy
     environment:
       REACT_APP_API_BASE: "http://backend:8080"
+    networks:
+      - cdrrmo-network
 
   postgres:
     image: postgres:15
@@ -47,6 +55,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - cdrrmo-network
 
 volumes:
   postgres_data:
+
+networks:
+  cdrrmo-network:
+    driver: bridge
