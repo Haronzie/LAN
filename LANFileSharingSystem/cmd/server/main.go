@@ -389,7 +389,7 @@ func main() {
 	router.Use(middleware.RateLimitMiddleware)
 
 	// Wrap your router with CORS middleware.
-	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS") //dynamic
 	var allowedOrigins []string
 	if allowedOriginsEnv != "" {
 		for _, origin := range strings.Split(allowedOriginsEnv, ",") {
