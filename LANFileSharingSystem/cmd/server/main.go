@@ -389,7 +389,10 @@ func main() {
 
 	// Wrap your router with CORS middleware.
 	corsRouter := handlers.CORS(
-		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
+		handlers.AllowedOrigins([]string{
+			"http://localhost:3000",
+			"http://192.168.1.84:3000",
+		}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}),
 		handlers.AllowedHeaders([]string{"Content-Type", "Authorization", "X-Requested-With"}),
 		handlers.AllowCredentials(),
