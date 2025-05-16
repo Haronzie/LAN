@@ -6,19 +6,21 @@ services:
       context: ./LANFileSharingSystem
     container_name: cdrrmo-backend
     ports:
-      - "8080:8080"
+      - "${PORT}:${PORT}"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: "postgres://postgres:myung@postgres:5432/Cdrrmo?sslmode=disable"
+      DATABASE_URL: ${DATABASE_URL}
       ALLOWED_ORIGINS: "http://localhost:3000,http://192.168.1.84:3000"
+      SESSION_KEY: ${SESSION_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     volumes:
       - ./LANFileSharingSystem:/app
     working_dir: /app
     command: go run ./cmd/server
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -35,7 +37,7 @@ services:
       backend:
         condition: service_healthy
     environment:
-      REACT_APP_API_BASE: "http://backend:8080"
+      REACT_APP_API_BASE: "http://backend:${PORT}"
     networks:
       - cdrrmo-network
 
@@ -44,15 +46,15 @@ services:
     container_name: cdrrmo-postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: myung
-      POSTGRES_DB: Cdrrmo
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5

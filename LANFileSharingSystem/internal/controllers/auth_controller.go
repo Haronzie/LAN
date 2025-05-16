@@ -40,10 +40,18 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
-	if req.Username == "" || req.Password == "" {
-		models.RespondError(w, http.StatusBadRequest, "Username and password cannot be empty")
+	req.ConfirmPassword = strings.TrimSpace(req.ConfirmPassword)
+
+	if req.Username == "" || req.Password == "" || req.ConfirmPassword == "" {
+		models.RespondError(w, http.StatusBadRequest, "Username and passwords cannot be empty")
 		return
 	}
+
+	if req.Password != req.ConfirmPassword {
+		models.RespondError(w, http.StatusBadRequest, "Password and confirm password do not match")
+		return
+	}
+
 	if ok, msg := isStrongPassword(req.Password); !ok {
 		models.RespondError(w, http.StatusBadRequest, msg)
 		return
@@ -62,12 +70,11 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// First user is admin; next users are regular.
+	// First user is admin; others are regular users.
 	role := "admin"
 	if ac.App.AdminExists() {
 		role = "user"
 	}
-	// Debug log: show assigned role
 	fmt.Printf("Registering user %s with role %s (AdminExists: %v)\n", req.Username, role, ac.App.AdminExists())
 
 	newUser := models.User{
@@ -81,10 +88,7 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Debug log: show assigned role
-	fmt.Printf("Registered user %s with role %s\n", newUser.Username, newUser.Role)
-
-	// ✅ NO SESSION CREATION HERE.
+	ac.App.LogActivity(fmt.Sprintf("User '%s' registered with role '%s'", newUser.Username, newUser.Role))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("%s registered successfully", newUser.Username),
@@ -110,24 +114,27 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	req.Password = strings.TrimSpace(req.Password)
 
 	user, err := ac.App.GetUserByUsername(req.Username)
+	if err != nil || !models.CheckPasswordHash(req.Password, user.Password) {
+		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
+		return
+	}
+
+	session, err := ac.App.Store.Get(r, "session")
 	if err != nil {
-		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving session")
 		return
 	}
 
-	if !models.CheckPasswordHash(req.Password, user.Password) {
-		models.RespondError(w, http.StatusUnauthorized, "Invalid username or password")
-		return
-	}
-
-	session, _ := ac.App.Store.Get(r, "session") // ✅ just ignore error
 	session.Values["username"] = user.Username
 	session.Values["role"] = user.Role
 	session.Options = ac.App.DefaultSessionOptions()
+
 	if err := session.Save(r, w); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error saving session")
 		return
 	}
+
+	ac.App.LogActivity(fmt.Sprintf("User '%s' logged in", user.Username))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message":  "Login successful",
@@ -201,7 +208,6 @@ func (ac *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// ✅ Enforce admin-only access
 	if user.Role != "admin" {
 		models.RespondError(w, http.StatusForbidden, "Only admins are allowed to reset password via this endpoint")
 		return
@@ -231,7 +237,7 @@ func (ac *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// isStrongPassword checks if the given password meets your strength criteria.
+// isStrongPassword checks if the given password meets strength criteria.
 func isStrongPassword(pw string) (bool, string) {
 	var (
 		hasMinLen  = false
@@ -241,7 +247,6 @@ func isStrongPassword(pw string) (bool, string) {
 		hasSpecial = false
 	)
 
-	// Adjust minimum length as needed
 	if len(pw) >= 8 {
 		hasMinLen = true
 	}

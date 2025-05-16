@@ -5,6 +5,8 @@ import { Column } from '@ant-design/charts';
 import { UserOutlined, FileOutlined, TeamOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const { Text, Title } = Typography;
 
 const AdminDashboardHome = () => {
@@ -15,10 +17,12 @@ const AdminDashboardHome = () => {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const navigate = useNavigate();
 
+  const getRole = (user) => user.role || user.userRole || user.type || '';
+
   const totalUsers = users.length;
   const totalFiles = files.length;
-  const adminCount = users.filter((u) => u.role === 'admin').length;
-  const regularCount = users.filter((u) => u.role === 'user').length;
+  const adminCount = users.filter((u) => getRole(u) === 'admin').length;
+  const regularCount = users.filter((u) => getRole(u) === 'user').length;
 
   const userStats = [
     { type: 'Admin Users', count: adminCount },
@@ -52,10 +56,9 @@ const AdminDashboardHome = () => {
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
-      const res = await axios.get('/users', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
+      console.log("Fetched users:", res.data); // helpful for debugging
       setUsers(Array.isArray(res.data) ? res.data : []);
-      // Debug: log users to console
-      console.log("Fetched users:", res.data);
     } catch {
       message.error('Error fetching users');
     } finally {
@@ -92,7 +95,9 @@ const AdminDashboardHome = () => {
 
   return (
     <div style={{ padding: '16px 24px', maxWidth: 1200, margin: '0 auto' }}>
-      <Title level={3} style={{ marginBottom: 24, textAlign: 'center' }}></Title>
+      <Title level={3} style={{ marginBottom: 24, textAlign: 'center' }}>
+        Welcome to the Admin Dashboard
+      </Title>
       
       <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={12} md={8}>
