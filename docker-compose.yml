@@ -12,6 +12,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: "postgres://postgres:myung@postgres:5432/Cdrrmo?sslmode=disable"
+      ALLOWED_ORIGINS: "http://localhost:3000,http://192.168.1.84:3000"
     volumes:
       - ./LANFileSharingSystem:/app
     working_dir: /app

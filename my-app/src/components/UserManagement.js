@@ -138,7 +138,7 @@ const UserManagement = () => {
     try {
       const values = await addUserForm.validateFields();
       await axios.post(
-        '/user/add',
+        `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080'}/user/add`,
         { username: values.username, password: values.password },
         { withCredentials: true }
       );

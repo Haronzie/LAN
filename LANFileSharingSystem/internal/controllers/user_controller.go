@@ -48,13 +48,13 @@ func (uc *UserController) ListUsers(w http.ResponseWriter, r *http.Request) {
 // user_controller.go
 
 func (uc *UserController) AddUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
 	user, err := uc.App.GetUserFromSession(r)
 	if err != nil || user.Role != "admin" {
 		models.RespondError(w, http.StatusForbidden, "Forbidden: Only admins can add users")
-		return
-	}
-	if r.Method != http.MethodPost {
-		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
 
@@ -363,4 +363,62 @@ func (uc *UserController) GetFirstAdmin(w http.ResponseWriter, r *http.Request) 
 
 	// Return the first admin's info (e.g., username and role)
 	models.RespondJSON(w, http.StatusOK, firstAdmin)
+}
+
+// Register handles user registration (for first admin)
+func (uc *UserController) Register(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	var req models.AddUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+	if req.Username == "" || req.Password == "" {
+		models.RespondError(w, http.StatusBadRequest, "Username and password cannot be empty")
+		return
+	}
+	if ok, msg := isStrongPassword(req.Password); !ok {
+		models.RespondError(w, http.StatusBadRequest, msg)
+		return
+	}
+
+	// Only allow registration if no admin exists
+	if uc.App.AdminExists() {
+		models.RespondError(w, http.StatusForbidden, "Admin already exists")
+		return
+	}
+
+	// Check if user already exists
+	_, err := uc.App.GetUserByUsername(req.Username)
+	if err == nil {
+		models.RespondError(w, http.StatusBadRequest, fmt.Sprintf("User '%s' already exists", req.Username))
+		return
+	}
+
+	hashedPass, err := models.HashPassword(req.Password)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error hashing password")
+		return
+	}
+
+	newUser := models.User{
+		Username: req.Username,
+		Password: hashedPass,
+		Role:     "admin", // <-- FIRST USER IS ADMIN
+	}
+	if err := uc.App.CreateUser(newUser); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error adding user")
+		return
+	}
+
+	uc.App.LogActivity(fmt.Sprintf("First admin '%s' registered.", req.Username))
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Admin '%s' has been registered successfully", req.Username),
+	})
 }

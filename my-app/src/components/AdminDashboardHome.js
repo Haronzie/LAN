@@ -54,6 +54,8 @@ const AdminDashboardHome = () => {
     try {
       const res = await axios.get('/users', { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
+      // Debug: log users to console
+      console.log("Fetched users:", res.data);
     } catch {
       message.error('Error fetching users');
     } finally {

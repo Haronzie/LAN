@@ -6,6 +6,9 @@ import { useNavigate } from 'react-router-dom';
 
 const { Title } = Typography;
 
+// ✅ Define the API base URL
+const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const passwordPolicyContent = (
   <div style={{ maxWidth: 250 }}>
     <p>Your password should have:</p>
@@ -27,7 +30,7 @@ const RegisterForm = () => {
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exists');
+        const res = await axios.get(`${API_BASE}/admin-exists`, { withCredentials: true });
         setAdminExists(res.data.exists);
       } catch (error) {
         message.error('Failed to check admin status.');
@@ -40,11 +43,20 @@ const RegisterForm = () => {
 
   const onFinish = async (values) => {
     try {
-      const res = await axios.post('/register', values, { withCredentials: true });
+      const res = await axios.post(`${API_BASE}/register`, values, { withCredentials: true });
       message.success(res.data.message);
-      navigate('/login');
+      // Automatically log in after registration
+      await axios.post(`${API_BASE}/login`, {
+        username: values.username,
+        password: values.password
+      }, { withCredentials: true });
+      // Save username to localStorage for adminName
+      localStorage.setItem('username', values.username);
+      navigate('/admin');
     } catch (error) {
-      message.error(error.response?.data?.error || 'Registration failed');
+      // Log the error for debugging
+      console.error('Registration error:', error, error?.response);
+      message.error(error.response?.data?.error || error.message || 'Registration failed');
     }
   };
 
@@ -78,14 +90,14 @@ const RegisterForm = () => {
           </Form.Item>
 
           <Form.Item
-            label={
+            label={(
               <span>
                 Password
                 <Popover content={passwordPolicyContent} title="Password Requirements">
                   <InfoCircleOutlined style={{ marginLeft: 8, color: '#1890ff', cursor: 'pointer' }} />
                 </Popover>
               </span>
-            }
+            )}
             name="password"
             rules={[{ required: true, message: 'Please input your password!' }]}
             hasFeedback

@@ -387,12 +387,6 @@ func main() {
 		ws.ServeWs(hub, w, r)
 	})
 
-	// Add correlation ID middleware before other middlewares.
-	router.Use(correlationIDMiddleware)
-
-	// Add rate limit middleware (applied only once now).
-	router.Use(middleware.RateLimitMiddleware)
-
 	// Wrap your router with CORS middleware.
 	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
 	var allowedOrigins []string
@@ -408,19 +402,27 @@ func main() {
 		allowedOrigins = []string{"http://localhost:3000"}
 	}
 
+	// Log allowed origins for debugging CORS issues
+	logger.WithField("allowedOrigins", allowedOrigins).Info("CORS allowed origins")
+
 	corsRouter := handlers.CORS(
 		handlers.AllowedOrigins(allowedOrigins),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization", "X-Requested-With"}),
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization", "X-Requested-With", "Origin", "X-Correlation-ID"}),
 		handlers.AllowCredentials(),
 		handlers.ExposedHeaders([]string{"Content-Length"}),
 	)(router)
+
+	// Add correlation ID middleware before other middlewares.
+	// Apply middlewares to the CORS-wrapped router.
+	corsRouterWithMiddleware := correlationIDMiddleware(corsRouter)
+	corsRouterWithMiddleware = middleware.RateLimitMiddleware(corsRouterWithMiddleware)
 
 	// Start the HTTP server.
 	logger.WithField("function", "main").
 		WithField("port", cfg.Port).
 		Info("Starting server")
-	if err := http.ListenAndServe(":"+cfg.Port, corsRouter); err != nil {
+	if err := http.ListenAndServe(":"+cfg.Port, corsRouterWithMiddleware); err != nil {
 		// SERVER_ERR: Server startup errors.
 		wrappedErr := fmt.Errorf("server failed on port %s: %w", cfg.Port, err)
 		logger.WithField("function", "main").

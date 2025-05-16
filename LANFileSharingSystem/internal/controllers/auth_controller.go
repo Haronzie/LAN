@@ -67,6 +67,8 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 	if ac.App.AdminExists() {
 		role = "user"
 	}
+	// Debug log: show assigned role
+	fmt.Printf("Registering user %s with role %s (AdminExists: %v)\n", req.Username, role, ac.App.AdminExists())
 
 	newUser := models.User{
 		Username: req.Username,
@@ -78,6 +80,9 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		models.RespondError(w, http.StatusInternalServerError, "Error registering user")
 		return
 	}
+
+	// Debug log: show assigned role
+	fmt.Printf("Registered user %s with role %s\n", newUser.Username, newUser.Role)
 
 	// ✅ NO SESSION CREATION HERE.
 
