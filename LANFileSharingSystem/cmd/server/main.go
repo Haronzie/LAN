@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"LANFileSharingSystem/internal/config"
 	"LANFileSharingSystem/internal/controllers"
@@ -388,11 +389,22 @@ func main() {
 	router.Use(middleware.RateLimitMiddleware)
 
 	// Wrap your router with CORS middleware.
+	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+	var allowedOrigins []string
+	if allowedOriginsEnv != "" {
+		for _, origin := range strings.Split(allowedOriginsEnv, ",") {
+			trimmed := strings.TrimSpace(origin)
+			if trimmed != "" {
+				allowedOrigins = append(allowedOrigins, trimmed)
+			}
+		}
+	} else {
+		// fallback to localhost if not set
+		allowedOrigins = []string{"http://localhost:3000"}
+	}
+
 	corsRouter := handlers.CORS(
-		handlers.AllowedOrigins([]string{
-			"http://localhost:3000",
-			"http://192.168.1.84:3000",
-		}),
+		handlers.AllowedOrigins(allowedOrigins),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}),
 		handlers.AllowedHeaders([]string{"Content-Type", "Authorization", "X-Requested-With"}),
 		handlers.AllowCredentials(),
