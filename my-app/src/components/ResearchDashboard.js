@@ -27,7 +27,8 @@ import {
   SwapOutlined,
   FileOutlined,
   ReloadOutlined,
-  MoreOutlined
+  MoreOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -36,6 +37,7 @@ import debounce from 'lodash.debounce';
 import CommonModals from './common/CommonModals';
 import BatchActionsMenu from './common/BatchActionsMenu';
 import ActionButtons from './common/ActionButtons';
+import UploadConflictModal from './common/UploadConflictModal';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
 
 const { Content } = Layout;
@@ -523,44 +525,220 @@ const ResearchDashboard = () => {
     const normalizedPath = currentPath.split(/[/\\]/).map(part => part.toLowerCase()).join('/');
     console.log("Uploading to directory:", normalizedPath); // for debugging
 
+    // Check for existing files
     try {
+      const existingFilesRes = await axios.get(`/files?directory=${encodeURIComponent(normalizedPath)}`, {
+        withCredentials: true
+      });
+      const existingFiles = existingFilesRes.data || [];
+      const existingNames = existingFiles.map(f => f.name);
+
       if (uploadingFiles.length === 1) {
-        const formData = new FormData();
-        formData.append('file', uploadingFiles[0]);
-        formData.append('directory', normalizedPath);
-        formData.append('container', 'research');
+        const file = uploadingFiles[0];
+        const fileExists = existingNames.includes(file.name);
 
-        await axios.post('/upload', formData, {
-          withCredentials: true,
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        const uploadSingle = async (overwrite, skip = false) => {
+          if (skip) {
+            message.info(`Skipped uploading ${file.name}`);
+            setUploadModalVisible(false);
+            return;
+          }
 
-        message.success('File uploaded successfully');
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('directory', normalizedPath);
+          formData.append('container', 'research');
+
+          // Only one of these should be true at a time
+          if (overwrite) formData.append('overwrite', 'true');
+          else if (skip) formData.append('skip', 'true');
+
+          try {
+            const response = await axios.post('/upload', formData, {
+              withCredentials: true,
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            // Get the destination from the response or fallback to the current path
+            const destination = response.data?.destination || normalizedPath;
+
+            let successMessage;
+            if (overwrite) {
+              successMessage = `Overwritten ${file.name} in ${destination}`;
+            } else {
+              successMessage = `Uploaded ${file.name} to ${destination}`;
+            }
+
+            message.success(successMessage);
+            setUploadModalVisible(false);
+            setUploadingFiles([]);
+            fetchItems(); // refresh file list
+            fetchAllFilesWithMessages(); // refresh files with messages
+          } catch (error) {
+            console.error('Upload failed:', error);
+            const errorMessage = error.response?.data?.error || `Upload failed for ${file.name}`;
+            message.error(errorMessage);
+          }
+        };
+
+        if (fileExists) {
+          // Show conflict resolution modal
+          Modal.info({
+            title: `A file named '${file.name}' already exists.`,
+            icon: <ExclamationCircleOutlined />,
+            content: (
+              <div>
+                <p>Choose an action for this file:</p>
+                <div style={{ marginTop: '16px' }}>
+                  <Button
+                    danger
+                    style={{ width: '100%', marginBottom: '8px' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      uploadSingle(true);
+                    }}
+                  >
+                    A. Overwrite - Replace the existing file
+                  </Button>
+
+                  <Button
+                    type="primary"
+                    style={{ width: '100%', marginBottom: '8px' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      uploadSingle(false);
+                    }}
+                  >
+                    B. Keep Both - Save with a new name
+                  </Button>
+
+                  <Button
+                    style={{ width: '100%' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      uploadSingle(false, true);
+                    }}
+                  >
+                    C. Skip - Cancel this upload
+                  </Button>
+                </div>
+              </div>
+            ),
+            okButtonProps: { style: { display: 'none' } }, // Hide the default OK button
+          });
+        } else {
+          await uploadSingle(false);
+        }
       } else {
-        const formData = new FormData();
-        uploadingFiles.forEach(file => formData.append('files', file));
-        formData.append('directory', normalizedPath);
-        formData.append('container', 'research');
-        formData.append('overwrite', 'false');
-        formData.append('skip', 'false');
+        // For multiple files, check if any of them already exist
+        const conflictingFiles = uploadingFiles.filter(file => existingNames.includes(file.name));
 
-        const res = await axios.post('/bulk-upload', formData, {
-          withCredentials: true,
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        const handleBulkUpload = async (overwrite, skip) => {
+          const formData = new FormData();
+          uploadingFiles.forEach(file => formData.append('files', file));
+          formData.append('directory', normalizedPath);
+          formData.append('container', 'research');
 
-        const results = res.data || [];
-        const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
-        const skipped = results.filter(r => r.status === 'skipped').length;
-        const failed = results.filter(r => r.status.startsWith('error')).length;
+          // Only one of these should be true at a time
+          if (overwrite) {
+            formData.append('overwrite', 'true');
+            formData.append('skip', 'false');
+          } else if (skip) {
+            formData.append('overwrite', 'false');
+            formData.append('skip', 'true');
+          } else {
+            formData.append('overwrite', 'false');
+            formData.append('skip', 'false');
+          }
 
-        message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+          try {
+            const res = await axios.post('/bulk-upload', formData, {
+              withCredentials: true,
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            const results = res.data || [];
+            const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
+            const skipped = results.filter(r => r.status === 'skipped').length;
+            const failed = results.filter(r => r.status.startsWith('error')).length;
+
+            let successMessage;
+            if (overwrite && uploaded > 0) {
+              successMessage = `${uploaded} file(s) overwritten, ${skipped} skipped, ${failed} failed`;
+            } else if (skip && skipped > 0) {
+              successMessage = `${uploaded} file(s) uploaded, ${skipped} skipped, ${failed} failed`;
+            } else {
+              successMessage = `${uploaded} file(s) uploaded, ${skipped} skipped, ${failed} failed`;
+            }
+
+            message.success(successMessage);
+            setUploadModalVisible(false);
+            setUploadingFiles([]);
+            fetchItems(); // refresh file list
+            fetchAllFilesWithMessages(); // refresh files with messages
+          } catch (error) {
+            console.error('Bulk upload failed:', error);
+            const errorMessage = error.response?.data?.error || 'Bulk upload failed';
+            message.error(errorMessage);
+          }
+        };
+
+        if (conflictingFiles.length > 0) {
+          // If there are conflicts, show a modal asking what to do with all conflicting files
+          Modal.info({
+            title: `${conflictingFiles.length} file(s) already exist`,
+            icon: <ExclamationCircleOutlined />,
+            content: (
+              <div>
+                <p>The following files already exist:</p>
+                <ul style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #eee', padding: '8px 16px' }}>
+                  {conflictingFiles.map(file => (
+                    <li key={file.uid}>{file.name}</li>
+                  ))}
+                </ul>
+                <p style={{ marginTop: '16px' }}>Choose an action for these files:</p>
+                <div style={{ marginTop: '16px' }}>
+                  <Button
+                    danger
+                    style={{ width: '100%', marginBottom: '8px' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      handleBulkUpload(true, false);
+                    }}
+                  >
+                    A. Overwrite All - Replace existing files
+                  </Button>
+
+                  <Button
+                    type="primary"
+                    style={{ width: '100%', marginBottom: '8px' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      handleBulkUpload(false, false);
+                    }}
+                  >
+                    B. Keep Both - Save with new names
+                  </Button>
+
+                  <Button
+                    style={{ width: '100%' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      handleBulkUpload(false, true);
+                    }}
+                  >
+                    C. Skip Conflicts - Upload only new files
+                  </Button>
+                </div>
+              </div>
+            ),
+            okButtonProps: { style: { display: 'none' } }, // Hide the default OK button
+          });
+        } else {
+          // If no conflicts, proceed with upload
+          await handleBulkUpload(false, false);
+        }
       }
-
-      setUploadModalVisible(false);
-      setUploadingFiles([]);
-      fetchItems(); // refresh file list
-      fetchAllFilesWithMessages(); // refresh files with messages
     } catch (error) {
       console.error('Upload error:', error);
       message.error(error.response?.data?.error || 'Upload failed');
@@ -646,20 +824,7 @@ const ResearchDashboard = () => {
   // ----------------------------------
   // Copy
   // ----------------------------------
-  const handleCopyConfirm = async () => {
-    if (!copyNewName.trim()) {
-      message.error('New name cannot be empty');
-      return;
-    }
-    if (!copyItem) {
-      message.error('No item selected to copy');
-      return;
-    }
-    if (!selectedMainFolder) {
-      message.error('Please select a main folder');
-      return;
-    }
-
+  const finalizeCopy = async (overwrite = false) => {
     try {
       // Determine the destination path based on main folder and subfolder
       let destinationPath = selectedMainFolder;
@@ -675,7 +840,8 @@ const ResearchDashboard = () => {
             source_parent: currentPath,
             new_name: copyNewName,
             destination_parent: destinationPath,
-            container: 'research'
+            container: 'research',
+            overwrite: overwrite
           },
           { withCredentials: true }
         );
@@ -686,7 +852,8 @@ const ResearchDashboard = () => {
             source_file: copyItem.name,
             new_file_name: copyNewName,
             destination_folder: destinationPath,
-            container: 'research'
+            container: 'research',
+            overwrite: overwrite
           },
           { withCredentials: true }
         );
@@ -719,9 +886,126 @@ const ResearchDashboard = () => {
     }
   };
 
+  const handleCopyConfirm = async () => {
+    if (!copyNewName.trim()) {
+      message.error('New name cannot be empty');
+      return;
+    }
+    if (!copyItem) {
+      message.error('No item selected to copy');
+      return;
+    }
+    if (!selectedMainFolder) {
+      message.error('Please select a main folder');
+      return;
+    }
+
+    try {
+      // Determine the destination path based on main folder and subfolder
+      let destinationPath = selectedMainFolder;
+      if (selectedSubFolder) {
+        destinationPath = `${selectedMainFolder}/${selectedSubFolder}`;
+      }
+
+      // Check if file with same name exists at destination
+      if (copyItem.type === 'file') {
+        const res = await axios.get(`/files?directory=${encodeURIComponent(destinationPath)}`, {
+          withCredentials: true
+        });
+
+        const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+        const nameExists = existingNames.includes(copyNewName);
+
+        if (nameExists) {
+          // Import dynamically to avoid circular dependencies
+          const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+
+          FileOperationConflictModal({
+            fileName: copyNewName,
+            destinationPath: destinationPath,
+            operation: 'copy',
+            onOverwrite: async () => {
+              await finalizeCopy(true);
+            },
+            onKeepBoth: async () => {
+              await finalizeCopy(false);
+            },
+            onSkip: () => {
+              message.info(`Skipped copying ${copyItem.name}`);
+              setCopyModalVisible(false);
+            }
+          });
+          return;
+        }
+      }
+
+      // If no conflict, proceed with copy
+      await finalizeCopy(false);
+    } catch (error) {
+      console.error('Copy error:', error);
+      message.error('Error checking for conflict or copying file');
+    }
+  };
+
   // ----------------------------------
   // Move
   // ----------------------------------
+  const finalizeMove = async (overwrite = false) => {
+    try {
+      if (moveItem.type === 'directory') {
+        await axios.post(
+          '/directory/move',
+          {
+            name: moveItem.name,
+            old_parent: currentPath,
+            new_parent: moveDestination,
+            container: 'research'
+          },
+          { withCredentials: true }
+        );
+      } else {
+        console.log('Moving file with:', {
+          id: moveItem.id.toString(),
+          filename: moveItem.name,
+          old_parent: currentPath,
+          new_parent: moveDestination,
+          overwrite: overwrite,
+          container: 'research'
+        });
+
+        await axios.post(
+          '/move-file',
+          {
+            id: moveItem.id.toString(),
+            filename: moveItem.name,
+            old_parent: currentPath,
+            new_parent: moveDestination,
+            overwrite: overwrite,
+            container: 'research'
+          },
+          { withCredentials: true }
+        );
+      }
+      message.success(`Moved '${moveItem.name}' successfully`);
+      setMoveModalVisible(false);
+      setMoveItem(null);
+      setMoveDestination('');
+      fetchItems();
+      fetchDirectories();
+    } catch (error) {
+      console.error('Move error:', error);
+
+      // Handle specific error cases
+      if (error.response?.data?.error === "Source file does not exist on disk") {
+        message.error('The file no longer exists on the server. Please refresh the page.');
+      } else {
+        message.error(error.response?.data?.error || 'Error moving item');
+      }
+
+      setMoveModalVisible(false);
+    }
+  };
+
   const handleMoveConfirm = async () => {
     if (!moveDestination.trim()) {
       message.error('Please select a destination folder');
@@ -746,6 +1030,37 @@ const ResearchDashboard = () => {
           if (!fileExists) {
             throw new Error("Source file not found. It may have been deleted or moved.");
           }
+
+          // Check if file with same name exists at destination
+          const destRes = await axios.get(`/files?directory=${encodeURIComponent(moveDestination)}`, {
+            withCredentials: true
+          });
+
+          const existingNames = Array.isArray(destRes.data) ? destRes.data.map(f => f.name) : [];
+          const nameExists = existingNames.includes(moveItem.name);
+
+          if (nameExists) {
+            // Import dynamically to avoid circular dependencies
+            const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+
+            FileOperationConflictModal({
+              fileName: moveItem.name,
+              destinationPath: moveDestination,
+              operation: 'move',
+              onOverwrite: async () => {
+                await finalizeMove(true);
+              },
+              onKeepBoth: async () => {
+                await finalizeMove(false);
+              },
+              onSkip: () => {
+                message.info(`Skipped moving ${moveItem.name}`);
+                setMoveModalVisible(false);
+              }
+            });
+            return;
+          }
+
         } catch (checkErr) {
           console.error('File existence check failed:', checkErr);
           message.error('Could not verify file existence. Please refresh and try again.');
@@ -754,55 +1069,11 @@ const ResearchDashboard = () => {
         }
       }
 
-      if (moveItem.type === 'directory') {
-        await axios.post(
-          '/directory/move',
-          {
-            name: moveItem.name,
-            old_parent: currentPath,
-            new_parent: moveDestination,
-            container: 'research'
-          },
-          { withCredentials: true }
-        );
-      } else {
-        console.log('Moving file with:', {
-          id: moveItem.id.toString(),
-          filename: moveItem.name,
-          old_parent: currentPath,
-          new_parent: moveDestination,
-          overwrite: false
-        });
-
-        await axios.post(
-          '/move-file',
-          {
-            id: moveItem.id.toString(),
-            filename: moveItem.name,
-            old_parent: currentPath,
-            new_parent: moveDestination,
-            overwrite: false,
-            container: 'research'
-          },
-          { withCredentials: true }
-        );
-      }
-      message.success(`Moved '${moveItem.name}' successfully`);
-      setMoveModalVisible(false);
-      setMoveItem(null);
-      setMoveDestination('');
-      fetchItems();
-      fetchDirectories();
+      // If no conflict or it's a directory, proceed with move
+      await finalizeMove(false);
     } catch (error) {
       console.error('Move error:', error);
-
-      // Handle specific error cases
-      if (error.response?.data?.error === "Source file does not exist on disk") {
-        message.error('The file no longer exists on the server. Please refresh the page.');
-      } else {
-        message.error(error.response?.data?.error || 'Error moving item');
-      }
-
+      message.error(error.response?.data?.error || 'Error moving item');
       setMoveModalVisible(false);
     }
   };

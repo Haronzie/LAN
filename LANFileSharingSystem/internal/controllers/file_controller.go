@@ -132,8 +132,9 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 
 	skip := r.FormValue("skip") == "true"
 	if getErr == nil && skip {
-		models.RespondJSON(w, http.StatusOK, map[string]string{
-			"message": fmt.Sprintf("File '%s' skipped (already exists)", rawFileName),
+		models.RespondJSON(w, http.StatusOK, map[string]interface{}{
+			"message":     fmt.Sprintf("File '%s' skipped (already exists)", rawFileName),
+			"destination": targetDir,
 		})
 		return
 	}
@@ -143,7 +144,8 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		ext := filepath.Ext(rawFileName)
 		counter := 1
 		for {
-			uniqueFileName := fmt.Sprintf("%s_%d%s", baseName, counter, ext)
+			// Use (1) format instead of _1 format
+			uniqueFileName := fmt.Sprintf("%s (%d)%s", baseName, counter, ext)
 			rel := filepath.Join(targetDir, uniqueFileName)
 			if _, err := fc.App.GetFileRecordByPath(rel); err != nil {
 				relativePath = rel
@@ -221,8 +223,9 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 			fc.App.NotificationHub.Broadcast(notification)
 		}
 
-		models.RespondJSON(w, http.StatusOK, map[string]string{
-			"message": fmt.Sprintf("File '%s' updated (version %d) successfully", rawFileName, newVer),
+		models.RespondJSON(w, http.StatusOK, map[string]interface{}{
+			"message":     fmt.Sprintf("File '%s' updated (version %d) successfully", rawFileName, newVer),
+			"destination": targetDir,
 		})
 		return
 	}
@@ -260,8 +263,9 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	models.RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": fmt.Sprintf("File '%s' uploaded (version 1) successfully", rawFileName),
-		"file_id": fileID,
+		"message":     fmt.Sprintf("File '%s' uploaded (version 1) successfully", rawFileName),
+		"file_id":     fileID,
+		"destination": targetDir,
 	})
 }
 
@@ -1523,7 +1527,8 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 					ext := filepath.Ext(rawFileName)
 					counter := 1
 					for {
-						altName := fmt.Sprintf("%s_%d%s", base, counter, ext)
+						// Use (1) format instead of _1 format
+						altName := fmt.Sprintf("%s (%d)%s", base, counter, ext)
 						altPath := filepath.Join(targetDir, altName)
 						if _, err := fc.App.GetFileRecordByPath(altPath); err != nil {
 							relativePath = altPath
