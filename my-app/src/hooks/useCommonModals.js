@@ -153,7 +153,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
           { withCredentials: true }
         );
       }
-      message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
+      message.success(`Copied ${copyItem.name} to ${selectedDestination || currentPath}`);
       setCopyModalVisible(false);
       setCopyItem(null);
       setCopyNewName('');

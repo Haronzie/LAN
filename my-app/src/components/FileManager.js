@@ -162,6 +162,10 @@ const FileManager = () => {
   const [targetUsername, setTargetUsername] = useState('');
   const [selectedFileInfo, setSelectedFileInfo] = useState(null);
   const [infoModalVisible, setInfoModalVisible] = useState(false);
+  // Add state variables for copy operation
+  const [copySelectedMainFolder, setCopySelectedMainFolder] = useState('');
+  const [copySelectedSubFolder, setCopySelectedSubFolder] = useState('');
+  const [copySubFolders, setCopySubFolders] = useState([]);
   // const [selectedFiles, setSelectedFiles] = useState([]); // Uncomment if needed for future enhancements
 
   // const navigate = useNavigate(); // Uncomment if navigation is needed
@@ -733,8 +737,15 @@ const FileManager = () => {
     const name = record.name;
     const ext = path.extname(name);
     const base = path.basename(name, ext);
-    const targetDir = selectedDestination || currentPath;
-    const suggested = await generateSuggestedName(base, ext, targetDir);
+
+    // Reset state for copy operation
+    setCopySelectedMainFolder('');
+    setCopySelectedSubFolder('');
+    setCopySubFolders([]);
+    setSelectedDestination('');
+
+    // Generate suggested name based on current path
+    const suggested = await generateSuggestedName(base, ext, currentPath);
     setCopyItem(record);
     setCopyNewName(suggested);
     setCopyModalVisible(true);
@@ -749,44 +760,67 @@ const FileManager = () => {
       message.error('No item selected to copy');
       return;
     }
+    if (!copySelectedMainFolder) {
+      message.error('Please select a main folder');
+      return;
+    }
 
     try {
-      const targetDir = selectedDestination || currentPath;
+      // Determine the destination path based on main folder and subfolder
+      let destinationPath = copySelectedMainFolder;
+      if (copySelectedSubFolder) {
+        destinationPath = `${copySelectedMainFolder}/${copySelectedSubFolder}`;
+      }
 
       if (copyItem.type === 'directory') {
         await axios.post(`${BASE_URL}/directory/copy`, {
           source_name: copyItem.name,
           source_parent: currentPath,
           new_name: copyNewName,
-          destination_parent: targetDir
+          destination_parent: destinationPath
         }, { withCredentials: true });
 
-        message.success(`Directory '${copyItem.name}' copied as '${copyNewName}'`);
+        message.success(`Copied ${copyItem.name} to ${copySelectedMainFolder}${copySelectedSubFolder ? '/' + copySelectedSubFolder : ''}`);
         fetchFolderTree();
 
       } else {
-        const res = await axios.post(`${BASE_URL}/copy-file`, {
+        await axios.post(`${BASE_URL}/copy-file`, {
           source_file: copyItem.name,
           new_file_name: copyNewName,
-          destination_folder: targetDir
+          destination_folder: destinationPath
         }, { withCredentials: true });
 
-        const finalName = res.data.final_name || copyNewName;
-
-        message.success(`File '${copyItem.name}' copied as '${finalName}'`);
+        message.success(`Copied ${copyItem.name} to ${copySelectedMainFolder}${copySelectedSubFolder ? '/' + copySelectedSubFolder : ''}`);
       }
 
       setCopyModalVisible(false);
       setCopyItem(null);
       setCopyNewName('');
+      setCopySelectedMainFolder('');
+      setCopySelectedSubFolder('');
+      setSelectedDestination('');
       fetchItems();
     } catch (err) {
       console.error('Copy error:', err);
-      message.error(err.response?.data?.error || 'Error copying item');
+
+      // Handle specific error cases
+      if (err.response?.data?.error === "Source file not found on disk") {
+        message.error('The file no longer exists on the server. Please refresh the page and try again.');
+      } else if (err.response?.data?.error === "Permission denied when accessing source file") {
+        message.error('Permission denied when accessing the file. Please contact your administrator.');
+      } else if (err.response?.data?.error === "Invalid encryption key configuration") {
+        message.error('There is an issue with the file encryption system. Please contact your administrator.');
+      } else if (err.response?.data?.error && err.response.data.error.includes("Failed to read from source file")) {
+        message.error('The file appears to be corrupted or cannot be read. Please try uploading it again.');
+      } else if (err.response?.data?.error && err.response.data.error.includes("Failed to open source file")) {
+        message.error('The file cannot be accessed. This might be due to a temporary issue. Please try again in a moment.');
+      } else {
+        message.error(err.response?.data?.error || 'Error copying item');
+      }
     }
   };
 
-  const fetchSubFolders = async (mainFolder) => {
+  const fetchSubFolders = async (mainFolder, forCopy = false) => {
     try {
       const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
         { withCredentials: true }
@@ -801,11 +835,19 @@ const FileManager = () => {
         }))
         .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
 
-      setSubFolders(folders);
+      if (forCopy) {
+        setCopySubFolders(folders);
+      } else {
+        setSubFolders(folders);
+      }
     } catch (error) {
       console.error('Error fetching subfolders:', error);
       message.error('Failed to load subfolders');
-      setSubFolders([]);
+      if (forCopy) {
+        setCopySubFolders([]);
+      } else {
+        setSubFolders([]);
+      }
     }
   };
 
@@ -815,7 +857,7 @@ const FileManager = () => {
     setMoveDestination(value); // Set the destination to the main folder by default
 
     if (value) {
-      fetchSubFolders(value);
+      fetchSubFolders(value, false);
     } else {
       setSubFolders([]);
     }
@@ -829,6 +871,30 @@ const FileManager = () => {
     } else {
       // If no subfolder is selected, use just the main folder
       setMoveDestination(selectedMainFolder);
+    }
+  };
+
+  // Handler functions for copy operation
+  const handleCopyMainFolderChange = (value) => {
+    setCopySelectedMainFolder(value);
+    setCopySelectedSubFolder('');
+    setSelectedDestination(value); // Set the destination to the main folder by default
+
+    if (value) {
+      fetchSubFolders(value, true);
+    } else {
+      setCopySubFolders([]);
+    }
+  };
+
+  const handleCopySubFolderChange = (value) => {
+    setCopySelectedSubFolder(value);
+    if (value) {
+      // Combine main folder and subfolder for the full path
+      setSelectedDestination(`${copySelectedMainFolder}/${value}`);
+    } else {
+      // If no subfolder is selected, use just the main folder
+      setSelectedDestination(copySelectedMainFolder);
     }
   };
 
@@ -1469,6 +1535,11 @@ const FileManager = () => {
           handleCopyConfirm={handleCopyConfirm}
           directoryItems={items}
           currentPath={currentPath}
+          copySelectedMainFolder={copySelectedMainFolder}
+          copySelectedSubFolder={copySelectedSubFolder}
+          copySubFolders={copySubFolders}
+          handleCopyMainFolderChange={handleCopyMainFolderChange}
+          handleCopySubFolderChange={handleCopySubFolderChange}
 
           // Move Modal props
           moveModalVisible={moveModalVisible}

@@ -152,7 +152,7 @@ const UserFileManager = () => {
         },
         { withCredentials: true }
       );
-      message.success('File copied successfully');
+      message.success(`Copied ${selectedFile} to ${copyDestination}`);
       setCopyModalVisible(false);
       fetchFiles();
     } catch (error) {

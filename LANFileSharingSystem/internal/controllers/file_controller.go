@@ -575,7 +575,145 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	srcPath := filepath.Join("Cdrrmo", oldFR.FilePath)
+	// Try different path formats to handle case sensitivity and path format issues
+	possiblePaths := []string{
+		filepath.Join("Cdrrmo", oldFR.FilePath),
+		filepath.Join("Cdrrmo", strings.ToLower(oldFR.FilePath)),
+		filepath.Join("Cdrrmo", strings.ToUpper(oldFR.FilePath)),
+		filepath.Join("Cdrrmo", filepath.ToSlash(oldFR.FilePath)),
+		filepath.Join("Cdrrmo", filepath.FromSlash(oldFR.FilePath)),
+	}
+
+	// Also try with different case for the first directory component
+	parts := strings.Split(oldFR.FilePath, string(filepath.Separator))
+	if len(parts) > 0 {
+		parts[0] = strings.ToLower(parts[0])
+		possiblePaths = append(possiblePaths, filepath.Join("Cdrrmo", filepath.Join(parts...)))
+
+		parts[0] = strings.ToUpper(parts[0])
+		possiblePaths = append(possiblePaths, filepath.Join("Cdrrmo", filepath.Join(parts...)))
+	}
+
+	// Try with just the filename in each main folder
+	filename := filepath.Base(oldFR.FilePath)
+	possiblePaths = append(possiblePaths,
+		filepath.Join("Cdrrmo", "operation", filename),
+		filepath.Join("Cdrrmo", "Operation", filename),
+		filepath.Join("Cdrrmo", "training", filename),
+		filepath.Join("Cdrrmo", "Training", filename),
+		filepath.Join("Cdrrmo", "research", filename),
+		filepath.Join("Cdrrmo", "Research", filename),
+	)
+
+	// Try with the file in subfolders of each main folder
+	// First, get a list of all subfolders in the main folders
+	subfolders := []string{}
+
+	// Check operation folder
+	operationDir := filepath.Join("Cdrrmo", "operation")
+	if entries, err := os.ReadDir(operationDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				subfolders = append(subfolders, filepath.Join(operationDir, entry.Name()))
+			}
+		}
+	}
+
+	// Check training folder
+	trainingDir := filepath.Join("Cdrrmo", "training")
+	if entries, err := os.ReadDir(trainingDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				subfolders = append(subfolders, filepath.Join(trainingDir, entry.Name()))
+			}
+		}
+	}
+
+	// Check research folder
+	researchDir := filepath.Join("Cdrrmo", "research")
+	if entries, err := os.ReadDir(researchDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				subfolders = append(subfolders, filepath.Join(researchDir, entry.Name()))
+			}
+		}
+	}
+
+	// Try each subfolder
+	for _, subfolder := range subfolders {
+		possiblePaths = append(possiblePaths, filepath.Join(subfolder, filename))
+	}
+
+	// Try each path
+	var srcPath string
+	var foundPath bool
+
+	for _, path := range possiblePaths {
+		log.Printf("Trying source path: %s", path)
+		if _, statErr := os.Stat(path); statErr == nil {
+			srcPath = path
+			foundPath = true
+			log.Printf("Found valid source path: %s", srcPath)
+			break
+		}
+	}
+
+	// If we still haven't found the file, try a more exhaustive search
+	if !foundPath {
+		// Search for the file by name in all directories
+		filename := filepath.Base(oldFR.FilePath)
+		log.Printf("Performing exhaustive search for file: %s", filename)
+
+		// Function to recursively search for a file
+		var searchFile func(dir string) string
+		searchFile = func(dir string) string {
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				return ""
+			}
+
+			for _, entry := range entries {
+				fullPath := filepath.Join(dir, entry.Name())
+				if !entry.IsDir() && entry.Name() == filename {
+					log.Printf("Found file during exhaustive search: %s", fullPath)
+					return fullPath
+				}
+
+				if entry.IsDir() {
+					if result := searchFile(fullPath); result != "" {
+						return result
+					}
+				}
+			}
+
+			return ""
+		}
+
+		// Start the search from the Cdrrmo directory
+		if searchResult := searchFile("Cdrrmo"); searchResult != "" {
+			srcPath = searchResult
+			foundPath = true
+			log.Printf("Found file during exhaustive search: %s", srcPath)
+		}
+	}
+
+	if !foundPath {
+		// Try one more time with the original path for logging purposes
+		srcPath = filepath.Join("Cdrrmo", oldFR.FilePath)
+		log.Printf("Copy operation - Source path not found: %s", srcPath)
+
+		if _, statErr := os.Stat(srcPath); statErr != nil {
+			log.Printf("Source file stat error: %v", statErr)
+			if os.IsNotExist(statErr) {
+				models.RespondError(w, http.StatusNotFound, "Source file not found on disk")
+			} else if os.IsPermission(statErr) {
+				models.RespondError(w, http.StatusForbidden, "Permission denied when accessing source file")
+			} else {
+				models.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Error checking source file: %v", statErr))
+			}
+			return
+		}
+	}
 
 	finalName := req.NewFileName
 	if finalName == "" {
@@ -586,6 +724,8 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	if destFolder == "" {
 		destFolder = filepath.Dir(oldFR.FilePath)
 	}
+
+	log.Printf("Copy operation - Destination folder: %s, Final name: %s", destFolder, finalName)
 
 	base := strings.TrimSuffix(finalName, filepath.Ext(finalName))
 	ext := filepath.Ext(finalName)
@@ -608,29 +748,87 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 
 	dstPath := filepath.Join("Cdrrmo", newRelativePath)
 
+	// Check if the file is encrypted and if we can decrypt it
+	key := []byte(os.Getenv("ENCRYPTION_KEY"))
+	if key != nil && len(key) > 0 && len(key) != 32 {
+		log.Println("Invalid encryption key length for copy operation")
+		models.RespondError(w, http.StatusInternalServerError, "Invalid encryption key configuration")
+		return
+	}
+
+	// Try to open the source file
 	in, err := os.Open(srcPath)
 	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Failed to open source file")
+		log.Printf("Error opening source file %s: %v", srcPath, err)
+		if os.IsNotExist(err) {
+			models.RespondError(w, http.StatusNotFound, "Source file not found on disk")
+		} else if os.IsPermission(err) {
+			models.RespondError(w, http.StatusForbidden, "Permission denied when accessing source file")
+		} else {
+			models.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to open source file: %v", err))
+		}
 		return
 	}
 	defer in.Close()
+
+	// Get file info to verify it's readable
+	fileInfo, statErr := in.Stat()
+	if statErr != nil {
+		log.Printf("Error getting file info for %s: %v", srcPath, statErr)
+		models.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get file info: %v", statErr))
+		return
+	}
+
+	// Log file size for debugging
+	log.Printf("Source file size: %d bytes", fileInfo.Size())
 
 	if _, err := os.Stat(dstPath); err == nil {
 		models.RespondError(w, http.StatusConflict, "Target file already exists on disk")
 		return
 	}
 
+	// Create destination directory if it doesn't exist
+	destDir := filepath.Dir(dstPath)
+	log.Printf("Creating destination directory: %s", destDir)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		log.Printf("Error creating destination directory for %s: %v", dstPath, err)
+		models.RespondError(w, http.StatusInternalServerError, "Failed to create destination directory")
+		return
+	}
+	log.Printf("Destination directory created or already exists: %s", destDir)
+
 	out, err := os.Create(dstPath)
 	if err != nil {
+		log.Printf("Error creating target file %s: %v", dstPath, err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to create target file")
 		return
 	}
 	defer out.Close()
 
-	if _, err := io.Copy(out, in); err != nil {
+	// Copy with additional error checking
+	log.Printf("Starting file copy from %s to %s", srcPath, dstPath)
+	written, err := io.Copy(out, in)
+	if err != nil {
+		log.Printf("Error copying file content from %s to %s: %v", srcPath, dstPath, err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to copy file content")
+		// Clean up the partially created file
+		out.Close()
+		os.Remove(dstPath)
 		return
 	}
+
+	// Verify file size matches
+	if written != oldFR.Size {
+		log.Printf("Warning: Copied file size (%d) doesn't match source file record size (%d)", written, oldFR.Size)
+	}
+
+	// Flush to disk
+	if err := out.Sync(); err != nil {
+		log.Printf("Error syncing file to disk: %v", err)
+		// Continue anyway, as the file might still be usable
+	}
+
+	log.Printf("File copy completed successfully: %d bytes written", written)
 
 	newRecord := models.FileRecord{
 		FileName:    finalName,

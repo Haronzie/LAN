@@ -231,6 +231,10 @@ const ResearchDashboard = () => {
     }
     setCopyItem(record);
     setCopyNewName(suggestedName);
+    setSelectedDestination('');
+    setSelectedMainFolder('');
+    setSelectedSubFolder('');
+    setSubFolders([]);
     setCopyModalVisible(true);
   };
 
@@ -651,7 +655,18 @@ const ResearchDashboard = () => {
       message.error('No item selected to copy');
       return;
     }
+    if (!selectedMainFolder) {
+      message.error('Please select a main folder');
+      return;
+    }
+
     try {
+      // Determine the destination path based on main folder and subfolder
+      let destinationPath = selectedMainFolder;
+      if (selectedSubFolder) {
+        destinationPath = `${selectedMainFolder}/${selectedSubFolder}`;
+      }
+
       if (copyItem.type === 'directory') {
         await axios.post(
           '/directory/copy',
@@ -659,7 +674,7 @@ const ResearchDashboard = () => {
             source_name: copyItem.name,
             source_parent: currentPath,
             new_name: copyNewName,
-            destination_parent: selectedDestination || currentPath,
+            destination_parent: destinationPath,
             container: 'research'
           },
           { withCredentials: true }
@@ -670,21 +685,37 @@ const ResearchDashboard = () => {
           {
             source_file: copyItem.name,
             new_file_name: copyNewName,
-            destination_folder: selectedDestination || currentPath,
+            destination_folder: destinationPath,
             container: 'research'
           },
           { withCredentials: true }
         );
       }
-      message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
+      message.success(`Copied ${copyItem.name} to ${selectedMainFolder}${selectedSubFolder ? '/' + selectedSubFolder : ''}`);
       setCopyModalVisible(false);
       setCopyItem(null);
       setCopyNewName('');
       setSelectedDestination('');
+      setSelectedMainFolder('');
+      setSelectedSubFolder('');
       fetchItems();
     } catch (error) {
       console.error('Copy error:', error);
-      message.error(error.response?.data?.error || 'Error copying item');
+
+      // Handle specific error cases
+      if (error.response?.data?.error === "Source file not found on disk") {
+        message.error('The file no longer exists on the server. Please refresh the page and try again.');
+      } else if (error.response?.data?.error === "Permission denied when accessing source file") {
+        message.error('Permission denied when accessing the file. Please contact your administrator.');
+      } else if (error.response?.data?.error === "Invalid encryption key configuration") {
+        message.error('There is an issue with the file encryption system. Please contact your administrator.');
+      } else if (error.response?.data?.error && error.response.data.error.includes("Failed to read from source file")) {
+        message.error('The file appears to be corrupted or cannot be read. Please try uploading it again.');
+      } else if (error.response?.data?.error && error.response.data.error.includes("Failed to open source file")) {
+        message.error('The file cannot be accessed. This might be due to a temporary issue. Please try again in a moment.');
+      } else {
+        message.error(error.response?.data?.error || 'Error copying item');
+      }
     }
   };
 
@@ -1162,6 +1193,11 @@ const ResearchDashboard = () => {
           handleCopyConfirm={handleCopyConfirm}
           directoryItems={items}
           currentPath={currentPath}
+          copySelectedMainFolder={selectedMainFolder}
+          copySelectedSubFolder={selectedSubFolder}
+          copySubFolders={subFolders}
+          handleCopyMainFolderChange={handleMainFolderChange}
+          handleCopySubFolderChange={handleSubFolderChange}
 
           // Move Modal props
           moveModalVisible={moveModalVisible}
@@ -1169,11 +1205,6 @@ const ResearchDashboard = () => {
           moveDestination={moveDestination}
           setMoveDestination={setMoveDestination}
           handleMoveConfirm={handleMoveConfirm}
-          selectedMainFolder={selectedMainFolder}
-          selectedSubFolder={selectedSubFolder}
-          subFolders={subFolders}
-          handleMainFolderChange={handleMainFolderChange}
-          handleSubFolderChange={handleSubFolderChange}
 
           // Upload Modal props
           uploadModalVisible={uploadModalVisible}

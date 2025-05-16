@@ -35,6 +35,11 @@ const CommonModals = ({
   handleCopyConfirm,
   directoryItems,
   currentPath,
+  copySelectedMainFolder,
+  copySelectedSubFolder,
+  copySubFolders,
+  handleCopyMainFolderChange,
+  handleCopySubFolderChange,
 
   // Move Modal props
   moveModalVisible,
@@ -103,6 +108,7 @@ const CommonModals = ({
         onOk={handleCopyConfirm}
         onCancel={() => setCopyModalVisible(false)}
         okText="Copy"
+        okButtonProps={{ disabled: !copySelectedMainFolder }}
       >
         <Form layout="vertical">
           <Form.Item label="New Name" required>
@@ -112,26 +118,43 @@ const CommonModals = ({
               placeholder="Enter new name"
             />
           </Form.Item>
-          <Form.Item label="Destination Folder (Optional)">
+          <Form.Item label="Main Folder" required>
             <Select
               style={{ width: '100%' }}
-              placeholder="Select a folder or leave blank"
-              value={selectedDestination}
-              onChange={(val) => setSelectedDestination(val)}
+              placeholder="Select main folder"
+              value={copySelectedMainFolder}
+              onChange={handleCopyMainFolderChange}
               allowClear
             >
-              {directoryItems && directoryItems
-                .filter((item) => item.type === 'directory')
-                .map((folder) => {
-                  const folderPath = path.join(currentPath, folder.name);
-                  return (
-                    <Option key={folderPath} value={folderPath}>
-                      {folder.name}
-                    </Option>
-                  );
-                })}
+              {/* Sort main folders alphabetically */}
+              {['Operation', 'Research', 'Training'].sort().map(folder => (
+                <Option key={folder} value={folder}>
+                  {folder}
+                </Option>
+              ))}
             </Select>
           </Form.Item>
+
+          {copySelectedMainFolder && (
+            <Form.Item label="Destination Folder">
+              <Select
+                style={{ width: '100%' }}
+                placeholder="Select destination folder (optional)"
+                value={copySelectedSubFolder}
+                onChange={handleCopySubFolderChange}
+                allowClear
+              >
+                {/* Sort subfolders alphabetically */}
+                {copySubFolders
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(folder => (
+                    <Option key={folder.path} value={folder.name}>
+                      {folder.name}
+                    </Option>
+                  ))}
+              </Select>
+            </Form.Item>
+          )}
         </Form>
       </Modal>
 
