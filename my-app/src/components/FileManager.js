@@ -902,16 +902,35 @@ const FileManager = () => {
     // For files, verify the file still exists before showing the move modal
     if (record.type === 'file') {
       try {
-        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
+        // Normalize the current path to ensure consistent handling
+        const normalizedPath = currentPath.replace(/\\/g, '/');
+        console.log('Initial check - file existence in:', normalizedPath);
+
+        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`;
         const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
-        const fileExists = (checkRes.data || []).some(f =>
-          f.name === record.name && (f.directory === currentPath || f.directory === undefined)
-        );
+        // More flexible matching to handle potential directory field inconsistencies
+        const fileExists = (checkRes.data || []).some(f => {
+          const nameMatch = f.name === record.name;
+          const dirMatch = !f.directory ||
+                          f.directory === normalizedPath ||
+                          f.directory.toLowerCase() === normalizedPath.toLowerCase();
+
+          return nameMatch && dirMatch;
+        });
 
         if (!fileExists) {
-          message.error('This file no longer exists. Please refresh the page.');
-          return;
+          // Try a direct API call to check if the file exists on disk
+          try {
+            const fileCheckUrl = `${BASE_URL}/download?directory=${encodeURIComponent(normalizedPath)}&filename=${encodeURIComponent(record.name)}`;
+            await axios.head(fileCheckUrl, { withCredentials: true });
+            console.log('File exists on disk based on HEAD request');
+            // If we get here, the file exists on disk even if not in the directory listing
+          } catch (headErr) {
+            console.error('File does not exist on disk:', headErr);
+            message.error('This file no longer exists. Please refresh the page.');
+            return;
+          }
         }
       } catch (err) {
         console.error('Error checking file existence:', err);
@@ -1040,15 +1059,37 @@ const FileManager = () => {
       } else {
         // First, verify the file exists by trying to get its metadata
         try {
-          const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
+          // Normalize the current path to ensure consistent handling
+          const normalizedPath = currentPath.replace(/\\/g, '/');
+          console.log('Checking file existence in:', normalizedPath);
+
+          const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`;
           const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
-          const fileExists = (checkRes.data || []).some(f =>
-            f.name === moveItem.name && f.directory === currentPath
-          );
+          console.log('Files in directory:', checkRes.data);
+
+          // More flexible matching to handle potential directory field inconsistencies
+          const fileExists = (checkRes.data || []).some(f => {
+            const nameMatch = f.name === moveItem.name;
+            const dirMatch = !f.directory ||
+                            f.directory === normalizedPath ||
+                            f.directory.toLowerCase() === normalizedPath.toLowerCase();
+
+            console.log(`Checking file: ${f.name}, Directory: ${f.directory}, Match: ${nameMatch && dirMatch}`);
+            return nameMatch && dirMatch;
+          });
 
           if (!fileExists) {
-            throw new Error("Source file not found. It may have been deleted or moved.");
+            // Try a direct API call to check if the file exists on disk
+            try {
+              const fileCheckUrl = `${BASE_URL}/download?directory=${encodeURIComponent(normalizedPath)}&filename=${encodeURIComponent(moveItem.name)}`;
+              await axios.head(fileCheckUrl, { withCredentials: true });
+              console.log('File exists on disk based on HEAD request');
+              // If we get here, the file exists on disk even if not in the directory listing
+            } catch (headErr) {
+              console.error('File does not exist on disk:', headErr);
+              throw new Error("Source file not found. It may have been deleted or moved.");
+            }
           }
         } catch (checkErr) {
           console.error('File existence check failed:', checkErr);
@@ -1057,8 +1098,11 @@ const FileManager = () => {
           return;
         }
 
+        // Convert ID to string to ensure proper format
+        const fileId = moveItem.id ? moveItem.id.toString() : "";
+
         console.log('Moving file with:', {
-          id: moveItem.id,
+          id: fileId,
           filename: moveItem.name,
           old_parent: currentPath,
           new_parent: moveDestination,
@@ -1068,7 +1112,7 @@ const FileManager = () => {
         await axios.post(
           `${BASE_URL}/move-file`,
           {
-            id: moveItem.id,
+            id: fileId,
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
@@ -1078,7 +1122,7 @@ const FileManager = () => {
         );
       }
 
-      message.success(`Moved '${moveItem.name}' successfully`);
+      message.success(`Moved '${moveItem.name}' to ${moveDestination}`);
 
       setMoveModalVisible(false);
       setMoveDestination('');
@@ -1089,9 +1133,24 @@ const FileManager = () => {
     } catch (err) {
       console.error('Move error:', err);
 
+      // Log detailed error information
+      if (err.response) {
+        console.error('Error response data:', err.response.data);
+        console.error('Error response status:', err.response.status);
+        console.error('Error response headers:', err.response.headers);
+      } else if (err.request) {
+        console.error('Error request:', err.request);
+      } else {
+        console.error('Error message:', err.message);
+      }
+
       // Handle specific error cases
       if (err.response?.data?.error === "Source file does not exist on disk") {
         message.error('The file no longer exists on the server. Please refresh the page.');
+      } else if (err.response?.status === 400 && err.response?.data?.error === "Invalid request body") {
+        message.error('Invalid request format. Please try again or contact support if the issue persists.');
+      } else if (err.response?.status === 404) {
+        message.error('File or destination folder not found. Please refresh and try again.');
       } else {
         message.error(err.response?.data?.error || 'Error moving item');
       }

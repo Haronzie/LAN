@@ -910,7 +910,8 @@ const TrainingDashboard = () => {
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
-            overwrite: false
+            overwrite: false,
+            container: 'training'
           },
           { withCredentials: true }
         );
@@ -1219,6 +1220,11 @@ const TrainingDashboard = () => {
           moveDestination={moveDestination}
           setMoveDestination={setMoveDestination}
           handleMoveConfirm={handleMoveConfirm}
+          selectedMainFolder={selectedMainFolder}
+          selectedSubFolder={selectedSubFolder}
+          subFolders={subFolders}
+          handleMainFolderChange={handleMainFolderChange}
+          handleSubFolderChange={handleSubFolderChange}
 
           // Upload Modal props
           uploadModalVisible={uploadModalVisible}
