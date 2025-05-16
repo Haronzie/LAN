@@ -303,6 +303,11 @@ func main() {
 	logger.WithField("function", "main").Debug("Creating new Gorilla mux router...")
 	router := mux.NewRouter()
 
+	// Handle OPTIONS for all routes (CORS preflight)
+	router.Methods(http.MethodOptions).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
@@ -389,7 +394,7 @@ func main() {
 	router.Use(middleware.RateLimitMiddleware)
 
 	// Wrap your router with CORS middleware.
-	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS") //dynamic
+	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
 	var allowedOrigins []string
 	if allowedOriginsEnv != "" {
 		for _, origin := range strings.Split(allowedOriginsEnv, ",") {
