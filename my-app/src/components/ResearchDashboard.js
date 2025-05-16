@@ -514,7 +514,10 @@ const ResearchDashboard = () => {
       return;
     }
 
-    const normalizedPath = currentPath.replace(/\\/g, '/').toLowerCase();
+    // Ensure consistent directory path format - always use forward slashes
+    // and lowercase for consistent database storage and retrieval
+    const normalizedPath = currentPath.split(/[/\\]/).map(part => part.toLowerCase()).join('/');
+    console.log("Uploading to directory:", normalizedPath); // for debugging
 
     try {
       if (uploadingFiles.length === 1) {

@@ -426,29 +426,49 @@ const TrainingDashboard = () => {
       return;
     }
 
+    // Ensure consistent directory path format - always use forward slashes
+    // and lowercase for consistent database storage and retrieval
+    const normalizedPath = currentPath.split(/[/\\]/).map(part => part.toLowerCase()).join('/');
+    console.log("Uploading to directory:", normalizedPath); // for debugging
+
     try {
-      const formData = new FormData();
-      uploadingFiles.forEach(file => formData.append('files', file)); // multiple files
-      formData.append('directory', currentPath);
-      formData.append('container', 'training');
-      formData.append('overwrite', 'false');
-      formData.append('skip', 'false');
+      if (uploadingFiles.length === 1) {
+        const formData = new FormData();
+        formData.append('file', uploadingFiles[0]);
+        formData.append('directory', normalizedPath);
+        formData.append('container', 'training');
 
-      const res = await axios.post('/bulk-upload', formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+        await axios.post('/upload', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
 
-      const results = res.data || [];
-      const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
-      const skipped = results.filter(r => r.status === 'skipped').length;
-      const failed = results.filter(r => r.status.startsWith('error')).length;
+        message.success('File uploaded successfully');
+      } else {
+        const formData = new FormData();
+        uploadingFiles.forEach(file => formData.append('files', file)); // multiple files
+        formData.append('directory', normalizedPath);
+        formData.append('container', 'training');
+        formData.append('overwrite', 'false');
+        formData.append('skip', 'false');
 
-      message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+        const res = await axios.post('/bulk-upload', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        const results = res.data || [];
+        const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
+        const skipped = results.filter(r => r.status === 'skipped').length;
+        const failed = results.filter(r => r.status.startsWith('error')).length;
+
+        message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+      }
 
       setUploadModalVisible(false);
       setUploadingFiles([]);
       fetchItems();
+      fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Upload error:', error);
       message.error('Upload failed');

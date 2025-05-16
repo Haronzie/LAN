@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -488,12 +489,36 @@ func (app *App) ListDirectory(parent string) ([]map[string]interface{}, error) {
 }
 
 func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
-	rows, err := app.DB.Query(`
-		SELECT id, file_name, file_path, size, content_type, uploader, created_at, directory
-		FROM files
-		WHERE LOWER(directory) = LOWER($1)
-	`, dir)
+	log.Printf("🔍 ListFilesInDirectory called with directory: '%s'", dir)
+
+	// Normalize directory path for consistent comparison
+	normalizedDir := strings.ToLower(strings.TrimSpace(dir))
+	normalizedDir = strings.ReplaceAll(normalizedDir, "\\", "/")
+
+	// Check if we're looking for files in a subfolder
+	var rows *sql.Rows
+	var err error
+
+	if normalizedDir == "" {
+		// For root directory, use exact match
+		rows, err = app.DB.Query(`
+			SELECT id, file_name, file_path, size, content_type, uploader, created_at, directory
+			FROM files
+			WHERE LOWER(directory) = ''
+		`)
+	} else {
+		// For other directories, use exact match but also handle path separators
+		// This query handles both backslash and forward slash in the database
+		rows, err = app.DB.Query(`
+			SELECT id, file_name, file_path, size, content_type, uploader, created_at, directory
+			FROM files
+			WHERE LOWER(REPLACE(directory, '\', '/')) = LOWER($1)
+			   OR LOWER(directory) = LOWER($1)
+		`, normalizedDir)
+	}
+
 	if err != nil {
+		log.Printf("❌ Database error in ListFilesInDirectory: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -502,10 +527,80 @@ func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 	for rows.Next() {
 		var f FileRecord
 		if err := rows.Scan(&f.ID, &f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader, &f.CreatedAt, &f.Directory); err != nil {
+			log.Printf("❌ Error scanning file record: %v", err)
 			return nil, err
 		}
+		log.Printf("✅ Found file in directory '%s': %s (path: %s)", dir, f.FileName, f.FilePath)
 		results = append(results, f)
 	}
+
+	// If no results found, try checking if files exist on disk but not in database
+	if len(results) == 0 {
+		// Try alternative directory formats
+		alternativeDirs := []string{
+			normalizedDir, // As provided
+			strings.ReplaceAll(normalizedDir, "/", "\\"), // With backslashes
+			strings.Title(normalizedDir),                 // Title case (Operation/Mem)
+			strings.ToUpper(normalizedDir),               // Uppercase (OPERATION/MEM)
+		}
+
+		for _, altDir := range alternativeDirs {
+			if altDir == normalizedDir {
+				continue // Skip the one we already tried
+			}
+
+			log.Printf("🔍 Trying alternative directory format: '%s'", altDir)
+			rows, err = app.DB.Query(`
+				SELECT id, file_name, file_path, size, content_type, uploader, created_at, directory
+				FROM files
+				WHERE LOWER(REPLACE(directory, '\', '/')) = LOWER($1)
+				   OR LOWER(directory) = LOWER($1)
+			`, altDir)
+
+			if err != nil {
+				continue
+			}
+
+			for rows.Next() {
+				var f FileRecord
+				if err := rows.Scan(&f.ID, &f.FileName, &f.FilePath, &f.Size, &f.ContentType, &f.Uploader, &f.CreatedAt, &f.Directory); err != nil {
+					continue
+				}
+				log.Printf("✅ Found file with alternative directory format '%s': %s (path: %s)", altDir, f.FileName, f.FilePath)
+				results = append(results, f)
+			}
+			rows.Close()
+
+			if len(results) > 0 {
+				break
+			}
+		}
+
+		// Check physical path as a last resort
+		if len(results) == 0 {
+			physicalPath := filepath.Join("Cdrrmo", dir)
+			log.Printf("🔍 No files found in database. Checking physical path: %s", physicalPath)
+
+			// Check if the directory exists
+			if _, err := os.Stat(physicalPath); !os.IsNotExist(err) {
+				// Directory exists, log this information
+				log.Printf("📁 Physical directory exists at: %s", physicalPath)
+
+				// List files in the directory
+				files, err := os.ReadDir(physicalPath)
+				if err == nil {
+					log.Printf("📁 Found %d files in physical directory", len(files))
+					for _, file := range files {
+						if !file.IsDir() {
+							log.Printf("📄 Physical file found: %s", file.Name())
+						}
+					}
+				}
+			}
+		}
+	}
+
+	log.Printf("📊 Total files found in directory '%s': %d", dir, len(results))
 	return results, nil
 }
 

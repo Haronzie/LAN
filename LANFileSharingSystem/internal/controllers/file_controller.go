@@ -92,11 +92,14 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		cleanTarget := filepath.Clean(targetDir)
 		parts := strings.Split(cleanTarget, string(os.PathSeparator))
 
-		if len(parts) > 0 {
-
+		// Ensure consistent directory format - always use forward slashes
+		// and lowercase for consistent database storage and retrieval
+		for i := range parts {
+			parts[i] = strings.ToLower(parts[i])
 		}
 
-		targetDir = filepath.Join(parts...)
+		// Rebuild the path with forward slashes for consistent storage
+		targetDir = strings.Join(parts, "/")
 		log.Println("📁 Normalized upload directory:", targetDir)
 
 		if strings.HasPrefix(targetDir, "..") {
@@ -104,15 +107,17 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		topFolder := strings.ToLower(parts[0])
-		validTopFolders := map[string]bool{
-			"operation": true,
-			"research":  true,
-			"training":  true,
-		}
-		if !validTopFolders[topFolder] {
-			models.RespondError(w, http.StatusBadRequest, "Invalid top-level folder")
-			return
+		if len(parts) > 0 {
+			topFolder := parts[0]
+			validTopFolders := map[string]bool{
+				"operation": true,
+				"research":  true,
+				"training":  true,
+			}
+			if !validTopFolders[topFolder] {
+				models.RespondError(w, http.StatusBadRequest, "Invalid top-level folder")
+				return
+			}
 		}
 	}
 
