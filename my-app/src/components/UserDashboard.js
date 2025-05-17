@@ -19,6 +19,8 @@ import ResearchDashboard from './ResearchDashboard';
 import InventoryDashboard from './InventoryDashboard';
 import UserSettings from './UserSettings';
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
 
@@ -34,7 +36,7 @@ const UserDashboard = () => {
   useEffect(() => {
     const checkUserRole = async () => {
       try {
-        const res = await axios.get('/user-role', { withCredentials: true });
+        const res = await axios.get(`${BASE_URL}/user-role`, { withCredentials: true });
         if (res.data.role === 'admin') {
           navigate('/admin');
         } else if (res.data.role === 'user') {
@@ -57,7 +59,7 @@ const UserDashboard = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post('/logout', {}, { withCredentials: true });
+      await axios.get('log-out', {}, { withCredentials: true });
       message.success('Logged out successfully.');
       navigate('/login');
     } catch (error) {

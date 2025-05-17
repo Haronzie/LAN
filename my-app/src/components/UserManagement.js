@@ -16,6 +16,8 @@ import { batchDeleteUsers } from '../utils/batchOperations';
 
 const { Content } = Layout;
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 // Password policy text from your RegisterForm
 const passwordPolicyContent = (
   <div style={{ maxWidth: 250 }}>
@@ -61,11 +63,11 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/users', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
 
       // Get the first admin information
-      const firstAdminRes = await axios.get('/admin-exists');
+      const firstAdminRes = await axios.get('/admin-exits');
       if (firstAdminRes.data.exists) {
         const firstAdminInfo = await axios.get('/get-first-admin', { withCredentials: true });
         setFirstAdmin(firstAdminInfo.data);
@@ -122,7 +124,7 @@ const UserManagement = () => {
       cancelText: 'No',
       onOk: async () => {
         try {
-          await axios.post('/revoke-admin', { username }, { withCredentials: true });
+          await axios.post(`${BASE_URL}/revoke-admin`, { username }, { withCredentials: true });
           message.success(`Admin privileges revoked from '${username}'`);
           fetchUsers();
         } catch (error) {
@@ -138,7 +140,7 @@ const UserManagement = () => {
     try {
       const values = await addUserForm.validateFields();
       await axios.post(
-        `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080'}/user/add`,
+        `${BASE_URL}/user/add`,
         { username: values.username, password: values.password },
         { withCredentials: true }
       );
@@ -162,7 +164,7 @@ const UserManagement = () => {
       cancelText: 'No',
       onOk: async () => {
         try {
-          await axios.delete('/user/delete', {
+          await axios.delete(`${BASE_URL}/user/delete`, {
             data: { username },
             withCredentials: true
           });
@@ -191,7 +193,7 @@ const UserManagement = () => {
     try {
       const values = await updateForm.validateFields();
       await axios.put(
-        '/user/update',
+        `${BASE_URL}/user/update`,
         {
           old_username: values.old_username,
           new_username: values.new_username,
@@ -218,7 +220,7 @@ const UserManagement = () => {
   // Handler for promoting a user to admin
   const handleAssignAdmin = async (username) => {
     try {
-      await axios.post('/assign-admin', { username }, { withCredentials: true });
+      await axios.post(`${BASE_URL}/assign-admin`, { username }, { withCredentials: true });
       message.success(`User '${username}' is now an admin`);
       fetchUsers();
     } catch (error) {

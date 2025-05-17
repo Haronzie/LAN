@@ -69,7 +69,7 @@ const AdminDashboardHome = () => {
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get('/files', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/files`, { withCredentials: true });
       setFiles(Array.isArray(res.data) ? res.data : []);
     } catch {
       message.error('Error fetching files');
@@ -80,7 +80,7 @@ const AdminDashboardHome = () => {
 
   const fetchAuditLogs = async () => {
     try {
-      const res = await axios.get('/auditlogs', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/auditlogs`, { withCredentials: true });
       setAuditLogs(Array.isArray(res.data) ? res.data : []);
     } catch {
       message.error('Error fetching audit logs');

@@ -6,6 +6,8 @@ import axios from 'axios';
 const { Content } = Layout;
 const { Title } = Typography;
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const AuditLog = () => {
   const [auditLogs, setAuditLogs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -15,7 +17,7 @@ const AuditLog = () => {
   const fetchAuditLogs = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/auditlogs', { withCredentials: true });  // Correct endpoint
+      const res = await axios.get(`${BASE_URL}/auditlogs`, { withCredentials: true });  // Correct endpoint
       setAuditLogs(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       message.error('Error fetching audit logs');

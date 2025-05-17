@@ -12,6 +12,8 @@ import {
   ClockCircleOutlined
 } from '@ant-design/icons';
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const { Title } = Typography;
 
 const UserDashboardHome = () => {
@@ -82,7 +84,7 @@ const UserDashboardHome = () => {
       if (tasksData.length === 0) {
         // Make a separate request to check if the user has any messages in the database
         try {
-          const checkRes = await axios.get('/user-role', { withCredentials: true });
+          const checkRes = await axios.get(`${BASE_URL}/user-role`, { withCredentials: true });
           console.log('UserDashboardHome: User role check:', checkRes.data);
         } catch (checkErr) {
           console.error('UserDashboardHome: Error checking user role:', checkErr);

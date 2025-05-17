@@ -52,7 +52,9 @@ import { batchDelete, batchDownload } from '../utils/batchOperations';
 
 const { Content } = Layout;
 const { Option } = Select;
-const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`;
+
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+const WS_BASE_URL = process.env.REACT_APP_BACKEND_WS || 'ws://localhost:8080';
 
 function formatFileSize(size) {
   if (size === 0) return '0 B';
@@ -117,8 +119,8 @@ const OperationDashboard = () => {
       if (ws) {
         ws.close();
       }
-
-      const wsInstance = new WebSocket(`ws://localhost:8080/ws?username=${username}`);
+      
+      const wsInstance = new WebSocket(`${WS_BASE_URL}/ws?username=${username}`);
       setWs(wsInstance);
 
       wsInstance.onopen = () => {
@@ -209,7 +211,7 @@ const OperationDashboard = () => {
 
   const fetchDirectories = async () => {
     try {
-      const res = await axios.get('/directory/tree', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/directory/tree`, { withCredentials: true });
       setDirectories(res.data || []);
     } catch (error) {
       console.error('Error fetching directories:', error);
@@ -219,7 +221,7 @@ const OperationDashboard = () => {
   const fetchAllFilesWithMessages = async () => {
     try {
       // First, try to get all files with messages assigned to the current user
-      const filesWithMessagesRes = await axios.get('/files-with-messages', { withCredentials: true });
+      const filesWithMessagesRes = await axios.get(`${BASE_URL}/files-with-messages`, { withCredentials: true });
       const filesWithMessages = filesWithMessagesRes.data || [];
 
       // Filter to only include files in the current directory or its subdirectories
@@ -263,7 +265,7 @@ const OperationDashboard = () => {
       const dirParam = encodeURIComponent(currentPath);
 
       // 1. Fetch folders
-      const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true });
+      const dirRes = await axios.get(`${BASE_URL}/directory/list?directory=${dirParam}`, { withCredentials: true });
       const folders = (dirRes.data || []).map((folder) => ({
         id: `folder-${folder.name}`,
         name: folder.name,
@@ -272,7 +274,7 @@ const OperationDashboard = () => {
       }));
 
       // 2. Fetch files
-      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
+      const fileRes = await axios.get(`${BASE_URL}/files?directory=${dirParam}`, { withCredentials: true });
       const files = (fileRes.data || []).map((file) => ({
         id: file.id,
         name: file.name,
@@ -442,7 +444,7 @@ const OperationDashboard = () => {
       return;
     }
     try {
-      await axios.post('/directory/create', {
+      await axios.post(`${BASE_URL}/directory/create`, {
         name: newFolderName,
         parent: currentPath,
         container: 'operation'
@@ -485,7 +487,7 @@ const OperationDashboard = () => {
         formData.append('directory', normalizedPath);
         formData.append('container', 'operation');
 
-        await axios.post('/upload', formData, {
+        await axios.post(`${BASE_URL}/upload`, formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -499,7 +501,7 @@ const OperationDashboard = () => {
         formData.append('overwrite', 'false');
         formData.append('skip', 'false');
 
-        const res = await axios.post('/bulk-upload', formData, {
+        const res = await axios.post(`${BASE_URL}/bulk-upload`, formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -533,12 +535,12 @@ const OperationDashboard = () => {
     }
     try {
       if (record.type === 'directory') {
-        await axios.delete('/directory/delete', {
+        await axios.delete(`${BASE_URL}/directory/delete`, {
           data: { name: record.name, parent: currentPath, container: 'operation' },
           withCredentials: true,
         });
       } else {
-        await axios.delete('/delete-file', {
+        await axios.delete(`${BASE_URL}/delete-file`, {
           data: { directory: currentPath, filename: record.name, container: 'operation' },
           withCredentials: true,
         });
@@ -556,7 +558,7 @@ const OperationDashboard = () => {
     try {
       // Verify file exists before attempting to download
       const dirToCheck = directory || currentPath;
-      const checkUrl = `/files?directory=${encodeURIComponent(dirToCheck)}`;
+      const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(dirToCheck)}`;
       const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
       const fileExists = (checkRes.data || []).some(f =>
@@ -650,11 +652,13 @@ const OperationDashboard = () => {
       if (isSearching) {
         // For search results, verify file exists in its directory
         const dirToCheck = file.directory || '';
-        const checkUrl = `/files?directory=${encodeURIComponent(dirToCheck)}`;
+        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(dirToCheck)}`;
         const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
-        const fileExists = (checkRes.data || []).some(f =>
-          f.name === file.name && (f.directory === dirToCheck || f.directory === undefined)
+        const filesArray = Array.isArray(checkRes.data) ? checkRes.data : [];
+        // More robust check: ignore directory property, just check name (case-insensitive)
+        const fileExists = filesArray.some(f =>
+          f.name.trim().toLowerCase() === file.name.trim().toLowerCase()
         );
 
         if (!fileExists) {
@@ -669,11 +673,13 @@ const OperationDashboard = () => {
         window.open(previewUrl, '_blank');
       } else {
         // For regular file listing, verify file exists in current directory
-        const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
         const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
-        const fileExists = (checkRes.data || []).some(f =>
-          f.name === file.name && (f.directory === currentPath || f.directory === undefined)
+        const filesArray = Array.isArray(checkRes.data) ? checkRes.data : [];
+        // More robust check: ignore directory property, just check name (case-insensitive)
+        const fileExists = filesArray.some(f =>
+          f.name.trim().toLowerCase() === file.name.trim().toLowerCase()
         );
 
         if (!fileExists) {
@@ -723,7 +729,7 @@ const OperationDashboard = () => {
     try {
       if (selectedItem.type === 'directory') {
         await axios.put(
-          '/directory/rename',
+          `${BASE_URL}/directory/rename`,
           {
             old_name: selectedItem.name,
             new_name: renameNewName,
@@ -734,11 +740,11 @@ const OperationDashboard = () => {
         );
       } else {
         await axios.put(
-          '/file/rename',
+          `${BASE_URL}/file/rename`,
           {
+            old_name: selectedItem.name,
+            new_name: renameNewName,
             directory: currentPath,
-            old_filename: selectedItem.name,
-            new_filename: renameNewName,
             container: 'operation',
           },
           { withCredentials: true }

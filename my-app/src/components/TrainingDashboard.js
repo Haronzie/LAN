@@ -47,7 +47,7 @@ import { batchDelete, batchDownload } from '../utils/batchOperations';
 
 const { Content } = Layout;
 const { Option } = Select;
-const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`;
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 /**
  * Helper to format file sizes in human-readable form.
@@ -132,7 +132,7 @@ const TrainingDashboard = () => {
 
   const fetchDirectories = async () => {
     try {
-      const res = await axios.get('/directory/tree?container=training', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/directory/tree?container=training`, { withCredentials: true });
       setDirectories(res.data || []);
     } catch (error) {
       console.error('Error fetching directories:', error);
@@ -142,7 +142,7 @@ const TrainingDashboard = () => {
   const fetchAllFilesWithMessages = async () => {
     try {
       // First, try to get all files with messages assigned to the current user
-      const filesWithMessagesRes = await axios.get('/files-with-messages', { withCredentials: true });
+      const filesWithMessagesRes = await axios.get(`${BASE_URL}/files-with-messages`, { withCredentials: true });
       const filesWithMessages = filesWithMessagesRes.data || [];
 
       // Filter to only include files in the current directory or its subdirectories
@@ -162,7 +162,7 @@ const TrainingDashboard = () => {
   const markAsDone = async (messageId, fileId) => {
     try {
       await axios.patch(
-        `/file/message/${messageId}/done`,
+        `${BASE_URL}/file/message/${messageId}/done`,
         {},
         { withCredentials: true }
       );
@@ -187,10 +187,10 @@ const TrainingDashboard = () => {
     try {
       const dirParam = encodeURIComponent(currentPath);
       // 1) Fetch directories
-      const dirRes = await axios.get(`/directory/list?directory=${dirParam}`, { withCredentials: true });
+      const dirRes = await axios.get(`${BASE_URL}/directory/list?directory=${dirParam}`, { withCredentials: true });
       const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
       // 2) Fetch files (including confidential flag and authorized users if available)
-      const fileRes = await axios.get(`/files?directory=${dirParam}`, { withCredentials: true });
+      const fileRes = await axios.get(`${BASE_URL}/files?directory=${dirParam}`, { withCredentials: true });
       const fetchedFiles = (fileRes.data || []).map((f) => {
         // Ensure size is a valid number
         const fileSize = typeof f.size === 'number' ? f.size :
@@ -250,7 +250,7 @@ const TrainingDashboard = () => {
 
     try {
       // Build the search URL with the main folder parameter for Training
-      const searchUrl = `/search?q=${encodeURIComponent(query)}&main_folder=Training`;
+      const searchUrl = `${BASE_URL}/search?q=${encodeURIComponent(query)}&main_folder=Training`;
 
       const response = await axios.get(searchUrl, { withCredentials: true });
 
@@ -330,7 +330,7 @@ const TrainingDashboard = () => {
     }
     try {
       await axios.post(
-        '/directory/create',
+        `${BASE_URL}/directory/create`,
         { name: newFolderName, parent: currentPath, container: 'training' },
         { withCredentials: true }
       );
@@ -338,6 +338,7 @@ const TrainingDashboard = () => {
       setCreateFolderModal(false);
       setNewFolderName('');
       fetchItems();
+      fetchDirectories();
     } catch (error) {
       console.error('Create folder error:', error);
       message.error(error.response?.data?.error || 'Error creating folder');
@@ -406,7 +407,7 @@ const TrainingDashboard = () => {
     formData.append('directory', currentPath);
     formData.append('container', 'training');
     try {
-      const res = await axios.post('/upload', formData, {
+      const res = await axios.post(`${BASE_URL}/upload`, formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -438,7 +439,7 @@ const TrainingDashboard = () => {
         formData.append('directory', normalizedPath);
         formData.append('container', 'training');
 
-        await axios.post('/upload', formData, {
+        await axios.post(`${BASE_URL}/upload`, formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -452,7 +453,7 @@ const TrainingDashboard = () => {
         formData.append('overwrite', 'false');
         formData.append('skip', 'false');
 
-        const res = await axios.post('/bulk-upload', formData, {
+        const res = await axios.post(`${BASE_URL}/bulk-upload`, formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -486,12 +487,12 @@ const TrainingDashboard = () => {
     }
     try {
       if (record.type === 'directory') {
-        await axios.delete('/directory/delete', {
+        await axios.delete(`${BASE_URL}/directory/delete`, {
           data: { name: record.name, parent: currentPath, container: 'training' },
           withCredentials: true
         });
       } else {
-        await axios.delete('/delete-file', {
+        await axios.delete(`${BASE_URL}/delete-file`, {
           data: { directory: currentPath, filename: record.name, container: 'training' },
           withCredentials: true
         });
@@ -511,7 +512,7 @@ const TrainingDashboard = () => {
     try {
       // Verify file exists before attempting to download
       const dirToCheck = directory || currentPath;
-      const checkUrl = `/files?directory=${encodeURIComponent(dirToCheck)}`;
+      const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(dirToCheck)}`;
       const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
       const fileExists = (checkRes.data || []).some(f =>
@@ -624,7 +625,7 @@ const TrainingDashboard = () => {
     try {
       if (selectedItem.type === 'directory') {
         await axios.put(
-          '/directory/rename',
+          `${BASE_URL}/directory/rename`,
           {
             old_name: selectedItem.name,
             new_name: renameNewName,
@@ -635,7 +636,7 @@ const TrainingDashboard = () => {
         );
       } else {
         await axios.put(
-          '/file/rename',
+          `${BASE_URL}/file/rename`,
           {
             directory: currentPath,
             old_filename: selectedItem.name,
@@ -700,7 +701,7 @@ const TrainingDashboard = () => {
     try {
       if (copyItem.type === 'directory') {
         await axios.post(
-          '/directory/copy',
+          `${BASE_URL}/directory/copy`,
           {
             source_name: copyItem.name,
             source_parent: currentPath,
@@ -712,7 +713,7 @@ const TrainingDashboard = () => {
         );
       } else {
         await axios.post(
-          '/copy-file',
+          `${BASE_URL}/copy-file`,
           {
             source_file: copyItem.name,
             new_file_name: copyNewName,
@@ -739,7 +740,7 @@ const TrainingDashboard = () => {
   // ----------------------------------
   const fetchSubFolders = async (mainFolder) => {
     try {
-      const res = await axios.get(`/directory/list?directory=${encodeURIComponent(mainFolder)}`,
+      const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
         { withCredentials: true }
       );
 
@@ -795,7 +796,7 @@ const TrainingDashboard = () => {
     // For files, verify the file still exists before showing the move modal
     if (record.type === 'file') {
       try {
-        const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
         const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
         const fileExists = (checkRes.data || []).some(f =>
@@ -834,7 +835,7 @@ const TrainingDashboard = () => {
       if (moveItem.type === 'file') {
         // First, verify the file exists by trying to get its metadata
         try {
-          const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+          const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
           const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
           const fileExists = (checkRes.data || []).some(f =>
@@ -854,7 +855,7 @@ const TrainingDashboard = () => {
 
       if (moveItem.type === 'directory') {
         await axios.post(
-          '/directory/move',
+          `${BASE_URL}/directory/move`,
           {
             name: moveItem.name,
             old_parent: currentPath,
@@ -873,7 +874,7 @@ const TrainingDashboard = () => {
         });
 
         await axios.post(
-          '/move-file',
+          `${BASE_URL}/move-file`,
           {
             id: moveItem.id.toString(),
             filename: moveItem.name,
@@ -911,7 +912,7 @@ const TrainingDashboard = () => {
       if (isSearching) {
         // For search results, verify file exists in its directory
         const dirToCheck = record.directory || '';
-        const checkUrl = `/files?directory=${encodeURIComponent(dirToCheck)}`;
+        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(dirToCheck)}`;
         const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
         const fileExists = (checkRes.data || []).some(f =>
@@ -930,7 +931,7 @@ const TrainingDashboard = () => {
         window.open(previewUrl, '_blank');
       } else {
         // For regular file listing, verify file exists in current directory
-        const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
         const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
         const fileExists = (checkRes.data || []).some(f =>

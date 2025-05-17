@@ -28,6 +28,8 @@ import axios from 'axios';
 const { Content } = Layout;
 const { Option } = Select;
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const UserFileManager = () => {
   const [files, setFiles] = useState([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
@@ -50,7 +52,7 @@ const UserFileManager = () => {
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get('/files', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/files`, { withCredentials: true });
       setFiles(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       message.error('Error fetching files');
@@ -61,7 +63,7 @@ const UserFileManager = () => {
 
   const fetchCurrentUser = async () => {
     try {
-      const res = await axios.get('/api/user/profile', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/api/user/profile`, { withCredentials: true });
       setCurrentUsername(res.data.username);
     } catch (error) {
       console.error('Error fetching user profile', error);
