@@ -16,7 +16,7 @@ services:
       SESSION_KEY: ${SESSION_KEY}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     volumes:
-      - ./LANFileSharingSystem:/app
+     - ./LANFileSharingSystem/cmd/server/Cdrrmo:/app/Cdrrmo
     working_dir: /app
     command: go run ./cmd/server
     healthcheck:

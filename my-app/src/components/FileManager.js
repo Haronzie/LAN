@@ -46,8 +46,7 @@ import './action-buttons-fix.css'; // Import CSS to fix action buttons
 
 const { Content } = Layout;
 const { Option } = Select;
-
-const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`;
 
 
 const UserSearchSelect = ({ value, onUserSelect, required }) => {
@@ -63,7 +62,7 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
       }
       setFetching(true);
       try {
-        const response = await axios.get(`/users?search=${value}`, { withCredentials: true });
+        const response = await axios.get(`${BASE_URL}/users?search=${value}`, { withCredentials: true });
         const data = response.data || [];
 
         // ✅ filter out self here too if not done in map stage
@@ -163,6 +162,10 @@ const FileManager = () => {
   const [targetUsername, setTargetUsername] = useState('');
   const [selectedFileInfo, setSelectedFileInfo] = useState(null);
   const [infoModalVisible, setInfoModalVisible] = useState(false);
+  // Add state variables for copy operation
+  const [copySelectedMainFolder, setCopySelectedMainFolder] = useState('');
+  const [copySelectedSubFolder, setCopySelectedSubFolder] = useState('');
+  const [copySubFolders, setCopySubFolders] = useState([]);
   // const [selectedFiles, setSelectedFiles] = useState([]); // Uncomment if needed for future enhancements
 
   // const navigate = useNavigate(); // Uncomment if navigation is needed
@@ -302,19 +305,8 @@ const FileManager = () => {
     return () => clearInterval(interval);
   }, [currentPath, moveModalVisible, copyModalVisible, renameModalVisible, createFolderModal, uploadModalVisible]);
 
-  useEffect(() => {
-    const updateSuggestedName = async () => {
-      if (copyItem && copyItem.type === 'file') {
-        const name = copyItem.name;
-        const ext = path.extname(name);
-        const base = path.basename(name, ext);
-        const targetDir = selectedDestination || currentPath;
-        const suggested = await generateSuggestedName(base, ext, targetDir);
-        setCopyNewName(suggested);
-      }
-    };
-    updateSuggestedName();
-  }, [selectedDestination]);
+  // We're no longer auto-generating a new name with a suffix when destination changes
+  // This allows the conflict detection to work properly
 
   // Perform global search across all subfolders
   const performSearch = async (query) => {
@@ -522,24 +514,46 @@ const FileManager = () => {
       const file = uploadingFile[0];
       const fileExists = existingNames.includes(file.name);
 
-      const uploadSingle = async (overwrite) => {
+      const uploadSingle = async (overwrite, skip = false) => {
+        if (skip) {
+          message.info(`Skipped uploading ${file.name}`);
+          return;
+        }
+
         const formData = new FormData();
         formData.append('file', file);
         console.log("Sending folder:", normalizedPath);
-        formData.append('directory', normalizedPath); // Fixed: removed toLowerCase()
-        formData.append('container', mainFolder || 'operation'); // Added container parameter
+        formData.append('directory', normalizedPath);
+        formData.append('container', mainFolder || 'operation');
+
+        // Only one of these should be true at a time
         if (overwrite) formData.append('overwrite', 'true');
+        else if (skip) formData.append('skip', 'true');
+
         if (fileUploadMessage.trim() && targetUsername.trim()) {
           formData.append('message', fileUploadMessage.trim());
           formData.append('receiver', targetUsername.trim());
         }
 
         try {
-          await axios.post(`${BASE_URL}/upload`, formData, {
+          const response = await axios.post(`${BASE_URL}/upload`, formData, {
             withCredentials: true,
             headers: { 'Content-Type': 'multipart/form-data' },
           });
-          message.success(`${file.name} uploaded`);
+
+          // Get the destination from the response or fallback to the current path
+          const destination = response.data?.destination || normalizedPath;
+
+          let successMessage;
+          if (overwrite) {
+            successMessage = `Overwritten ${file.name} in ${destination}`;
+          } else {
+            successMessage = `Uploaded ${file.name} to ${destination}`;
+          }
+
+          message.success(successMessage);
+          fetchItems(); // Refresh the file list
+          setUploadModalVisible(false); // Close the upload modal after successful upload
         } catch (error) {
           console.error('Upload failed:', error);
           const errorMessage = error.response?.data?.error || `Upload failed for ${file.name}`;
@@ -548,26 +562,139 @@ const FileManager = () => {
       };
 
       if (fileExists) {
-        Modal.confirm({
+        const modal = Modal.info({
           title: `A file named '${file.name}' already exists.`,
           icon: <ExclamationCircleOutlined />,
-          content: 'Do you want to overwrite or keep both?',
-          okText: 'Overwrite',
-          cancelText: 'Keep Both',
-          okButtonProps: { danger: true },
-          onOk: async () => await uploadSingle(true),
-          onCancel: async () => await uploadSingle(false),
+          content: (
+            <div>
+              <p>Choose an action for this file:</p>
+              <div style={{ marginTop: '16px' }}>
+                <Button
+                  danger
+                  style={{ width: '100%', marginBottom: '8px' }}
+                  onClick={() => {
+                    modal.destroy();
+                    uploadSingle(true);
+                    setUploadModalVisible(false); // Close the upload modal after handling
+                  }}
+                >
+                  A. Overwrite - Replace the existing file
+                </Button>
+
+                <Button
+                  type="primary"
+                  style={{ width: '100%', marginBottom: '8px' }}
+                  onClick={() => {
+                    modal.destroy();
+                    uploadSingle(false);
+                    setUploadModalVisible(false); // Close the upload modal after handling
+                  }}
+                >
+                  B. Keep Both - Save with a new name
+                </Button>
+
+                <Button
+                  style={{ width: '100%' }}
+                  onClick={() => {
+                    modal.destroy();
+                    message.info(`Skipped uploading ${file.name}`);
+                    setUploadModalVisible(false); // Close the upload modal after handling
+                  }}
+                >
+                  C. Skip - Cancel this upload
+                </Button>
+              </div>
+            </div>
+          ),
+          okButtonProps: { style: { display: 'none' } }, // Hide the default OK button
         });
       } else {
         await uploadSingle(false);
       }
     } else {
+      // For multiple files, check if any of them already exist
+      const existingFiles = existingNames;
+      const conflictingFiles = uploadingFile.filter(file => existingFiles.includes(file.name));
+
+      if (conflictingFiles.length > 0) {
+        // If there are conflicts, show a modal asking what to do with all conflicting files
+        const modal = Modal.info({
+          title: `${conflictingFiles.length} file(s) already exist`,
+          icon: <ExclamationCircleOutlined />,
+          content: (
+            <div>
+              <p>The following files already exist:</p>
+              <ul style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #eee', padding: '8px 16px' }}>
+                {conflictingFiles.map(file => (
+                  <li key={file.uid}>{file.name}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: '16px' }}>Choose an action for these files:</p>
+              <div style={{ marginTop: '16px' }}>
+                <Button
+                  danger
+                  style={{ width: '100%', marginBottom: '8px' }}
+                  onClick={() => {
+                    modal.destroy();
+                    handleBulkUpload(true, false);
+                    // No need to close modal here as handleBulkUpload will close it
+                  }}
+                >
+                  A. Overwrite All - Replace existing files
+                </Button>
+
+                <Button
+                  type="primary"
+                  style={{ width: '100%', marginBottom: '8px' }}
+                  onClick={() => {
+                    modal.destroy();
+                    handleBulkUpload(false, false);
+                    // No need to close modal here as handleBulkUpload will close it
+                  }}
+                >
+                  B. Keep Both - Save with new names
+                </Button>
+
+                <Button
+                  style={{ width: '100%' }}
+                  onClick={() => {
+                    modal.destroy();
+                    handleBulkUpload(false, true);
+                    // No need to close modal here as handleBulkUpload will close it
+                  }}
+                >
+                  C. Skip Conflicts - Upload only new files
+                </Button>
+              </div>
+            </div>
+          ),
+          okButtonProps: { style: { display: 'none' } }, // Hide the default OK button
+        });
+      } else {
+        // If no conflicts, proceed with upload
+        await handleBulkUpload(false, false);
+      }
+    }
+
+    // Function to handle bulk upload with overwrite/skip options
+    async function handleBulkUpload(overwrite, skip) {
       const formData = new FormData();
       uploadingFile.forEach((file) => formData.append('files', file));
-      formData.append('directory', normalizedPath); // ✅ updated
-      formData.append('container', mainFolder || 'operation'); // ✅ updated using mainFolder variable
-      formData.append('overwrite', 'false');
-      formData.append('skip', 'false');
+      formData.append('directory', normalizedPath);
+      formData.append('container', mainFolder || 'operation');
+
+      // Only one of these should be true at a time
+      if (overwrite) {
+        formData.append('overwrite', 'true');
+        formData.append('skip', 'false');
+      } else if (skip) {
+        formData.append('overwrite', 'false');
+        formData.append('skip', 'true');
+      } else {
+        formData.append('overwrite', 'false');
+        formData.append('skip', 'false');
+      }
+
       if (fileUploadMessage.trim() && targetUsername.trim()) {
         formData.append('message', fileUploadMessage.trim());
         formData.append('receiver', targetUsername.trim());
@@ -583,19 +710,27 @@ const FileManager = () => {
         const skipped = results.filter(r => r.status === 'skipped').length;
         const failed = results.filter(r => r.status.startsWith('error')).length;
 
-        message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+        let successMessage;
+        if (overwrite && uploaded > 0) {
+          successMessage = `${uploaded} file(s) overwritten, ${skipped} skipped, ${failed} failed`;
+        } else if (skip && skipped > 0) {
+          successMessage = `${uploaded} file(s) uploaded, ${skipped} skipped, ${failed} failed`;
+        } else {
+          successMessage = `${uploaded} file(s) uploaded, ${skipped} skipped, ${failed} failed`;
+        }
+
+        message.success(successMessage);
+        setUploadModalVisible(false);
+        setUploadingFile([]);
+        setFileUploadMessage('');
+        setTargetUsername('');
+        fetchItems();
       } catch (error) {
         console.error('Bulk upload failed:', error);
         const errorMessage = error.response?.data?.error || 'Bulk upload failed';
         message.error(errorMessage);
       }
     }
-
-    setUploadModalVisible(false);
-    setUploadingFile([]);
-    setFileUploadMessage('');
-    setTargetUsername('');
-    fetchItems();
   };
 
   // This function is currently not used but might be needed for future enhancements
@@ -732,12 +867,16 @@ const FileManager = () => {
 
   const handleCopy = async (record) => {
     const name = record.name;
-    const ext = path.extname(name);
-    const base = path.basename(name, ext);
-    const targetDir = selectedDestination || currentPath;
-    const suggested = await generateSuggestedName(base, ext, targetDir);
+
+    // Reset state for copy operation
+    setCopySelectedMainFolder('');
+    setCopySelectedSubFolder('');
+    setCopySubFolders([]);
+    setSelectedDestination('');
+
+    // Use the original file name instead of generating a new one with a suffix
     setCopyItem(record);
-    setCopyNewName(suggested);
+    setCopyNewName(name);
     setCopyModalVisible(true);
   };
 
@@ -750,44 +889,115 @@ const FileManager = () => {
       message.error('No item selected to copy');
       return;
     }
+    if (!copySelectedMainFolder) {
+      message.error('Please select a main folder');
+      return;
+    }
 
     try {
-      const targetDir = selectedDestination || currentPath;
+      // Determine the destination path based on main folder and subfolder
+      let destinationPath = copySelectedMainFolder;
+      if (copySelectedSubFolder) {
+        destinationPath = `${copySelectedMainFolder}/${copySelectedSubFolder}`;
+      }
+
+      // For files, check if a file with the same name already exists at the destination
+      if (copyItem.type === 'file') {
+        const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(destinationPath)}`, {
+          withCredentials: true
+        });
+
+        const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+        const nameExists = existingNames.includes(copyNewName);
+
+        if (nameExists) {
+          // Import dynamically to avoid circular dependencies
+          const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+
+          FileOperationConflictModal({
+            fileName: copyNewName,
+            destinationPath: destinationPath,
+            operation: 'copy',
+            onOverwrite: async () => {
+              await finalizeCopy(true);
+            },
+            onKeepBoth: async () => {
+              await finalizeCopy(false);
+            },
+            onSkip: () => {
+              message.info(`Skipped copying ${copyItem.name}`);
+              setCopyModalVisible(false);
+            }
+          });
+          return;
+        }
+      }
+
+      // If no conflict or it's a directory, proceed with copy
+      await finalizeCopy(false);
+    } catch (err) {
+      console.error('Copy error:', err);
+      message.error(err.response?.data?.error || 'Error checking for conflict or copying item');
+    }
+  };
+
+  const finalizeCopy = async (overwrite) => {
+    try {
+      // Determine the destination path based on main folder and subfolder
+      let destinationPath = copySelectedMainFolder;
+      if (copySelectedSubFolder) {
+        destinationPath = `${copySelectedMainFolder}/${copySelectedSubFolder}`;
+      }
 
       if (copyItem.type === 'directory') {
         await axios.post(`${BASE_URL}/directory/copy`, {
           source_name: copyItem.name,
           source_parent: currentPath,
           new_name: copyNewName,
-          destination_parent: targetDir
+          destination_parent: destinationPath
         }, { withCredentials: true });
 
-        message.success(`Directory '${copyItem.name}' copied as '${copyNewName}'`);
+        message.success(`Copied ${copyItem.name} to ${copySelectedMainFolder}${copySelectedSubFolder ? '/' + copySelectedSubFolder : ''}`);
         fetchFolderTree();
-
       } else {
-        const res = await axios.post(`${BASE_URL}/copy-file`, {
+        await axios.post(`${BASE_URL}/copy-file`, {
           source_file: copyItem.name,
           new_file_name: copyNewName,
-          destination_folder: targetDir
+          destination_folder: destinationPath,
+          overwrite: overwrite
         }, { withCredentials: true });
 
-        const finalName = res.data.final_name || copyNewName;
-
-        message.success(`File '${copyItem.name}' copied as '${finalName}'`);
+        message.success(`Copied ${copyItem.name} to ${copySelectedMainFolder}${copySelectedSubFolder ? '/' + copySelectedSubFolder : ''}`);
       }
 
       setCopyModalVisible(false);
       setCopyItem(null);
       setCopyNewName('');
+      setCopySelectedMainFolder('');
+      setCopySelectedSubFolder('');
+      setSelectedDestination('');
       fetchItems();
     } catch (err) {
       console.error('Copy error:', err);
-      message.error(err.response?.data?.error || 'Error copying item');
+
+      // Handle specific error cases
+      if (err.response?.data?.error === "Source file not found on disk") {
+        message.error('The file no longer exists on the server. Please refresh the page and try again.');
+      } else if (err.response?.data?.error === "Permission denied when accessing source file") {
+        message.error('Permission denied when accessing the file. Please contact your administrator.');
+      } else if (err.response?.data?.error === "Invalid encryption key configuration") {
+        message.error('There is an issue with the file encryption system. Please contact your administrator.');
+      } else if (err.response?.data?.error && err.response.data.error.includes("Failed to read from source file")) {
+        message.error('The file appears to be corrupted or cannot be read. Please try uploading it again.');
+      } else if (err.response?.data?.error && err.response.data.error.includes("Failed to open source file")) {
+        message.error('The file cannot be accessed. This might be due to a temporary issue. Please try again in a moment.');
+      } else {
+        message.error(err.response?.data?.error || 'Error copying item');
+      }
     }
   };
 
-  const fetchSubFolders = async (mainFolder) => {
+  const fetchSubFolders = async (mainFolder, forCopy = false) => {
     try {
       const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
         { withCredentials: true }
@@ -802,11 +1012,19 @@ const FileManager = () => {
         }))
         .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
 
-      setSubFolders(folders);
+      if (forCopy) {
+        setCopySubFolders(folders);
+      } else {
+        setSubFolders(folders);
+      }
     } catch (error) {
       console.error('Error fetching subfolders:', error);
       message.error('Failed to load subfolders');
-      setSubFolders([]);
+      if (forCopy) {
+        setCopySubFolders([]);
+      } else {
+        setSubFolders([]);
+      }
     }
   };
 
@@ -816,7 +1034,7 @@ const FileManager = () => {
     setMoveDestination(value); // Set the destination to the main folder by default
 
     if (value) {
-      fetchSubFolders(value);
+      fetchSubFolders(value, false);
     } else {
       setSubFolders([]);
     }
@@ -833,20 +1051,63 @@ const FileManager = () => {
     }
   };
 
+  // Handler functions for copy operation
+  const handleCopyMainFolderChange = (value) => {
+    setCopySelectedMainFolder(value);
+    setCopySelectedSubFolder('');
+    setSelectedDestination(value); // Set the destination to the main folder by default
+
+    if (value) {
+      fetchSubFolders(value, true);
+    } else {
+      setCopySubFolders([]);
+    }
+  };
+
+  const handleCopySubFolderChange = (value) => {
+    setCopySelectedSubFolder(value);
+    if (value) {
+      // Combine main folder and subfolder for the full path
+      setSelectedDestination(`${copySelectedMainFolder}/${value}`);
+    } else {
+      // If no subfolder is selected, use just the main folder
+      setSelectedDestination(copySelectedMainFolder);
+    }
+  };
+
   const handleMove = async (record) => {
     // For files, verify the file still exists before showing the move modal
     if (record.type === 'file') {
       try {
-        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
+        // Normalize the current path to ensure consistent handling
+        const normalizedPath = currentPath.replace(/\\/g, '/');
+        console.log('Initial check - file existence in:', normalizedPath);
+
+        const checkUrl = `/files?directory=${encodeURIComponent(normalizedPath)}`;
         const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
-        const fileExists = (checkRes.data || []).some(f =>
-          f.name === record.name && (f.directory === currentPath || f.directory === undefined)
-        );
+        // More flexible matching to handle potential directory field inconsistencies
+        const fileExists = (checkRes.data || []).some(f => {
+          const nameMatch = f.name === record.name;
+          const dirMatch = !f.directory ||
+                          f.directory === normalizedPath ||
+                          f.directory.toLowerCase() === normalizedPath.toLowerCase();
+
+          return nameMatch && dirMatch;
+        });
 
         if (!fileExists) {
-          message.error('This file no longer exists. Please refresh the page.');
-          return;
+          // Try a direct API call to check if the file exists on disk
+          try {
+            const fileCheckUrl = `${BASE_URL}/download?directory=${encodeURIComponent(normalizedPath)}&filename=${encodeURIComponent(record.name)}`;
+            await axios.head(fileCheckUrl, { withCredentials: true });
+            console.log('File exists on disk based on HEAD request');
+            // If we get here, the file exists on disk even if not in the directory listing
+          } catch (headErr) {
+            console.error('File does not exist on disk:', headErr);
+            message.error('This file no longer exists. Please refresh the page.');
+            return;
+          }
         }
       } catch (err) {
         console.error('Error checking file existence:', err);
@@ -883,76 +1144,29 @@ const FileManager = () => {
         const nameExists = existingNames.includes(moveItem.name);
 
         if (nameExists) {
-          const conflictModal = Modal.info({
-            title: `A file named '${moveItem.name}' already exists in '${moveDestination}'`,
-            icon: <ExclamationCircleOutlined />,
-            closable: true,
-            width: 600,
-            content: (
-              <div>
-                <p>Choose an action for this file:</p>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                  marginTop: '16px'
-                }}>
-                  <Button
-                    type="primary"
-                    danger
-                    style={{ flex: 1 }}
-                    onClick={async () => {
-                      try {
-                        await finalizeMove(true);
-                        setMoveModalVisible(false);
-                        conflictModal.destroy();
-                      } catch (err) {
-                        console.error('Replace failed:', err);
-                        message.error('Failed to replace file.');
-                      }
-                    }}
-                  >
-                    Replace
-                  </Button>
+          // Import dynamically to avoid circular dependencies
+          const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
 
-                  <Button
-                    style={{ flex: 1 }}
-                    onClick={() => {
-                      message.info('Skipped this file.');
-                      setMoveModalVisible(false);
-                      conflictModal.destroy();
-                    }}
-                  >
-                    Skip
-                  </Button>
-
-                  <Button
-                    type="default"
-                    style={{ flex: 1 }}
-                    onClick={async () => {
-                      try {
-                        await finalizeMove(false);
-                        setMoveModalVisible(false);
-                        conflictModal.destroy();
-                      } catch (err) {
-                        console.error('Keep both failed:', err);
-                        message.error('Failed to keep both.');
-                      }
-                    }}
-                  >
-                    Keep Both
-                  </Button>
-                </div>
-              </div>
-            ),
-            okButtonProps: { style: { display: 'none' } },
-            cancelButtonProps: { style: { display: 'none' } },
+          FileOperationConflictModal({
+            fileName: moveItem.name,
+            destinationPath: moveDestination,
+            operation: 'move',
+            onOverwrite: async () => {
+              await finalizeMove(true);
+            },
+            onKeepBoth: async () => {
+              await finalizeMove(false);
+            },
+            onSkip: () => {
+              message.info(`Skipped moving ${moveItem.name}`);
+              setMoveModalVisible(false);
+            }
           });
-
           return;
         }
       }
 
+      // If no conflict or it's a directory, proceed with move
       await finalizeMove(false);
     } catch (err) {
       console.error('Move error:', err);
@@ -975,15 +1189,37 @@ const FileManager = () => {
       } else {
         // First, verify the file exists by trying to get its metadata
         try {
-          const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
+          // Normalize the current path to ensure consistent handling
+          const normalizedPath = currentPath.replace(/\\/g, '/');
+          console.log('Checking file existence in:', normalizedPath);
+
+          const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`;
           const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
-          const fileExists = (checkRes.data || []).some(f =>
-            f.name === moveItem.name && f.directory === currentPath
-          );
+          console.log('Files in directory:', checkRes.data);
+
+          // More flexible matching to handle potential directory field inconsistencies
+          const fileExists = (checkRes.data || []).some(f => {
+            const nameMatch = f.name === moveItem.name;
+            const dirMatch = !f.directory ||
+                            f.directory === normalizedPath ||
+                            f.directory.toLowerCase() === normalizedPath.toLowerCase();
+
+            console.log(`Checking file: ${f.name}, Directory: ${f.directory}, Match: ${nameMatch && dirMatch}`);
+            return nameMatch && dirMatch;
+          });
 
           if (!fileExists) {
-            throw new Error("Source file not found. It may have been deleted or moved.");
+            // Try a direct API call to check if the file exists on disk
+            try {
+              const fileCheckUrl = `${BASE_URL}/download?directory=${encodeURIComponent(normalizedPath)}&filename=${encodeURIComponent(moveItem.name)}`;
+              await axios.head(fileCheckUrl, { withCredentials: true });
+              console.log('File exists on disk based on HEAD request');
+              // If we get here, the file exists on disk even if not in the directory listing
+            } catch (headErr) {
+              console.error('File does not exist on disk:', headErr);
+              throw new Error("Source file not found. It may have been deleted or moved.");
+            }
           }
         } catch (checkErr) {
           console.error('File existence check failed:', checkErr);
@@ -992,8 +1228,11 @@ const FileManager = () => {
           return;
         }
 
+        // Convert ID to string to ensure proper format
+        const fileId = moveItem.id ? moveItem.id.toString() : "";
+
         console.log('Moving file with:', {
-          id: moveItem.id,
+          id: fileId,
           filename: moveItem.name,
           old_parent: currentPath,
           new_parent: moveDestination,
@@ -1003,7 +1242,7 @@ const FileManager = () => {
         await axios.post(
           `${BASE_URL}/move-file`,
           {
-            id: moveItem.id,
+            id: fileId,
             filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
@@ -1013,7 +1252,7 @@ const FileManager = () => {
         );
       }
 
-      message.success(`Moved '${moveItem.name}' successfully`);
+      message.success(`Moved '${moveItem.name}' to ${moveDestination}`);
 
       setMoveModalVisible(false);
       setMoveDestination('');
@@ -1024,9 +1263,24 @@ const FileManager = () => {
     } catch (err) {
       console.error('Move error:', err);
 
+      // Log detailed error information
+      if (err.response) {
+        console.error('Error response data:', err.response.data);
+        console.error('Error response status:', err.response.status);
+        console.error('Error response headers:', err.response.headers);
+      } else if (err.request) {
+        console.error('Error request:', err.request);
+      } else {
+        console.error('Error message:', err.message);
+      }
+
       // Handle specific error cases
       if (err.response?.data?.error === "Source file does not exist on disk") {
         message.error('The file no longer exists on the server. Please refresh the page.');
+      } else if (err.response?.status === 400 && err.response?.data?.error === "Invalid request body") {
+        message.error('Invalid request format. Please try again or contact support if the issue persists.');
+      } else if (err.response?.status === 404) {
+        message.error('File or destination folder not found. Please refresh and try again.');
       } else {
         message.error(err.response?.data?.error || 'Error moving item');
       }
@@ -1470,6 +1724,11 @@ const FileManager = () => {
           handleCopyConfirm={handleCopyConfirm}
           directoryItems={items}
           currentPath={currentPath}
+          copySelectedMainFolder={copySelectedMainFolder}
+          copySelectedSubFolder={copySelectedSubFolder}
+          copySubFolders={copySubFolders}
+          handleCopyMainFolderChange={handleCopyMainFolderChange}
+          handleCopySubFolderChange={handleCopySubFolderChange}
 
           // Move Modal props
           moveModalVisible={moveModalVisible}
@@ -1546,33 +1805,157 @@ const FileManager = () => {
           }}
 
           customRequest={async ({ file, onProgress, onSuccess, onError }) => {
-            const formData = new FormData();
-            formData.append('file', file);
             const normalizedPath = currentPath.replace(/\\/g, '/');
-            formData.append('directory', normalizedPath); // Normalize path
-            formData.append('container', mainFolder || 'operation'); // Added container parameter
 
-            if (fileUploadMessage.trim() && targetUsername.trim()) {
-              formData.append('message', fileUploadMessage.trim());
-              formData.append('receiver', targetUsername.trim());
-            }
-
+            // Check if file already exists
             try {
-              await axios.post(`${BASE_URL}/upload`, formData, {
-                withCredentials: true,
-                headers: { 'Content-Type': 'multipart/form-data' },
-                onUploadProgress: (event) => {
-                  onProgress({ percent: (event.loaded / event.total) * 100 });
-                }
+              const existingFilesRes = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`, {
+                withCredentials: true
               });
-              message.success(`${file.name} uploaded successfully`);
-              onSuccess();
-              fetchItems();
+              const existingFiles = existingFilesRes.data || [];
+              const existingNames = existingFiles.map(f => f.name);
+              const fileExists = existingNames.includes(file.name);
+
+              const uploadFile = async (overwrite, skip = false) => {
+                if (skip) {
+                  message.info(`Skipped uploading ${file.name}`);
+                  onSuccess();
+                  return;
+                }
+
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('directory', normalizedPath);
+                formData.append('container', mainFolder || 'operation');
+
+                // Only one of these should be true at a time
+                if (overwrite) formData.append('overwrite', 'true');
+                else if (skip) formData.append('skip', 'true');
+
+                if (fileUploadMessage.trim() && targetUsername.trim()) {
+                  formData.append('message', fileUploadMessage.trim());
+                  formData.append('receiver', targetUsername.trim());
+                }
+
+                try {
+                  const response = await axios.post(`${BASE_URL}/upload`, formData, {
+                    withCredentials: true,
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                    onUploadProgress: (event) => {
+                      onProgress({ percent: (event.loaded / event.total) * 100 });
+                    }
+                  });
+
+                  // Get the destination from the response or fallback to the current path
+                  const destination = response.data?.destination || normalizedPath;
+
+                  let successMessage;
+                  if (overwrite) {
+                    successMessage = `Overwritten ${file.name} in ${destination}`;
+                  } else {
+                    successMessage = `Uploaded ${file.name} to ${destination}`;
+                  }
+
+                  message.success(successMessage);
+                  onSuccess();
+                  fetchItems();
+                  setUploadModalVisible(false); // Close the upload modal after successful upload
+                } catch (err) {
+                  console.error('Upload error:', err);
+                  const errorMessage = err.response?.data?.error || `${file.name} upload failed`;
+                  message.error(errorMessage);
+                  onError(err);
+                }
+              };
+
+              if (fileExists) {
+                const modal = Modal.info({
+                  title: `A file named '${file.name}' already exists.`,
+                  icon: <ExclamationCircleOutlined />,
+                  content: (
+                    <div>
+                      <p>Choose an action for this file:</p>
+                      <div style={{ marginTop: '16px' }}>
+                        <Button
+                          danger
+                          style={{ width: '100%', marginBottom: '8px' }}
+                          onClick={() => {
+                            modal.destroy();
+                            uploadFile(true);
+                            setUploadModalVisible(false); // Close the upload modal after handling
+                          }}
+                        >
+                          A. Overwrite - Replace the existing file
+                        </Button>
+
+                        <Button
+                          type="primary"
+                          style={{ width: '100%', marginBottom: '8px' }}
+                          onClick={() => {
+                            modal.destroy();
+                            uploadFile(false);
+                            setUploadModalVisible(false); // Close the upload modal after handling
+                          }}
+                        >
+                          B. Keep Both - Save with a new name
+                        </Button>
+
+                        <Button
+                          style={{ width: '100%' }}
+                          onClick={() => {
+                            modal.destroy();
+                            uploadFile(false, true);
+                            setUploadModalVisible(false); // Close the upload modal after handling
+                          }}
+                        >
+                          C. Skip - Cancel this upload
+                        </Button>
+                      </div>
+                    </div>
+                  ),
+                  okButtonProps: { style: { display: 'none' } }, // Hide the default OK button
+                });
+              } else {
+                await uploadFile(false);
+              }
             } catch (err) {
-              console.error('Upload error:', err);
-              const errorMessage = err.response?.data?.error || `${file.name} upload failed`;
-              message.error(errorMessage);
-              onError(err);
+              console.error('Error checking for existing files:', err);
+              // If we can't check for existing files, proceed with upload anyway
+              message.info("Unable to check for existing files. Proceeding with upload...");
+
+              const formData = new FormData();
+              formData.append('file', file);
+              formData.append('directory', normalizedPath);
+              formData.append('container', mainFolder || 'operation');
+              // Default to keeping both files if there's a conflict
+              formData.append('overwrite', 'false');
+              formData.append('skip', 'false');
+
+              if (fileUploadMessage.trim() && targetUsername.trim()) {
+                formData.append('message', fileUploadMessage.trim());
+                formData.append('receiver', targetUsername.trim());
+              }
+
+              try {
+                const response = await axios.post(`${BASE_URL}/upload`, formData, {
+                  withCredentials: true,
+                  headers: { 'Content-Type': 'multipart/form-data' },
+                  onUploadProgress: (event) => {
+                    onProgress({ percent: (event.loaded / event.total) * 100 });
+                  }
+                });
+
+                const destination = response.data?.destination || normalizedPath;
+                message.success(`${file.name} uploaded to ${destination}`);
+                onSuccess();
+                fetchItems();
+                setUploadModalVisible(false); // Close the upload modal after successful upload
+              } catch (uploadErr) {
+                console.error('Upload error:', uploadErr);
+                const errorMessage = uploadErr.response?.data?.error || `${file.name} upload failed`;
+                message.error(errorMessage);
+                onError(uploadErr);
+              }
             }
           }}
 

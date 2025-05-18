@@ -742,8 +742,8 @@ const OperationDashboard = () => {
         await axios.put(
           `${BASE_URL}/file/rename`,
           {
-            old_name: selectedItem.name,
-            new_name: renameNewName,
+            old_filename: selectedItem.name,
+            new_filename: renameNewName,
             directory: currentPath,
             container: 'operation',
           },
@@ -839,7 +839,7 @@ const OperationDashboard = () => {
 
   const fetchSubFolders = async (mainFolder) => {
     try {
-      const res = await axios.get(`/directory/list?directory=${encodeURIComponent(mainFolder)}`,
+      const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
         { withCredentials: true }
       );
 
@@ -934,7 +934,7 @@ const OperationDashboard = () => {
       if (moveItem.type === 'file') {
         // First, verify the file exists by trying to get its metadata
         try {
-          const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+          const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
           const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
           const fileExists = (checkRes.data || []).some(f =>
@@ -954,7 +954,7 @@ const OperationDashboard = () => {
 
       if (moveItem.type === 'directory') {
         await axios.post(
-          '/directory/move',
+          `${BASE_URL}/directory/move`,
           {
             name: moveItem.name,
             old_parent: currentPath,
@@ -973,7 +973,7 @@ const OperationDashboard = () => {
         });
 
         await axios.post(
-          '/move-file',
+          `${BASE_URL}/move-file`,
           {
             id: moveItem.id.toString(),
             filename: moveItem.name,
