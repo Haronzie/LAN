@@ -19,6 +19,69 @@ import { ExclamationCircleOutlined } from '@ant-design/icons';
  */
 export const deleteFolder = async (folder, currentPath, container, onSuccess, onError) => {
   try {
+    // Build the full path for the folder
+    const folderPath = currentPath ? `${currentPath}/${folder.name}` : folder.name;
+    console.log(`🗑️ Deleting folder: ${folderPath}`);
+
+    // Step 1: Recursively get all files and subfolders within this folder
+    const allContents = await getAllFolderContents(folderPath);
+    console.log(`Found ${allContents.files.length} files and ${allContents.folders.length} subfolders to delete`);
+
+    // Step 2: Delete all files first
+    if (allContents.files.length > 0) {
+      console.log(`Deleting ${allContents.files.length} files...`);
+      for (const file of allContents.files) {
+        try {
+          await axios.delete('/delete-file', {
+            data: {
+              filename: file.name,
+              directory: file.directory,
+              container
+            },
+            withCredentials: true
+          });
+          console.log(`Deleted file: ${file.directory}/${file.name}`);
+        } catch (fileError) {
+          console.error(`Error deleting file ${file.directory}/${file.name}:`, fileError);
+          // Continue with other files even if one fails
+        }
+      }
+    }
+
+    // Step 3: Delete all subfolders (from deepest to shallowest)
+    if (allContents.folders.length > 0) {
+      // Sort folders by depth (deepest first) to ensure proper deletion order
+      const sortedFolders = [...allContents.folders].sort((a, b) => {
+        const depthA = (a.path.match(/\//g) || []).length;
+        const depthB = (b.path.match(/\//g) || []).length;
+        return depthB - depthA; // Descending order (deepest first)
+      });
+
+      console.log(`Deleting ${sortedFolders.length} subfolders in order from deepest to shallowest...`);
+      for (const subfolder of sortedFolders) {
+        try {
+          // Extract parent path and folder name
+          const lastSlashIndex = subfolder.path.lastIndexOf('/');
+          const parentPath = lastSlashIndex > 0 ? subfolder.path.substring(0, lastSlashIndex) : '';
+          const folderName = lastSlashIndex > 0 ? subfolder.path.substring(lastSlashIndex + 1) : subfolder.path;
+
+          await axios.delete('/directory/delete', {
+            data: {
+              name: folderName,
+              parent: parentPath,
+              container
+            },
+            withCredentials: true
+          });
+          console.log(`Deleted subfolder: ${subfolder.path}`);
+        } catch (folderError) {
+          console.error(`Error deleting subfolder ${subfolder.path}:`, folderError);
+          // Continue with other folders even if one fails
+        }
+      }
+    }
+
+    // Step 4: Finally delete the main folder itself
     await axios.delete('/directory/delete', {
       data: {
         name: folder.name,
@@ -48,6 +111,66 @@ export const deleteFolder = async (folder, currentPath, container, onSuccess, on
 };
 
 /**
+ * Recursively get all files and subfolders within a folder
+ * @param {string} folderPath - Path to the folder
+ * @returns {Promise<{files: Array, folders: Array}>} - Promise that resolves with arrays of files and folders
+ */
+export const getAllFolderContents = async (folderPath) => {
+  const result = {
+    files: [],
+    folders: []
+  };
+
+  try {
+    // Get all files in the current folder
+    const filesRes = await axios.get(`/files?directory=${encodeURIComponent(folderPath)}`, {
+      withCredentials: true
+    });
+
+    if (filesRes.data && Array.isArray(filesRes.data)) {
+      // Add all files from this folder
+      result.files.push(...filesRes.data.map(file => ({
+        name: file.name,
+        directory: folderPath,
+        id: file.id
+      })));
+    }
+
+    // Get all subfolders in the current folder
+    const foldersRes = await axios.get(`/directory/list?directory=${encodeURIComponent(folderPath)}`, {
+      withCredentials: true
+    });
+
+    if (foldersRes.data && Array.isArray(foldersRes.data)) {
+      const subfolders = foldersRes.data.filter(item => item.type === 'directory');
+
+      // Add all subfolders from this level
+      for (const subfolder of subfolders) {
+        const subfolderPath = `${folderPath}/${subfolder.name}`;
+
+        // Add this subfolder to the list
+        result.folders.push({
+          name: subfolder.name,
+          path: subfolderPath
+        });
+
+        // Recursively get contents of this subfolder
+        const subContents = await getAllFolderContents(subfolderPath);
+
+        // Add subfolder's files and folders to our result
+        result.files.push(...subContents.files);
+        result.folders.push(...subContents.folders);
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error(`Error getting contents of folder ${folderPath}:`, error);
+    return result; // Return whatever we've collected so far
+  }
+};
+
+/**
  * Show confirmation dialog before deleting a folder
  * @param {Object} folder - The folder object to delete
  * @param {string} currentPath - Current directory path
@@ -55,18 +178,59 @@ export const deleteFolder = async (folder, currentPath, container, onSuccess, on
  * @param {Function} onSuccess - Callback function to execute on success
  * @param {Function} onError - Callback function to execute on error
  */
-export const confirmFolderDelete = (folder, currentPath, container, onSuccess, onError) => {
-  Modal.confirm({
-    title: 'Delete Folder',
-    icon: <ExclamationCircleOutlined />,
-    content: `Are you sure you want to delete the folder "${folder.name}" and all its contents? This action cannot be undone.`,
-    okText: 'Yes, Delete',
-    okType: 'danger',
-    cancelText: 'Cancel',
-    onOk: async () => {
-      await deleteFolder(folder, currentPath, container, onSuccess, onError);
+export const confirmFolderDelete = async (folder, currentPath, container, onSuccess, onError) => {
+  try {
+    // Build the full path for the folder
+    const folderPath = currentPath ? `${currentPath}/${folder.name}` : folder.name;
+
+    // Get folder contents to show detailed information
+    const contents = await getAllFolderContents(folderPath);
+    const fileCount = contents.files.length;
+    const folderCount = contents.folders.length;
+
+    // Create a detailed message about what will be deleted
+    let detailedMessage = `Are you sure you want to delete the folder "${folder.name}"?`;
+
+    if (fileCount > 0 || folderCount > 0) {
+      detailedMessage += `\n\nThis will delete:`;
+      if (fileCount > 0) {
+        detailedMessage += `\n• ${fileCount} file${fileCount !== 1 ? 's' : ''}`;
+      }
+      if (folderCount > 0) {
+        detailedMessage += `\n• ${folderCount} subfolder${folderCount !== 1 ? 's' : ''}`;
+      }
+      detailedMessage += `\n\nThis action cannot be undone.`;
+    } else {
+      detailedMessage += `\n\nThe folder is empty. This action cannot be undone.`;
     }
-  });
+
+    Modal.confirm({
+      title: 'Delete Folder',
+      icon: <ExclamationCircleOutlined />,
+      content: detailedMessage,
+      okText: 'Yes, Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        await deleteFolder(folder, currentPath, container, onSuccess, onError);
+      }
+    });
+  } catch (error) {
+    console.error('Error preparing folder delete confirmation:', error);
+
+    // Fallback to simple confirmation if we can't get folder contents
+    Modal.confirm({
+      title: 'Delete Folder',
+      icon: <ExclamationCircleOutlined />,
+      content: `Are you sure you want to delete the folder "${folder.name}" and all its contents? This action cannot be undone.`,
+      okText: 'Yes, Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        await deleteFolder(folder, currentPath, container, onSuccess, onError);
+      }
+    });
+  }
 };
 
 /**
