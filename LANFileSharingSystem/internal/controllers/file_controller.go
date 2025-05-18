@@ -1695,3 +1695,44 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	log.Printf("🔍 Search found %d results", len(results))
 	models.RespondJSON(w, http.StatusOK, results)
 }
+
+// DeleteFolder handles folder deletion requests.
+func (fc *FileController) DeleteFolder(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	var req struct {
+		Name      string `json:"name"`
+		Parent    string `json:"parent"`
+		Container string `json:"container"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Build the folder path
+	folderPath := filepath.Join(req.Parent, req.Name)
+	diskPath := filepath.Join("Cdrrmo", folderPath)
+
+	// Remove the folder and all its contents
+	if err := os.RemoveAll(diskPath); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Failed to delete folder")
+		return
+	}
+
+	// Optionally: Remove folder records from your DB if you track folders
+
+	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted folder '%s'", user.Username, folderPath))
+	models.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Folder '%s' deleted successfully", folderPath),
+	})
+}

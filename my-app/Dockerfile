@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy only package files first to leverage Docker cache for npm install
 COPY package.json package-lock.json ./
 
-# Use faster and more reliable install
-RUN npm ci --prefer-offline --no-audit
+# Use npm install instead of npm ci due to lockfile issues
+RUN npm install --legacy-peer-deps --prefer-offline --no-audit
 
 # Copy the rest of the application code
 COPY . .

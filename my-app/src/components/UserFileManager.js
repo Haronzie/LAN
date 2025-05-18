@@ -47,6 +47,8 @@ const UserFileManager = () => {
   const [copyNewName, setCopyNewName] = useState('');
   const [copyDestination, setCopyDestination] = useState('');
 
+  const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
   const navigate = useNavigate();
 
   const fetchFiles = async () => {

@@ -59,7 +59,11 @@ const UserDashboard = () => {
 
   const handleLogout = async () => {
     try {
+<<<<<<< Updated upstream
       await axios.get('log-out', {}, { withCredentials: true });
+=======
+      await axios.post(`${BASE_URL}/logout`, {}, { withCredentials: true });
+>>>>>>> Stashed changes
       message.success('Logged out successfully.');
       navigate('/login');
     } catch (error) {

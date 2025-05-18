@@ -50,17 +50,24 @@ import BatchActionsMenu from './common/BatchActionsMenu';
 import ActionButtons from './common/ActionButtons';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const { Content } = Layout;
 const { Option } = Select;
 
+<<<<<<< Updated upstream
 const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 const WS_BASE_URL = process.env.REACT_APP_BACKEND_WS || 'ws://localhost:8080';
+=======
+
+>>>>>>> Stashed changes
 
 function formatFileSize(size) {
   if (size === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(size) / Math.log(1024));
   return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+
 }
 
 const OperationDashboard = () => {
@@ -242,7 +249,7 @@ const OperationDashboard = () => {
   const markAsDone = async (messageId, fileId) => {
     try {
       await axios.patch(
-        `/file/message/${messageId}/done`,
+        `${BASE_URL}/file/message/${messageId}/done`,
         {},
         { withCredentials: true }
       );
@@ -333,7 +340,7 @@ const OperationDashboard = () => {
 
     try {
       // Build the search URL with the main folder parameter for Operation
-      const searchUrl = `/search?q=${encodeURIComponent(query)}&main_folder=Operation`;
+      const searchUrl = `${BASE_URL}/search?q=${encodeURIComponent(query)}&main_folder=Operation`;
 
       const response = await axios.get(searchUrl, { withCredentials: true });
 
@@ -481,6 +488,15 @@ const OperationDashboard = () => {
     console.log("Uploading to directory:", normalizedPath); // for debugging
 
     try {
+<<<<<<< Updated upstream
+=======
+      const existingFilesRes = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`, {
+        withCredentials: true
+      });
+      const existingFiles = existingFilesRes.data || [];
+      const existingNames = existingFiles.map(f => f.name);
+
+>>>>>>> Stashed changes
       if (uploadingFiles.length === 1) {
         const formData = new FormData();
         formData.append('file', uploadingFiles[0]);
@@ -492,7 +508,95 @@ const OperationDashboard = () => {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
 
+<<<<<<< Updated upstream
         message.success('File uploaded successfully');
+=======
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('directory', normalizedPath);
+          formData.append('container', 'operation');
+
+          // Only one of these should be true at a time
+          if (overwrite) formData.append('overwrite', 'true');
+          else if (skip) formData.append('skip', 'true');
+
+          try {
+            const response = await axios.post(`${BASE_URL}/upload`, formData, {
+              withCredentials: true,
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            // Get the destination from the response or fallback to the current path
+            const destination = response.data?.destination || normalizedPath;
+
+            let successMessage;
+            if (overwrite) {
+              successMessage = `Overwritten ${file.name} in ${destination}`;
+            } else {
+              successMessage = `Uploaded ${file.name} to ${destination}`;
+            }
+
+            message.success(successMessage);
+            setUploadModalVisible(false);
+            setUploadingFiles([]);
+            fetchItems(); // refresh file list
+            fetchAllFilesWithMessages(); // refresh files with messages
+          } catch (error) {
+            console.error('Upload failed:', error);
+            const errorMessage = error.response?.data?.error || `Upload failed for ${file.name}`;
+            message.error(errorMessage);
+          }
+        };
+
+        if (fileExists) {
+          // Show conflict resolution modal
+          Modal.info({
+            title: `A file named '${file.name}' already exists.`,
+            icon: <ExclamationCircleOutlined />,
+            content: (
+              <div>
+                <p>Choose an action for this file:</p>
+                <div style={{ marginTop: '16px' }}>
+                  <Button
+                    danger
+                    style={{ width: '100%', marginBottom: '8px' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      uploadSingle(true);
+                    }}
+                  >
+                    A. Overwrite - Replace the existing file
+                  </Button>
+
+                  <Button
+                    type="primary"
+                    style={{ width: '100%', marginBottom: '8px' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      uploadSingle(false);
+                    }}
+                  >
+                    B. Keep Both - Save with a new name
+                  </Button>
+
+                  <Button
+                    style={{ width: '100%' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      uploadSingle(false, true);
+                    }}
+                  >
+                    C. Skip - Cancel this upload
+                  </Button>
+                </div>
+              </div>
+            ),
+            okButtonProps: { style: { display: 'none' } }, // Hide the default OK button
+          });
+        } else {
+          await uploadSingle(false);
+        }
+>>>>>>> Stashed changes
       } else {
         const formData = new FormData();
         uploadingFiles.forEach((file) => formData.append('files', file));
@@ -511,7 +615,97 @@ const OperationDashboard = () => {
         const skipped = results.filter(r => r.status === 'skipped').length;
         const failed = results.filter(r => r.status.startsWith('error')).length;
 
+<<<<<<< Updated upstream
         message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+=======
+          try {
+            const res = await axios.post(`${BASE_URL}/bulk-upload`, formData, {
+              withCredentials: true,
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            const results = res.data || [];
+            const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
+            const skipped = results.filter(r => r.status === 'skipped').length;
+            const failed = results.filter(r => r.status.startsWith('error')).length;
+
+            let successMessage;
+            if (overwrite && uploaded > 0) {
+              successMessage = `${uploaded} file(s) overwritten, ${skipped} skipped, ${failed} failed`;
+            } else if (skip && skipped > 0) {
+              successMessage = `${uploaded} file(s) uploaded, ${skipped} skipped, ${failed} failed`;
+            } else {
+              successMessage = `${uploaded} file(s) uploaded, ${skipped} skipped, ${failed} failed`;
+            }
+
+            message.success(successMessage);
+            setUploadModalVisible(false);
+            setUploadingFiles([]);
+            fetchItems(); // refresh file list
+            fetchAllFilesWithMessages(); // refresh files with messages
+          } catch (error) {
+            console.error('Bulk upload failed:', error);
+            const errorMessage = error.response?.data?.error || 'Bulk upload failed';
+            message.error(errorMessage);
+          }
+        };
+
+        if (conflictingFiles.length > 0) {
+          // If there are conflicts, show a modal asking what to do with all conflicting files
+          Modal.info({
+            title: `${conflictingFiles.length} file(s) already exist`,
+            icon: <ExclamationCircleOutlined />,
+            content: (
+              <div>
+                <p>The following files already exist:</p>
+                <ul style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #eee', padding: '8px 16px' }}>
+                  {conflictingFiles.map(file => (
+                    <li key={file.uid}>{file.name}</li>
+                  ))}
+                </ul>
+                <p style={{ marginTop: '16px' }}>Choose an action for these files:</p>
+                <div style={{ marginTop: '16px' }}>
+                  <Button
+                    danger
+                    style={{ width: '100%', marginBottom: '8px' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      handleBulkUpload(true, false);
+                    }}
+                  >
+                    A. Overwrite All - Replace existing files
+                  </Button>
+
+                  <Button
+                    type="primary"
+                    style={{ width: '100%', marginBottom: '8px' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      handleBulkUpload(false, false);
+                    }}
+                  >
+                    B. Keep Both - Save with new names
+                  </Button>
+
+                  <Button
+                    style={{ width: '100%' }}
+                    onClick={() => {
+                      Modal.destroyAll();
+                      handleBulkUpload(false, true);
+                    }}
+                  >
+                    C. Skip Conflicts - Upload only new files
+                  </Button>
+                </div>
+              </div>
+            ),
+            okButtonProps: { style: { display: 'none' } }, // Hide the default OK button
+          });
+        } else {
+          // If no conflicts, proceed with upload
+          await handleBulkUpload(false, false);
+        }
+>>>>>>> Stashed changes
       }
 
       setUploadModalVisible(false);
@@ -801,6 +995,82 @@ const OperationDashboard = () => {
       return;
     }
     try {
+<<<<<<< Updated upstream
+=======
+      // Determine the destination path based on main folder and subfolder
+      let destinationPath = selectedMainFolder;
+      if (selectedSubFolder) {
+        destinationPath = `${selectedMainFolder}/${selectedSubFolder}`;
+      }
+
+      // For files, check if a file with the same name already exists at the destination
+      if (copyItem.type === 'file') {
+        try {
+          const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(destinationPath)}`, {
+            withCredentials: true
+          });
+
+          const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+          const nameExists = existingNames.includes(copyNewName);
+
+          if (nameExists) {
+            // Import dynamically to avoid circular dependencies
+            const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+
+            FileOperationConflictModal({
+              fileName: copyNewName,
+              destinationPath: destinationPath,
+              operation: 'copy',
+              onOverwrite: async () => {
+                await finalizeCopy(true);
+              },
+              onKeepBoth: async () => {
+                await finalizeCopy(false);
+              },
+              onSkip: () => {
+                message.info(`Skipped copying ${copyItem.name}`);
+                setCopyModalVisible(false);
+              }
+            });
+            return;
+          }
+        } catch (err) {
+          console.error('Error checking for existing files:', err);
+          // Continue with copy operation if we can't check for conflicts
+        }
+      }
+
+      // If no conflict or it's a directory, proceed with copy
+      await finalizeCopy(false);
+    } catch (error) {
+      console.error('Copy error:', error);
+
+      // Handle specific error cases
+      if (error.response?.data?.error === "Source file not found on disk") {
+        message.error('The file no longer exists on the server. Please refresh the page and try again.');
+      } else if (error.response?.data?.error === "Permission denied when accessing source file") {
+        message.error('Permission denied when accessing the file. Please contact your administrator.');
+      } else if (error.response?.data?.error === "Invalid encryption key configuration") {
+        message.error('There is an issue with the file encryption system. Please contact your administrator.');
+      } else if (error.response?.data?.error && error.response.data.error.includes("Failed to read from source file")) {
+        message.error('The file appears to be corrupted or cannot be read. Please try uploading it again.');
+      } else if (error.response?.data?.error && error.response.data.error.includes("Failed to open source file")) {
+        message.error('The file cannot be accessed. This might be due to a temporary issue. Please try again in a moment.');
+      } else {
+        message.error(error.response?.data?.error || 'Error copying item');
+      }
+    }
+  };
+
+  const finalizeCopy = async (overwrite) => {
+    try {
+      // Determine the destination path based on main folder and subfolder
+      let destinationPath = selectedMainFolder;
+      if (selectedSubFolder) {
+        destinationPath = `${selectedMainFolder}/${selectedSubFolder}`;
+      }
+
+>>>>>>> Stashed changes
       if (copyItem.type === 'directory') {
         await axios.post(
           '/directory/copy',
@@ -815,7 +1085,7 @@ const OperationDashboard = () => {
         );
       } else {
         await axios.post(
-          '/copy-file',
+          `${BASE_URL}/copy-file`,
           {
             source_file: copyItem.name,
             new_file_name: copyNewName,
@@ -895,7 +1165,7 @@ const OperationDashboard = () => {
     // For files, verify the file still exists before showing the move modal
     if (record.type === 'file') {
       try {
-        const checkUrl = `/files?directory=${encodeURIComponent(currentPath)}`;
+        const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
         const checkRes = await axios.get(checkUrl, { withCredentials: true });
 
         const fileExists = (checkRes.data || []).some(f =>
@@ -950,6 +1220,44 @@ const OperationDashboard = () => {
           setMoveModalVisible(false);
           return;
         }
+<<<<<<< Updated upstream
+=======
+
+        // Then check if a file with the same name exists at the destination
+        try {
+          const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
+            withCredentials: true
+          });
+
+          const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+          const nameExists = existingNames.includes(moveItem.name);
+
+          if (nameExists) {
+            // Import dynamically to avoid circular dependencies
+            const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+
+            FileOperationConflictModal({
+              fileName: moveItem.name,
+              destinationPath: moveDestination,
+              operation: 'move',
+              onOverwrite: async () => {
+                await finalizeMove(true);
+              },
+              onKeepBoth: async () => {
+                await finalizeMove(false);
+              },
+              onSkip: () => {
+                message.info(`Skipped moving ${moveItem.name}`);
+                setMoveModalVisible(false);
+              }
+            });
+            return;
+          }
+        } catch (err) {
+          console.error('Error checking for existing files at destination:', err);
+          // Continue with move operation if we can't check for conflicts
+        }
+>>>>>>> Stashed changes
       }
 
       if (moveItem.type === 'directory') {
@@ -1004,6 +1312,59 @@ const OperationDashboard = () => {
     }
   };
 
+<<<<<<< Updated upstream
+=======
+  const finalizeMove = async (overwrite) => {
+    try {
+      if (moveItem.type === 'directory') {
+        // Use the global moveFolder function
+        await moveFolder(
+          moveItem,
+          currentPath,
+          moveDestination,
+          'operation', // container for OperationDashboard
+          () => {
+            // Success callback is handled by the moveFolder function
+          },
+          null,
+          fetchDirectories
+        );
+      } else {
+        console.log('Moving file with:', {
+          id: moveItem.id.toString(),
+          filename: moveItem.name,
+          old_parent: currentPath,
+          new_parent: moveDestination,
+          overwrite: overwrite
+        });
+
+        await axios.post(
+          `${BASE_URL}/move-file`,
+          {
+            id: moveItem.id.toString(),
+            filename: moveItem.name,
+            old_parent: currentPath,
+            new_parent: moveDestination,
+            overwrite: overwrite
+          },
+          { withCredentials: true }
+        );
+      }
+
+      message.success(`Moved '${moveItem.name}' successfully`);
+      setMoveModalVisible(false);
+      setMoveDestination('');
+      setMoveItem(null);
+      fetchItems();
+      fetchAllFilesWithMessages();
+    } catch (error) {
+      console.error('Move finalization error:', error);
+      message.error(error.response?.data?.error || 'Error moving item');
+      setMoveModalVisible(false);
+    }
+  };
+
+>>>>>>> Stashed changes
   const columns = [
     {
       title: 'Name',

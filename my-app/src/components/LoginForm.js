@@ -4,6 +4,10 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const { Title } = Typography;
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 const LoginForm = () => {

@@ -366,6 +366,7 @@ func main() {
 	router.HandleFunc("/directory/tree", directoryController.Tree).Methods("GET")
 	router.HandleFunc("/directory/move", directoryController.Move).Methods("POST")
 	router.HandleFunc("/download-folder", directoryController.DownloadFolder).Methods("GET")
+	router.HandleFunc("/directory/delete", fileController.DeleteFolder).Methods("POST")
 
 	// Inventory routes
 	router.HandleFunc("/inventory", inventoryController.List).Methods("GET")

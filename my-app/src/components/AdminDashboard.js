@@ -21,6 +21,8 @@ import NotificationDropdown from './common/NotificationDropdown';
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const AdminDashboard = () => {
   const [adminName, setAdminName] = useState('Admin');
   const [collapsed, setCollapsed] = useState(false);
@@ -47,7 +49,11 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     try {
+<<<<<<< Updated upstream
       await axios.get('/logout', { withCredentials: true });
+=======
+      await axios.post(`${BASE_URL}/logout`, {}, { withCredentials: true });
+>>>>>>> Stashed changes
       navigate('/login');
     } catch {
       message.error('Logout failed.');

@@ -67,9 +67,13 @@ const UserManagement = () => {
       setUsers(Array.isArray(res.data) ? res.data : []);
 
       // Get the first admin information
+<<<<<<< Updated upstream
       const firstAdminRes = await axios.get('/admin-exits');
+=======
+      const firstAdminRes = await axios.get(`${BASE_URL}/admin-exists`, { withCredentials: true });
+>>>>>>> Stashed changes
       if (firstAdminRes.data.exists) {
-        const firstAdminInfo = await axios.get('/get-first-admin', { withCredentials: true });
+        const firstAdminInfo = await axios.get(`${BASE_URL}/get-first-admin`, { withCredentials: true });
         setFirstAdmin(firstAdminInfo.data);
       }
     } catch (error) {
@@ -215,7 +219,6 @@ const UserManagement = () => {
       }
     }
   };
-
 
   // Handler for promoting a user to admin
   const handleAssignAdmin = async (username) => {

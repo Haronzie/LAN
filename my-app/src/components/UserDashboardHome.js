@@ -48,7 +48,7 @@ const UserDashboardHome = () => {
 
       // Add a timestamp to prevent caching
       const timestamp = new Date().getTime();
-      const res = await axios.get(`/files-with-messages?_t=${timestamp}`, {
+      const res = await axios.get(`${BASE_URL}/files-with-messages?_t=${timestamp}`, {
         withCredentials: true,
         // Add a timeout to prevent hanging requests
         timeout: 10000
@@ -59,26 +59,6 @@ const UserDashboardHome = () => {
       // Ensure we have an array, even if empty
       const tasksData = Array.isArray(res.data) ? res.data : [];
       setFilesWithTasks(tasksData);
-
-      // Check if there are any tasks
-      if (tasksData.length === 0) {
-        console.log('UserDashboardHome: No files with tasks found');
-      } else {
-        console.log(`UserDashboardHome: Found ${tasksData.length} files with tasks`);
-
-        // Count total messages and pending tasks
-        let totalMessages = 0;
-        let pendingTasks = 0;
-
-        tasksData.forEach(file => {
-          if (Array.isArray(file.messages)) {
-            totalMessages += file.messages.length;
-            pendingTasks += file.messages.filter(msg => !msg.is_done).length;
-          }
-        });
-
-        console.log(`UserDashboardHome: Total messages: ${totalMessages}, Pending tasks: ${pendingTasks}`);
-      }
 
       // If we expected tasks but didn't find any, log additional debug info
       if (tasksData.length === 0) {
@@ -92,14 +72,6 @@ const UserDashboardHome = () => {
       }
     } catch (error) {
       console.error('UserDashboardHome: Error fetching files with tasks:', error);
-      if (error.response) {
-        console.error('UserDashboardHome: Response data:', error.response.data);
-        console.error('UserDashboardHome: Response status:', error.response.status);
-      } else if (error.request) {
-        console.error('UserDashboardHome: No response received:', error.request);
-      } else {
-        console.error('UserDashboardHome: Error setting up request:', error.message);
-      }
       message.error('Failed to load your assigned tasks');
     } finally {
       setLoading(false);
@@ -155,7 +127,7 @@ const UserDashboardHome = () => {
   const markTaskAsDone = async (messageId) => {
     try {
       await axios.patch(
-        `/file/message/${messageId}/done`,
+        `${BASE_URL}/file/message/${messageId}/done`,
         {},
         { withCredentials: true }
       );

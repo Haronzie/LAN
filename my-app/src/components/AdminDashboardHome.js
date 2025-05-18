@@ -9,6 +9,8 @@ const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 const { Text, Title } = Typography;
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const AdminDashboardHome = () => {
   const [users, setUsers] = useState([]);
   const [files, setFiles] = useState([]);
@@ -57,7 +59,10 @@ const AdminDashboardHome = () => {
     setLoadingUsers(true);
     try {
       const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
+<<<<<<< Updated upstream
       console.log("Fetched users:", res.data); // helpful for debugging
+=======
+>>>>>>> Stashed changes
       setUsers(Array.isArray(res.data) ? res.data : []);
     } catch {
       message.error('Error fetching users');
