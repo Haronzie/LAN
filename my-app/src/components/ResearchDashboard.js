@@ -39,6 +39,7 @@ import BatchActionsMenu from './common/BatchActionsMenu';
 import ActionButtons from './common/ActionButtons';
 import UploadConflictModal from './common/UploadConflictModal';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
+import { deleteFolder, confirmFolderDelete, copyFolder, fetchSubFolders, moveFolder } from '../utils/folderOperations';
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -240,26 +241,9 @@ const ResearchDashboard = () => {
     setCopyModalVisible(true);
   };
 
-  const fetchSubFolders = async (mainFolder) => {
-    try {
-      const res = await axios.get(`/directory/list?directory=${encodeURIComponent(mainFolder)}`,
-        { withCredentials: true }
-      );
-
-      // Filter to only include directories
-      const folders = (res.data || [])
-        .filter(item => item.type === 'directory')
-        .map(folder => ({
-          name: folder.name,
-          path: `${mainFolder}/${folder.name}`
-        }));
-
-      setSubFolders(folders);
-    } catch (error) {
-      console.error('Error fetching subfolders:', error);
-      message.error('Failed to load subfolders');
-      setSubFolders([]);
-    }
+  // Use the global fetchSubFolders function
+  const handleFetchSubFolders = async (mainFolder) => {
+    await fetchSubFolders(mainFolder, setSubFolders);
   };
 
   const handleMainFolderChange = (value) => {
@@ -268,7 +252,7 @@ const ResearchDashboard = () => {
     setMoveDestination(value); // Set the destination to the main folder by default
 
     if (value) {
-      fetchSubFolders(value);
+      handleFetchSubFolders(value);
     } else {
       setSubFolders([]);
     }
@@ -758,20 +742,27 @@ const ResearchDashboard = () => {
       message.error('Only the owner can delete this item.');
       return;
     }
+
     try {
       if (record.type === 'directory') {
-        await axios.delete('/directory/delete', {
-          data: { name: record.name, parent: currentPath, container: 'research' },
-          withCredentials: true
-        });
+        // Use the global folder delete function
+        await deleteFolder(
+          record,
+          currentPath,
+          'research', // Container for ResearchDashboard
+          () => {
+            fetchItems();
+            fetchDirectories();
+          }
+        );
       } else {
         await axios.delete('/delete-file', {
           data: { directory: currentPath, filename: record.name, container: 'research' },
           withCredentials: true
         });
+        message.success(`${record.name} deleted successfully`);
+        fetchItems();
       }
-      message.success(`${record.name} deleted successfully`);
-      fetchItems();
     } catch (error) {
       console.error('Delete error:', error);
       message.error(error.response?.data?.error || 'Error deleting item');
@@ -833,17 +824,17 @@ const ResearchDashboard = () => {
       }
 
       if (copyItem.type === 'directory') {
-        await axios.post(
-          '/directory/copy',
-          {
-            source_name: copyItem.name,
-            source_parent: currentPath,
-            new_name: copyNewName,
-            destination_parent: destinationPath,
-            container: 'research',
-            overwrite: overwrite
+        // Use the global copyFolder function
+        await copyFolder(
+          copyItem,
+          currentPath,
+          destinationPath,
+          'research', // container for ResearchDashboard
+          () => {
+            message.success(`Copied ${copyItem.name} to ${selectedMainFolder}${selectedSubFolder ? '/' + selectedSubFolder : ''}`);
           },
-          { withCredentials: true }
+          null,
+          fetchDirectories
         );
       } else {
         await axios.post(
@@ -953,15 +944,17 @@ const ResearchDashboard = () => {
   const finalizeMove = async (overwrite = false) => {
     try {
       if (moveItem.type === 'directory') {
-        await axios.post(
-          '/directory/move',
-          {
-            name: moveItem.name,
-            old_parent: currentPath,
-            new_parent: moveDestination,
-            container: 'research'
+        // Use the global moveFolder function
+        await moveFolder(
+          moveItem,
+          currentPath,
+          moveDestination,
+          'research', // container for ResearchDashboard
+          () => {
+            // Success callback is handled by the moveFolder function
           },
-          { withCredentials: true }
+          null,
+          fetchDirectories
         );
       } else {
         console.log('Moving file with:', {

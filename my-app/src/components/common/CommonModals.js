@@ -116,6 +116,7 @@ const CommonModals = ({
               value={copyNewName}
               onChange={(e) => setCopyNewName(e.target.value)}
               placeholder="Enter new name"
+              disabled={false} // Allow editing the name
             />
           </Form.Item>
           <Form.Item label="Main Folder" required>

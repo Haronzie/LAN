@@ -617,6 +617,30 @@ func (app *App) DirectoryExists(name, parent string) (bool, error) {
 	return count > 0, err
 }
 
+// DirectoryExistsByPath checks if a directory exists by its full path.
+// The path can be either a directory name at the root level or a path like "parent/child".
+func (app *App) DirectoryExistsByPath(path string) (bool, error) {
+	// Handle empty path (root)
+	if path == "" {
+		return true, nil // Root always exists
+	}
+
+	// Split the path into segments
+	segments := strings.Split(path, "/")
+
+	// If it's just a single directory name
+	if len(segments) == 1 {
+		return app.DirectoryExists(segments[0], "")
+	}
+
+	// For paths with multiple segments, the last segment is the directory name
+	// and everything before it is the parent path
+	dirName := segments[len(segments)-1]
+	parentPath := strings.Join(segments[:len(segments)-1], "/")
+
+	return app.DirectoryExists(dirName, parentPath)
+}
+
 // Enhance this method to update both file_name AND file_path
 func (app *App) RenameFileRecord(oldFilename, newFilename, newFilePath string) error {
 	_, err := app.DB.Exec(`
@@ -749,26 +773,236 @@ func (app *App) DeleteInventoryItem(id int) error {
 }
 
 func (app *App) DeleteFilesWithPrefix(prefix string) error {
+	// Log the prefix for debugging
+	log.Printf("DeleteFilesWithPrefix called with prefix: '%s'", prefix)
+
+	// First, check if there are any files with this directory exactly
+	directoryCountQuery := `
+		SELECT COUNT(*)
+		FROM files
+		WHERE directory = $1
+	`
+	var directoryCount int
+	err := app.DB.QueryRow(directoryCountQuery, prefix).Scan(&directoryCount)
+	if err != nil {
+		log.Printf("Error counting files with directory='%s': %v", prefix, err)
+	} else {
+		log.Printf("Found %d files with directory='%s'", directoryCount, prefix)
+	}
+
+	// Also check for files with directory that starts with prefix/
+	directoryPrefixCountQuery := `
+		SELECT COUNT(*)
+		FROM files
+		WHERE directory LIKE $1 || '/%'
+	`
+	var directoryPrefixCount int
+	err = app.DB.QueryRow(directoryPrefixCountQuery, prefix).Scan(&directoryPrefixCount)
+	if err != nil {
+		log.Printf("Error counting files with directory like '%s/%%': %v", prefix, err)
+	} else {
+		log.Printf("Found %d files with directory like '%s/%%'", directoryPrefixCount, prefix)
+	}
+
+	// Also check for files with file_path that matches or starts with prefix
+	filePathCountQuery := `
+		SELECT COUNT(*)
+		FROM files
+		WHERE file_path = $1
+		   OR file_path LIKE $1 || '/%'
+	`
+	var filePathCount int
+	err = app.DB.QueryRow(filePathCountQuery, prefix).Scan(&filePathCount)
+	if err != nil {
+		log.Printf("Error counting files with file_path='%s' or like '%s/%%': %v", prefix, prefix, err)
+	} else {
+		log.Printf("Found %d files with file_path='%s' or like '%s/%%'", filePathCount, prefix, prefix)
+	}
+
+	// Log some example files that will be deleted
+	exampleQuery := `
+		SELECT id, file_name, directory, file_path
+		FROM files
+		WHERE directory = $1
+		   OR directory LIKE $1 || '/%'
+		   OR file_path = $1
+		   OR file_path LIKE $1 || '/%'
+		LIMIT 10
+	`
+	rows, err := app.DB.Query(exampleQuery, prefix)
+	if err != nil {
+		log.Printf("Error querying example files: %v", err)
+	} else {
+		defer rows.Close()
+		log.Printf("Example files to delete:")
+		for rows.Next() {
+			var id int
+			var fileName, directory, filePath string
+			if err := rows.Scan(&id, &fileName, &directory, &filePath); err != nil {
+				log.Printf("Error scanning example file: %v", err)
+				continue
+			}
+			log.Printf("  - ID: %d, Name: '%s', Directory: '%s', Path: '%s'", id, fileName, directory, filePath)
+		}
+	}
+
+	// Now delete the files - using both directory and file_path columns
 	query := `
         DELETE FROM files
-        WHERE file_path = $1
+        WHERE directory = $1
+           OR directory LIKE $1 || '/%'
+           OR file_path = $1
            OR file_path LIKE $1 || '/%'
     `
-	// For empty parent, you might just have "FolderName" in file_path.
-	// The first condition (`file_path = $1`) catches the exact match (rare for a folder).
-	// The second condition matches subpaths, e.g. "FolderName/anything..."
-	_, err := app.DB.Exec(query, prefix)
-	return err
+	result, err := app.DB.Exec(query, prefix)
+	if err != nil {
+		log.Printf("Error deleting files with prefix '%s': %v", prefix, err)
+		return err
+	}
+
+	// Log how many files were actually deleted
+	rowsAffected, _ := result.RowsAffected()
+	log.Printf("Deleted %d files with prefix '%s'", rowsAffected, prefix)
+
+	return nil
 }
 func (app *App) DeleteDirectoriesWithPrefix(prefix string) error {
-	query := `DELETE FROM directories WHERE (parent_directory || '/' || directory_name) LIKE $1 || '%'`
-	_, err := app.DB.Exec(query, prefix)
-	return err
+	// Log the prefix for debugging
+	log.Printf("DeleteDirectoriesWithPrefix called with prefix: '%s'", prefix)
+
+	// Try different path formats for more robust matching
+	possiblePrefixes := []string{
+		prefix,                                // Original path
+		strings.ReplaceAll(prefix, "/", "\\"), // Windows-style path
+		strings.ToLower(prefix),               // Lowercase path
+		strings.ToUpper(prefix),               // Uppercase path
+	}
+
+	log.Printf("Trying multiple prefix formats for matching: %v", possiblePrefixes)
+
+	// Debug: Log all directories in the database
+	debugDirRows, err := app.DB.Query(`
+		SELECT id, directory_name, parent_directory
+		FROM directories
+		ORDER BY id
+		LIMIT 100
+	`)
+
+	if err != nil {
+		log.Printf("Error querying all directories for debugging: %v", err)
+	} else {
+		defer debugDirRows.Close()
+		log.Printf("DEBUG: All directories in database:")
+		for debugDirRows.Next() {
+			var id int
+			var dirName, parentDir string
+			if err := debugDirRows.Scan(&id, &dirName, &parentDir); err != nil {
+				log.Printf("Error scanning debug directory: %v", err)
+				continue
+			}
+			log.Printf("  - ID: %d, Name: '%s', Parent: '%s'", id, dirName, parentDir)
+		}
+	}
+
+	// Count directories that will be deleted using multiple prefix formats
+	var totalDirCount int
+	for _, p := range possiblePrefixes {
+		var dirCount int
+		countQuery := `
+			SELECT COUNT(*)
+			FROM directories
+			WHERE (parent_directory || '/' || directory_name) LIKE $1 || '%'
+			   OR (parent_directory || '\' || directory_name) LIKE $1 || '%'
+		`
+		err := app.DB.QueryRow(countQuery, p).Scan(&dirCount)
+		if err != nil {
+			log.Printf("Error counting directories with prefix '%s': %v", p, err)
+		} else {
+			log.Printf("Found %d directories to delete with prefix '%s'", dirCount, p)
+			totalDirCount += dirCount
+		}
+	}
+
+	log.Printf("Total directories to delete across all prefix formats: %d", totalDirCount)
+
+	// Log some example directories that will be deleted using multiple prefix formats
+	for _, p := range possiblePrefixes {
+		exampleQuery := `
+			SELECT id, directory_name, parent_directory
+			FROM directories
+			WHERE (parent_directory || '/' || directory_name) LIKE $1 || '%'
+			   OR (parent_directory || '\' || directory_name) LIKE $1 || '%'
+			LIMIT 10
+		`
+		rows, err := app.DB.Query(exampleQuery, p)
+		if err != nil {
+			log.Printf("Error querying example directories with prefix '%s': %v", p, err)
+		} else {
+			defer rows.Close()
+			log.Printf("Example directories to delete with prefix '%s':", p)
+			for rows.Next() {
+				var id int
+				var dirName, parentDir string
+				if err := rows.Scan(&id, &dirName, &parentDir); err != nil {
+					log.Printf("Error scanning example directory: %v", err)
+					continue
+				}
+				log.Printf("  - ID: %d, Name: '%s', Parent: '%s'", id, dirName, parentDir)
+			}
+		}
+	}
+
+	// Delete the directories using multiple prefix formats
+	var totalRowsAffected int64
+	for _, p := range possiblePrefixes {
+		query := `
+			DELETE FROM directories
+			WHERE (parent_directory || '/' || directory_name) LIKE $1 || '%'
+			   OR (parent_directory || '\' || directory_name) LIKE $1 || '%'
+		`
+		result, err := app.DB.Exec(query, p)
+		if err != nil {
+			log.Printf("Error deleting directories with prefix '%s': %v", p, err)
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		log.Printf("Deleted %d directories with prefix '%s'", rowsAffected, p)
+		totalRowsAffected += rowsAffected
+	}
+
+	log.Printf("Total directories deleted across all prefix formats: %d", totalRowsAffected)
+
+	// Also try deleting by exact parent directory match
+	// This handles cases where the directory structure doesn't match the expected format
+	parts := strings.Split(prefix, "/")
+	if len(parts) > 0 {
+		lastPart := parts[len(parts)-1]
+		log.Printf("Trying to delete directories with name '%s'", lastPart)
+
+		result, err := app.DB.Exec(`
+			DELETE FROM directories
+			WHERE directory_name = $1
+		`, lastPart)
+
+		if err != nil {
+			log.Printf("Error deleting directories by name '%s': %v", lastPart, err)
+		} else {
+			rowsAffected, _ := result.RowsAffected()
+			log.Printf("Deleted %d additional directories by name match", rowsAffected)
+			totalRowsAffected += rowsAffected
+		}
+	}
+
+	return nil
 }
 
 // DeleteDirectoryAndSubdirectories removes exactly the (parent, name) directory record,
-// then removes all subdirectories that reside under it.
+// then removes all subdirectories that reside under it, and all files associated with the directory.
 func (app *App) DeleteDirectoryAndSubdirectories(parent, name string) error {
+	// Log the parameters for debugging
+	log.Printf("DeleteDirectoryAndSubdirectories called with parent: '%s', name: '%s'", parent, name)
+
 	// Build a prefix for subfolders
 	// e.g. if parent = "", prefix = "Tata"
 	//      if parent = "Root", prefix = "Root/Tata"
@@ -777,23 +1011,148 @@ func (app *App) DeleteDirectoryAndSubdirectories(parent, name string) error {
 		prefix += "/"
 	}
 	prefix += name
+	log.Printf("Built prefix for subdirectories: '%s'", prefix)
+
+	// Check if the directory exists before deleting and get its ID
+	var directoryID int
+	var exists bool
+	err := app.DB.QueryRow(`
+		SELECT id
+		FROM directories
+		WHERE parent_directory = $1
+		  AND directory_name = $2
+	`, parent, name).Scan(&directoryID)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Printf("Directory with parent='%s' and name='%s' not found", parent, name)
+			exists = false
+		} else {
+			log.Printf("Error checking if directory exists: %v", err)
+			return err
+		}
+	} else {
+		exists = true
+		log.Printf("Found directory with ID=%d, parent='%s' and name='%s'", directoryID, parent, name)
+	}
+
+	// If the directory exists, delete all files associated with it
+	if exists {
+		// Delete files associated with this directory ID
+		if err := app.DeleteFilesByDirectoryID(directoryID); err != nil {
+			log.Printf("Error deleting files for directory ID %d: %v", directoryID, err)
+			// Continue with directory deletion even if file deletion fails
+		}
+	}
 
 	// 1) Delete the main directory itself
-	_, err := app.DB.Exec(`
+	result, err := app.DB.Exec(`
         DELETE FROM directories
         WHERE parent_directory = $1
           AND directory_name = $2
     `, parent, name)
 	if err != nil {
+		log.Printf("Error deleting main directory: %v", err)
 		return err
 	}
 
+	// Log how many directories were actually deleted
+	rowsAffected, _ := result.RowsAffected()
+	log.Printf("Deleted %d main directory records with parent='%s' and name='%s'", rowsAffected, parent, name)
+
+	// Check how many subdirectories will be deleted
+	var count int
+	err = app.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM directories
+		WHERE (parent_directory || '/' || directory_name) LIKE $1 || '/%'
+	`, prefix).Scan(&count)
+	if err != nil {
+		log.Printf("Error counting subdirectories to delete: %v", err)
+	} else {
+		log.Printf("Found %d subdirectories to delete with prefix '%s'", count, prefix)
+	}
+
+	// Get IDs of all subdirectories to delete their files too
+	subDirRows, err := app.DB.Query(`
+		SELECT id
+		FROM directories
+		WHERE (parent_directory || '/' || directory_name) LIKE $1 || '/%'
+	`, prefix)
+
+	if err != nil {
+		log.Printf("Error querying subdirectory IDs: %v", err)
+	} else {
+		defer subDirRows.Close()
+		var subDirIDs []int
+		for subDirRows.Next() {
+			var subDirID int
+			if err := subDirRows.Scan(&subDirID); err != nil {
+				log.Printf("Error scanning subdirectory ID: %v", err)
+				continue
+			}
+			subDirIDs = append(subDirIDs, subDirID)
+		}
+
+		// Delete files for each subdirectory
+		for _, subDirID := range subDirIDs {
+			if err := app.DeleteFilesByDirectoryID(subDirID); err != nil {
+				log.Printf("Error deleting files for subdirectory ID %d: %v", subDirID, err)
+				// Continue with next subdirectory even if file deletion fails
+			}
+		}
+	}
+
 	// 2) Delete any subfolders whose path starts with prefix
-	_, err = app.DB.Exec(`
+	result, err = app.DB.Exec(`
         DELETE FROM directories
         WHERE (parent_directory || '/' || directory_name) LIKE $1 || '/%'
     `, prefix)
-	return err
+	if err != nil {
+		log.Printf("Error deleting subdirectories: %v", err)
+		return err
+	}
+
+	// Log how many subdirectories were actually deleted
+	rowsAffected, _ = result.RowsAffected()
+	log.Printf("Deleted %d subdirectory records with prefix '%s'", rowsAffected, prefix)
+
+	// 3) Also delete any files that might still be associated with this directory path
+	// This is a fallback in case the directory ID-based deletion missed any files
+	if err := app.DeleteFilesWithPrefix(prefix); err != nil {
+		log.Printf("Error in fallback file deletion for prefix '%s': %v", prefix, err)
+		// Continue even if this fails
+	}
+
+	// 4) Try a more aggressive approach - delete any files where the directory contains the directory name
+	result, err = app.DB.Exec(`
+		DELETE FROM files
+		WHERE directory LIKE '%' || $1 || '%'
+		   OR file_path LIKE '%' || $1 || '%'
+	`, name)
+
+	if err != nil {
+		log.Printf("Error deleting files by directory name pattern: %v", err)
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		log.Printf("Deleted %d additional files by directory name pattern match", rowsAffected)
+	}
+
+	// 5) As a last resort, try to delete files where the directory is empty or null
+	// This might happen if the directory reference is lost but the file still exists
+	result, err = app.DB.Exec(`
+		DELETE FROM files
+		WHERE directory = '' OR directory IS NULL
+	`)
+
+	if err != nil {
+		log.Printf("Error deleting files with empty directory: %v", err)
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		log.Printf("Deleted %d files with empty directory", rowsAffected)
+	}
+
+	return nil
 }
 
 // MoveDirectoryRecord updates the parent_directory of a directory.
@@ -924,35 +1283,66 @@ func (app *App) UpdateFileMetadata(fileID int, newSize int64, newContentType str
 }
 
 // DeleteFileVersionsInFolder removes file_versions rows for all files whose
-// file_path starts with the given folderPath prefix.
+// directory or file_path starts with the given folderPath prefix.
 func (app *App) DeleteFileVersionsInFolder(folderPath string) error {
+	// Log the folder path for debugging
+	log.Printf("DeleteFileVersionsInFolder called with folderPath: '%s'", folderPath)
+
 	// Step 1: Gather all file IDs in that folder (including subfolders).
+	// Use both directory and file_path columns to find all files
 	rows, err := app.DB.Query(`
-        SELECT id
+        SELECT id, file_name, directory, file_path
         FROM files
-        WHERE file_path = $1
+        WHERE directory = $1
+           OR directory LIKE $1 || '/%'
+           OR file_path = $1
            OR file_path LIKE $1 || '/%'
     `, folderPath)
 	if err != nil {
+		log.Printf("Error querying files in folder '%s': %v", folderPath, err)
 		return err
 	}
 	defer rows.Close()
 
 	var fileIDs []int
+	log.Printf("Files found in folder '%s':", folderPath)
 	for rows.Next() {
 		var fid int
-		if err := rows.Scan(&fid); err != nil {
+		var fileName, directory, filePath string
+		if err := rows.Scan(&fid, &fileName, &directory, &filePath); err != nil {
+			log.Printf("Error scanning file record: %v", err)
 			return err
 		}
 		fileIDs = append(fileIDs, fid)
+		log.Printf("  - ID: %d, Name: '%s', Directory: '%s', Path: '%s'", fid, fileName, directory, filePath)
 	}
 
+	log.Printf("Found %d files in folder '%s'", len(fileIDs), folderPath)
+
 	// Step 2: For each file ID, delete any version rows in file_versions.
+	var totalVersionsDeleted int
 	for _, fid := range fileIDs {
-		if _, err := app.DB.Exec(`DELETE FROM file_versions WHERE file_id = $1`, fid); err != nil {
+		// First count how many versions will be deleted
+		var versionCount int
+		err := app.DB.QueryRow(`SELECT COUNT(*) FROM file_versions WHERE file_id = $1`, fid).Scan(&versionCount)
+		if err != nil {
+			log.Printf("Error counting versions for file ID %d: %v", fid, err)
+		} else {
+			log.Printf("Found %d versions for file ID %d", versionCount, fid)
+		}
+
+		// Now delete the versions
+		result, err := app.DB.Exec(`DELETE FROM file_versions WHERE file_id = $1`, fid)
+		if err != nil {
+			log.Printf("Error deleting versions for file ID %d: %v", fid, err)
 			return err
 		}
+		rowsAffected, _ := result.RowsAffected()
+		log.Printf("Deleted %d versions for file ID %d", rowsAffected, fid)
+		totalVersionsDeleted += int(rowsAffected)
 	}
+
+	log.Printf("Total file versions deleted: %d", totalVersionsDeleted)
 	return nil
 }
 
@@ -1175,4 +1565,230 @@ func (app *App) DeleteFileRecordByPath(filePath string) (int, error) {
 	log.Printf("Deleted %d rows for file ID %d", rowsAffected, fileID)
 
 	return fileID, nil
+}
+
+// DeleteFilesByDirectoryID deletes all files associated with a specific directory ID
+// This ensures that when a directory is deleted, all files in that directory are also deleted
+func (app *App) DeleteFilesByDirectoryID(directoryID int) error {
+	// Log the directory ID for debugging
+	log.Printf("DeleteFilesByDirectoryID called with directoryID: %d", directoryID)
+
+	// First, get the directory information to use for logging
+	var directoryName, parentDirectory string
+	err := app.DB.QueryRow(`
+		SELECT directory_name, parent_directory
+		FROM directories
+		WHERE id = $1
+	`, directoryID).Scan(&directoryName, &parentDirectory)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Printf("Directory with ID %d not found, possibly already deleted", directoryID)
+			return nil // Nothing to delete if directory doesn't exist
+		} else {
+			log.Printf("Error retrieving directory info for ID %d: %v", directoryID, err)
+			return err
+		}
+	}
+
+	log.Printf("Found directory: '%s' with parent: '%s'", directoryName, parentDirectory)
+
+	// Build the full directory path for searching
+	directoryPath := filepath.Join(parentDirectory, directoryName)
+	log.Printf("Full directory path: '%s'", directoryPath)
+
+	// Debug: Log all files in the database to see what we're working with
+	debugRows, err := app.DB.Query(`
+		SELECT id, file_name, directory, file_path
+		FROM files
+		ORDER BY id
+		LIMIT 100
+	`)
+
+	if err != nil {
+		log.Printf("Error querying all files for debugging: %v", err)
+	} else {
+		defer debugRows.Close()
+		log.Printf("DEBUG: All files in database:")
+		for debugRows.Next() {
+			var id int
+			var fileName, directory, filePath string
+			if err := debugRows.Scan(&id, &fileName, &directory, &filePath); err != nil {
+				log.Printf("Error scanning debug file: %v", err)
+				continue
+			}
+			log.Printf("  - ID: %d, Name: '%s', Directory: '%s', Path: '%s'", id, fileName, directory, filePath)
+		}
+	}
+
+	// Debug: Log all directories in the database
+	debugDirRows, err := app.DB.Query(`
+		SELECT id, directory_name, parent_directory
+		FROM directories
+		ORDER BY id
+		LIMIT 100
+	`)
+
+	if err != nil {
+		log.Printf("Error querying all directories for debugging: %v", err)
+	} else {
+		defer debugDirRows.Close()
+		log.Printf("DEBUG: All directories in database:")
+		for debugDirRows.Next() {
+			var id int
+			var dirName, parentDir string
+			if err := debugDirRows.Scan(&id, &dirName, &parentDir); err != nil {
+				log.Printf("Error scanning debug directory: %v", err)
+				continue
+			}
+			log.Printf("  - ID: %d, Name: '%s', Parent: '%s'", id, dirName, parentDir)
+		}
+	}
+
+	// Try different path formats for more robust matching
+	possiblePaths := []string{
+		directoryPath, // Original path
+		strings.ReplaceAll(directoryPath, "/", "\\"), // Windows-style path
+		strings.ToLower(directoryPath),               // Lowercase path
+		strings.ToUpper(directoryPath),               // Uppercase path
+	}
+
+	log.Printf("Trying multiple path formats for matching: %v", possiblePaths)
+
+	// Count files that will be deleted using multiple path formats
+	var totalFileCount int
+	for _, path := range possiblePaths {
+		var fileCount int
+		err = app.DB.QueryRow(`
+			SELECT COUNT(*)
+			FROM files
+			WHERE directory = $1
+			   OR directory LIKE $1 || '/%'
+			   OR directory LIKE $1 || '\%'
+			   OR file_path = $1
+			   OR file_path LIKE $1 || '/%'
+			   OR file_path LIKE $1 || '\%'
+		`, path).Scan(&fileCount)
+
+		if err != nil {
+			log.Printf("Error counting files for path '%s': %v", path, err)
+		} else {
+			log.Printf("Found %d files to delete for path '%s'", fileCount, path)
+			totalFileCount += fileCount
+		}
+	}
+
+	log.Printf("Total files to delete across all path formats: %d", totalFileCount)
+
+	// Log some example files that will be deleted using multiple path formats
+	for _, path := range possiblePaths {
+		rows, err := app.DB.Query(`
+			SELECT id, file_name, directory, file_path
+			FROM files
+			WHERE directory = $1
+			   OR directory LIKE $1 || '/%'
+			   OR directory LIKE $1 || '\%'
+			   OR file_path = $1
+			   OR file_path LIKE $1 || '/%'
+			   OR file_path LIKE $1 || '\%'
+			LIMIT 10
+		`, path)
+
+		if err != nil {
+			log.Printf("Error querying example files for path '%s': %v", path, err)
+		} else {
+			defer rows.Close()
+			log.Printf("Example files to delete for path '%s':", path)
+			for rows.Next() {
+				var id int
+				var fileName, directory, filePath string
+				if err := rows.Scan(&id, &fileName, &directory, &filePath); err != nil {
+					log.Printf("Error scanning example file: %v", err)
+					continue
+				}
+				log.Printf("  - ID: %d, Name: '%s', Directory: '%s', Path: '%s'", id, fileName, directory, filePath)
+			}
+		}
+	}
+
+	// Delete file versions first
+	for _, path := range possiblePaths {
+		if err := app.DeleteFileVersionsInFolder(path); err != nil {
+			log.Printf("Error deleting file versions for path '%s': %v", path, err)
+			// Continue with file deletion even if version deletion fails
+		}
+	}
+
+	// Delete the files using multiple path formats
+	var totalRowsAffected int64
+	for _, path := range possiblePaths {
+		result, err := app.DB.Exec(`
+			DELETE FROM files
+			WHERE directory = $1
+			   OR directory LIKE $1 || '/%'
+			   OR directory LIKE $1 || '\%'
+			   OR file_path = $1
+			   OR file_path LIKE $1 || '/%'
+			   OR file_path LIKE $1 || '\%'
+		`, path)
+
+		if err != nil {
+			log.Printf("Error deleting files for path '%s': %v", path, err)
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		log.Printf("Deleted %d files for path '%s'", rowsAffected, path)
+		totalRowsAffected += rowsAffected
+	}
+
+	log.Printf("Total files deleted across all path formats: %d", totalRowsAffected)
+
+	// Also try deleting by exact directory name match
+	result, err := app.DB.Exec(`
+		DELETE FROM files
+		WHERE directory = $1
+		   OR directory LIKE '%/' || $2
+		   OR directory LIKE '%\' || $2
+	`, directoryPath, directoryName)
+
+	if err != nil {
+		log.Printf("Error deleting files by directory name: %v", err)
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		log.Printf("Deleted %d additional files by directory name match", rowsAffected)
+		totalRowsAffected += rowsAffected
+	}
+
+	// Try a more aggressive approach - delete any files where the directory contains the directory name
+	result, err = app.DB.Exec(`
+		DELETE FROM files
+		WHERE directory LIKE '%' || $1 || '%'
+		   OR file_path LIKE '%' || $1 || '%'
+	`, directoryName)
+
+	if err != nil {
+		log.Printf("Error deleting files by directory name pattern: %v", err)
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		log.Printf("Deleted %d additional files by directory name pattern match", rowsAffected)
+		totalRowsAffected += rowsAffected
+	}
+
+	// As a last resort, try to delete files where the directory is empty or null
+	// This might happen if the directory reference is lost but the file still exists
+	result, err = app.DB.Exec(`
+		DELETE FROM files
+		WHERE directory = '' OR directory IS NULL
+	`)
+
+	if err != nil {
+		log.Printf("Error deleting files with empty directory: %v", err)
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		log.Printf("Deleted %d files with empty directory", rowsAffected)
+		totalRowsAffected += rowsAffected
+	}
+
+	return nil
 }

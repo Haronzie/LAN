@@ -118,41 +118,43 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log the request details
+	log.Printf("Directory delete request: Name='%s', Parent='%s'", req.Name, req.Parent)
+
 	// 1) Build the absolute path for disk deletion
 	resourcePath := getResourcePath(req.Name, req.Parent)
+	log.Printf("Absolute path for disk deletion: '%s'", resourcePath)
+
+	// Check if the directory exists on disk
+	if _, err := os.Stat(resourcePath); os.IsNotExist(err) {
+		log.Printf("Warning: Directory '%s' does not exist on disk", resourcePath)
+		// Continue with database deletion even if the directory doesn't exist on disk
+	} else {
+		log.Printf("Directory '%s' exists on disk, proceeding with deletion", resourcePath)
+	}
 
 	// 2) Remove the directory (and its sub-contents) from the filesystem
 	if err := os.RemoveAll(resourcePath); err != nil {
+		log.Printf("Error removing directory from disk: %v", err)
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory on disk")
 		return
 	}
+	log.Printf("Successfully removed directory '%s' from disk", resourcePath)
 
 	// 3) Build the relative path (for database deletion).
 	//    e.g. If parent="Root" and name="FolderA", this becomes "Root/FolderA"
 	relativeFolder := filepath.Join(req.Parent, req.Name)
+	log.Printf("Relative folder path for database operations: '%s'", relativeFolder)
 
-	// *** Delete file_versions for any files in this folder.
-	if err := dc.App.DeleteFileVersionsInFolder(relativeFolder); err != nil {
-		models.RespondError(w, http.StatusInternalServerError,
-			"Error deleting file version records in the folder")
-		return
-	}
-
-	// 4) Delete the file records in that folder
-	if err := dc.App.DeleteFilesWithPrefix(relativeFolder); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error deleting file records in the folder")
-		return
-	}
-
-	// 5) Delete any subdirectories
-	if err := dc.App.DeleteDirectoriesWithPrefix(relativeFolder); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory records from database")
-		return
-	}
+	// Delete the directory and all its contents (files, subdirectories, and file versions)
+	// The improved DeleteDirectoryAndSubdirectories function will handle everything
+	log.Printf("Deleting directory '%s' and all its contents", relativeFolder)
 	if err := dc.App.DeleteDirectoryAndSubdirectories(req.Parent, req.Name); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory records from database")
+		log.Printf("Error deleting directory and its contents: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Error deleting directory and its contents from database")
 		return
 	}
+	log.Printf("Successfully deleted directory '%s' and all its contents", relativeFolder)
 
 	dc.App.LogActivity(fmt.Sprintf(
 		"User '%s' deleted directory '%s' (parent: '%s') and all its contents.",
@@ -288,6 +290,7 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 		SourceParent      string `json:"source_parent"`
 		NewName           string `json:"new_name"`
 		DestinationParent string `json:"destination_parent"`
+		Overwrite         bool   `json:"overwrite"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
@@ -334,27 +337,43 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2) Auto-rename the top-level destination folder if it already exists
+	// 2) Check if destination folder already exists
+	destExists := false
 	if _, err := os.Stat(dstPath); err == nil {
-		uniqueName, _ := generateUniqueFolderName(req.NewName, destParent)
-		req.NewName = uniqueName
-		destRelPath = filepath.Join(destParent, req.NewName)
-		dstPath = getResourcePath(req.NewName, destParent)
+		// Destination folder exists, we'll merge contents instead of renaming
+		destExists = true
+		log.Printf("Destination folder '%s' already exists, will merge contents", dstPath)
+
+		// Ensure the destination folder has the correct permissions
+		if err := os.Chmod(dstPath, 0755); err != nil {
+			log.Printf("Warning: could not update permissions on destination folder: %v", err)
+		}
 	}
 
 	// 3) Recursively copy the folder on disk, capturing any subfolder renames
-	renames, err := copyDirAndTrackRenames(srcPath, dstPath)
+	// Always set overwrite to true for directories to ensure they merge
+	renames, err := copyDirAndTrackRenames(srcPath, dstPath, true)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error copying folder: "+err.Error())
 		// Optionally remove the partially copied folder on disk
 		return
 	}
 
-	// 4) Create the top-level directory record
-	if err := dc.App.CreateDirectoryRecord(req.NewName, destParent, user.Username); err != nil {
-		os.RemoveAll(dstPath) // rollback if DB fails
-		models.RespondError(w, http.StatusInternalServerError, "Error saving folder record to database")
+	// 4) Create the top-level directory record if it doesn't exist
+	// Check if directory record already exists
+	exists, err := dc.App.DirectoryExists(req.NewName, destParent)
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error checking directory existence")
 		return
+	}
+
+	// Only create directory record if it doesn't exist
+	if !exists {
+		if err := dc.App.CreateDirectoryRecord(req.NewName, destParent, user.Username); err != nil {
+			os.RemoveAll(dstPath) // rollback if DB fails
+			models.RespondError(w, http.StatusInternalServerError, "Error saving folder record to database")
+			return
+		}
 	}
 
 	// 5) Recursively duplicate file & directory records, using the rename map
@@ -363,65 +382,145 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 		// optionally remove the folder or partially inserted records
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' copied folder from '%s' to '%s'.",
-		user.Username, sourceRelPath, destRelPath))
-	dc.App.LogAudit(user.Username, 0, "COPY_FOLDER", fmt.Sprintf("User '%s' copied folder from '%s' to '%s'.", user.Username, sourceRelPath, destRelPath))
+	// Determine if we merged or created a new folder
+	isMergeOperation := destExists
 
-	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("Folder copied to '%s' successfully", destRelPath),
-	})
+	// Log appropriate message based on operation type
+	if isMergeOperation {
+		dc.App.LogActivity(fmt.Sprintf("User '%s' merged folder from '%s' into '%s'.",
+			user.Username, sourceRelPath, destRelPath))
+		dc.App.LogAudit(user.Username, 0, "MERGE_FOLDER", fmt.Sprintf("User '%s' merged folder from '%s' into '%s'.", user.Username, sourceRelPath, destRelPath))
+	} else {
+		dc.App.LogActivity(fmt.Sprintf("User '%s' copied folder from '%s' to '%s'.",
+			user.Username, sourceRelPath, destRelPath))
+		dc.App.LogAudit(user.Username, 0, "COPY_FOLDER", fmt.Sprintf("User '%s' copied folder from '%s' to '%s'.", user.Username, sourceRelPath, destRelPath))
+	}
+
+	// Send response based on operation type
+	if isMergeOperation {
+		models.RespondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("Folder contents merged into '%s' successfully", destRelPath),
+		})
+	} else {
+		models.RespondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("Folder copied to '%s' successfully", destRelPath),
+		})
+	}
 }
 
 // copyDirAndTrackRenames recursively copies a directory from src to dst,
-// renaming subfolders if collisions occur. It returns a map so we can
-// track which subfolders ended up renamed on disk.
-func copyDirAndTrackRenames(src, dst string) (map[string]string, error) {
+// merging contents when folders with the same name exist. It returns a map
+// that tracks any renames that might still occur in special cases.
+// If overwrite is true, existing files will be overwritten.
+func copyDirAndTrackRenames(src, dst string, overwrite bool) (map[string]string, error) {
 	renames := make(map[string]string) // key = oldFullDstPath, val = newSubfolderName
 
+	// Check if source directory exists
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return renames, fmt.Errorf("source directory does not exist: %v", err)
+	}
+	if !srcInfo.IsDir() {
+		return renames, fmt.Errorf("source path is not a directory")
+	}
+
+	// Check if destination directory exists
+	dstExists := false
+	if dstInfo, err := os.Stat(dst); err == nil {
+		if !dstInfo.IsDir() {
+			return renames, fmt.Errorf("destination exists but is not a directory")
+		}
+		dstExists = true
+		log.Printf("Destination folder '%s' exists, merging contents", dst)
+	}
+
+	// Create destination directory if it doesn't exist
+	if !dstExists {
+		if err := os.MkdirAll(dst, 0755); err != nil {
+			return renames, fmt.Errorf("failed to create destination directory: %v", err)
+		}
+		log.Printf("Created destination folder '%s'", dst)
+	}
+
+	// Read source directory entries
 	entries, err := os.ReadDir(src)
 	if err != nil {
-		return renames, err
+		return renames, fmt.Errorf("failed to read source directory: %v", err)
 	}
 
-	// Ensure the destination folder exists
-	if err := os.MkdirAll(dst, 0755); err != nil {
-		return renames, err
-	}
-
+	// Process each entry in the source directory
 	for _, entry := range entries {
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 
 		if entry.IsDir() {
-			// If a subfolder with this name already exists, rename it
+			// Handle subdirectory
+			log.Printf("Processing subdirectory: %s", entry.Name())
+
+			// Check if destination subdirectory already exists
 			if _, errStat := os.Stat(dstPath); errStat == nil {
-				newName, _ := generateUniqueFolderName(entry.Name(), filepath.Base(dst))
-				// So now "dst/Subfolder" => "dst/Subfolder_copy"
-				dstPath = filepath.Join(dst, newName)
-				// Record that this subfolder was renamed
-				renames[filepath.Join(dst, entry.Name())] = newName
+				log.Printf("Subdirectory '%s' already exists at destination, merging", entry.Name())
+
+				// Ensure the destination subdirectory has the correct permissions
+				if err := os.Chmod(dstPath, 0755); err != nil {
+					log.Printf("Warning: could not update permissions on destination subdirectory: %v", err)
+				}
+			} else {
+				// Create the subdirectory if it doesn't exist
+				if err := os.MkdirAll(dstPath, 0755); err != nil {
+					return renames, fmt.Errorf("failed to create subdirectory '%s': %v", entry.Name(), err)
+				}
+				log.Printf("Created subdirectory '%s' at destination", entry.Name())
 			}
 
-			subRenames, err := copyDirAndTrackRenames(srcPath, dstPath)
+			// Recursively copy/merge the subdirectory contents
+			subRenames, err := copyDirAndTrackRenames(srcPath, dstPath, overwrite)
 			if err != nil {
-				return renames, err
+				return renames, fmt.Errorf("error processing subdirectory '%s': %v", entry.Name(), err)
 			}
+
 			// Merge subRenames into renames
 			for k, v := range subRenames {
 				renames[k] = v
 			}
 		} else {
-			// Copy file
-			if err := copyFile(srcPath, dstPath); err != nil {
-				return renames, err
+			// Handle file
+			log.Printf("Processing file: %s", entry.Name())
+
+			// Check if destination file already exists
+			fileExists := false
+			if _, errStat := os.Stat(dstPath); errStat == nil {
+				fileExists = true
+				log.Printf("File '%s' already exists at destination", entry.Name())
+			}
+
+			// For directories, we always want to merge files
+			// Copy the file if it doesn't exist or if overwrite is true
+			if !fileExists {
+				// File doesn't exist, copy it
+				if err := copyFile(srcPath, dstPath); err != nil {
+					return renames, fmt.Errorf("failed to copy file '%s': %v", entry.Name(), err)
+				}
+				log.Printf("Copied file '%s' to destination", entry.Name())
+			} else if overwrite {
+				// File exists and overwrite is true
+				log.Printf("Overwriting existing file '%s'", entry.Name())
+				if err := copyFile(srcPath, dstPath); err != nil {
+					return renames, fmt.Errorf("failed to overwrite file '%s': %v", entry.Name(), err)
+				}
+				log.Printf("Overwritten file '%s' at destination", entry.Name())
+			} else {
+				// File exists and overwrite is false, skip it
+				log.Printf("Keeping existing file '%s' (not overwriting)", entry.Name())
 			}
 		}
 	}
+
 	return renames, nil
 }
 
-// duplicateRecordsWithRenames is like duplicateRecords, but uses the renames map
-// to ensure DB directory records match the final on-disk folder names.
+// duplicateRecordsWithRenames creates database records for copied files and directories,
+// skipping existing files and directories when merging folders.
 func duplicateRecordsWithRenames(
 	srcRelPath, destRelPath string,
 	dc *DirectoryController,
@@ -429,78 +528,97 @@ func duplicateRecordsWithRenames(
 	renames map[string]string,
 ) error {
 	// 1) Duplicate file records for the current directory
+	log.Printf("Creating database records for files in '%s' to '%s'", srcRelPath, destRelPath)
+
 	fileRecords, err := dc.App.ListFilesInDirectory(srcRelPath)
 	if err == nil {
+		// Get existing files in destination directory to avoid duplicates
+		destFiles, destErr := dc.App.ListFilesInDirectory(destRelPath)
+		destFileNames := make(map[string]bool)
+		if destErr == nil {
+			for _, df := range destFiles {
+				destFileNames[df.FileName] = true
+				log.Printf("Found existing file in destination: %s", df.FileName)
+			}
+		} else {
+			log.Printf("Warning: could not list files in destination directory '%s': %v", destRelPath, destErr)
+		}
+
 		for _, f := range fileRecords {
+			// Skip if file already exists in destination (for merging)
+			if destFileNames[f.FileName] {
+				log.Printf("Skipping existing file during merge: %s", f.FileName)
+				continue
+			}
+
 			newFilePath := filepath.Join(destRelPath, f.FileName)
 			newFR := models.FileRecord{
 				FileName:    f.FileName,
 				FilePath:    newFilePath,
+				Directory:   destRelPath,
 				Size:        f.Size,
 				ContentType: f.ContentType,
 				Uploader:    username,
 			}
-			// Attempt to create the file record
-			if createErr := dc.App.CreateFileRecord(newFR); createErr != nil {
-				// If it's a duplicate key constraint, rename and retry
-				if strings.Contains(createErr.Error(), "duplicate key value violates unique constraint") {
-					log.Println("Auto-renaming duplicate file:", newFR.FileName)
-					newFR.FileName = generateCopyName(newFR.FileName)
-					newFR.FilePath = filepath.Join(destRelPath, newFR.FileName)
 
-					if retryErr := dc.App.CreateFileRecord(newFR); retryErr != nil {
-						log.Println("Error creating file record even after rename:", retryErr)
-					}
-				} else {
-					log.Println("Error duplicating file record for", f.FileName, ":", createErr)
-				}
+			// Create the file record
+			if createErr := dc.App.CreateFileRecord(newFR); createErr != nil {
+				log.Printf("Error creating database record for file '%s': %v", f.FileName, createErr)
+			} else {
+				log.Printf("Created database record for file '%s' in '%s'", f.FileName, destRelPath)
 			}
 		}
 	} else {
-		log.Println("Warning: could not list files in", srcRelPath, ":", err)
+		log.Printf("Warning: could not list files in source directory '%s': %v", srcRelPath, err)
 	}
 
 	// 2) Look for subdirectories in the source directory
+	log.Printf("Processing subdirectories in '%s'", srcRelPath)
+
 	srcFullPath := filepath.Join("Cdrrmo", srcRelPath)
 	entries, err := os.ReadDir(srcFullPath)
 	if err != nil {
+		log.Printf("Error reading source directory '%s': %v", srcFullPath, err)
 		return err
 	}
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			srcSubRel := filepath.Join(srcRelPath, entry.Name())
-			destSubRel := filepath.Join(destRelPath, entry.Name())
+			subfolderName := entry.Name()
+			log.Printf("Processing subdirectory '%s'", subfolderName)
 
-			// Check if we renamed this subfolder on disk
-			// The original full path on disk was: "dst + / + entry.Name()"
-			// But we only have the *relative* "destRelPath/entry.Name()"
-			oldFullDst := filepath.Join("Cdrrmo", destRelPath, entry.Name())
+			srcSubRel := filepath.Join(srcRelPath, subfolderName)
+			destSubRel := filepath.Join(destRelPath, subfolderName)
 
-			newSubfolderName := entry.Name() // default
-			if renameVal, found := renames[oldFullDst]; found {
-				newSubfolderName = renameVal
-				destSubRel = filepath.Join(destRelPath, newSubfolderName)
+			// Check if directory record already exists
+			exists, checkErr := dc.App.DirectoryExists(subfolderName, destRelPath)
+			if checkErr != nil {
+				log.Printf("Error checking if directory '%s' exists in '%s': %v",
+					subfolderName, destRelPath, checkErr)
+				continue
 			}
 
-			// Create a directory record with the final subfolder name
-			if createErr := dc.App.CreateDirectoryRecord(newSubfolderName, destRelPath, username); createErr != nil {
-				if strings.Contains(createErr.Error(), "duplicate key value violates unique constraint") {
-					log.Println("Auto-renaming duplicate directory:", newSubfolderName)
-					renamed := generateCopyName(newSubfolderName)
-					if retryErr := dc.App.CreateDirectoryRecord(renamed, destRelPath, username); retryErr != nil {
-						log.Println("Error creating directory record even after rename:", retryErr)
-						continue
-					}
-					destSubRel = filepath.Join(destRelPath, renamed)
+			// Only create directory record if it doesn't exist
+			if !exists {
+				log.Printf("Creating directory record for '%s' in '%s'", subfolderName, destRelPath)
+				if createErr := dc.App.CreateDirectoryRecord(subfolderName, destRelPath, username); createErr != nil {
+					log.Printf("Error creating directory record for '%s': %v", subfolderName, createErr)
 				} else {
-					log.Println("Error creating directory record for", entry.Name(), ":", createErr)
+					log.Printf("Created directory record for '%s' in '%s'", subfolderName, destRelPath)
 				}
+			} else {
+				log.Printf("Directory record for '%s' already exists in '%s', merging contents",
+					subfolderName, destRelPath)
+
+				// Log that we're merging the directory contents
+				log.Printf("Merging directory contents for '%s' in '%s'", subfolderName, destRelPath)
 			}
 
-			// Recurse
+			// Recurse to handle subdirectory contents
 			if err := duplicateRecordsWithRenames(srcSubRel, destSubRel, dc, username, renames); err != nil {
-				log.Println("Error duplicating records for subdirectory", entry.Name(), ":", err)
+				log.Printf("Error processing subdirectory '%s': %v", subfolderName, err)
+			} else {
+				log.Printf("Successfully processed subdirectory '%s'", subfolderName)
 			}
 		}
 	}
@@ -662,7 +780,8 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.NewParent != "" {
-		destExists, err := dc.App.DirectoryExists(req.NewParent, "")
+		// Use the new DirectoryExistsByPath function to check if the destination path exists
+		destExists, err := dc.App.DirectoryExistsByPath(req.NewParent)
 		if err != nil {
 			models.RespondError(w, http.StatusInternalServerError, "Error checking destination folder")
 			return
@@ -676,29 +795,86 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 	oldPath := filepath.Join("Cdrrmo", req.OldParent, req.Name)
 	newPath := filepath.Join("Cdrrmo", req.NewParent, req.Name)
 
+	// Build relative paths for source/destination
+	sourceRelPath := filepath.Join(req.OldParent, req.Name)
+	destRelPath := filepath.Join(req.NewParent, req.Name)
+
+	// Check if destination folder already exists
 	if _, err := os.Stat(newPath); err == nil {
-		models.RespondError(w, http.StatusConflict, "A folder with that name already exists in the destination")
-		return
+		// Destination folder exists, we'll merge contents instead of moving directly
+		log.Printf("Destination folder '%s' already exists, will merge contents", newPath)
+
+		// Ensure the destination folder has the correct permissions
+		if err := os.Chmod(newPath, 0755); err != nil {
+			log.Printf("Warning: could not update permissions on destination folder: %v", err)
+		}
+
+		// Use the copyDirAndTrackRenames function to merge the folders
+		renames, err := copyDirAndTrackRenames(oldPath, newPath, true)
+		if err != nil {
+			models.RespondError(w, http.StatusInternalServerError, "Error merging folder contents: "+err.Error())
+			return
+		}
+
+		// Duplicate records in the database
+		if err := duplicateRecordsWithRenames(sourceRelPath, destRelPath, dc, user.Username, renames); err != nil {
+			log.Println("Warning: error duplicating nested records:", err)
+		}
+
+		// Delete file_versions for any files in the source folder
+		if err := dc.App.DeleteFileVersionsInFolder(sourceRelPath); err != nil {
+			log.Printf("Warning: could not delete file versions in source folder: %v", err)
+		}
+
+		// Delete the file records in the source folder
+		if err := dc.App.DeleteFilesWithPrefix(sourceRelPath); err != nil {
+			log.Printf("Warning: could not delete file records in source folder: %v", err)
+		}
+
+		// Delete any subdirectories in the source folder
+		if err := dc.App.DeleteDirectoriesWithPrefix(sourceRelPath); err != nil {
+			log.Printf("Warning: could not delete subdirectory records: %v", err)
+		}
+
+		// Delete the source directory record
+		if err := dc.App.DeleteDirectoryAndSubdirectories(req.OldParent, req.Name); err != nil {
+			log.Printf("Warning: could not delete source directory record: %v", err)
+		}
+
+		// Delete the source folder after successful merge
+		if err := os.RemoveAll(oldPath); err != nil {
+			log.Printf("Warning: could not remove source folder after merge: %v", err)
+			// Continue anyway as the content has been copied
+		}
+
+		dc.App.LogActivity(fmt.Sprintf("User '%s' merged directory '%s' from '%s' into '%s'.",
+			user.Username, req.Name, req.OldParent, req.NewParent))
+		dc.App.LogAudit(user.Username, 0, "MERGE_FOLDER", fmt.Sprintf("User '%s' merged folder '%s' from '%s' into '%s'.", user.Username, req.Name, req.OldParent, req.NewParent))
+
+		models.RespondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("Directory '%s' merged successfully", req.Name),
+		})
+	} else {
+		// Simple move operation - no folder with the same name exists at the destination
+		if err := os.Rename(oldPath, newPath); err != nil {
+			models.RespondError(w, http.StatusInternalServerError, "Error moving directory on disk")
+			return
+		}
+
+		if err := dc.App.MoveDirectoryRecord(req.Name, req.OldParent, req.NewParent); err != nil {
+			os.Rename(newPath, oldPath) // rollback
+			models.RespondError(w, http.StatusInternalServerError, "Error updating directory records")
+			return
+		}
+
+		dc.App.LogActivity(fmt.Sprintf("User '%s' moved directory '%s' from '%s' to '%s'.",
+			user.Username, req.Name, req.OldParent, req.NewParent))
+		dc.App.LogAudit(user.Username, 0, "MOVE_FOLDER", fmt.Sprintf("User '%s' moved folder '%s' from '%s' to '%s'.", user.Username, req.Name, req.OldParent, req.NewParent))
+
+		models.RespondJSON(w, http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("Directory '%s' moved successfully", req.Name),
+		})
 	}
-
-	if err := os.Rename(oldPath, newPath); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error moving directory on disk")
-		return
-	}
-
-	if err := dc.App.MoveDirectoryRecord(req.Name, req.OldParent, req.NewParent); err != nil {
-		os.Rename(newPath, oldPath) // rollback
-		models.RespondError(w, http.StatusInternalServerError, "Error updating directory records")
-		return
-	}
-
-	dc.App.LogActivity(fmt.Sprintf("User '%s' moved directory '%s' from '%s' to '%s'.",
-		user.Username, req.Name, req.OldParent, req.NewParent))
-	dc.App.LogAudit(user.Username, 0, "MOVE_FOLDER", fmt.Sprintf("User '%s' moved folder '%s' from '%s' to '%s'.", user.Username, req.Name, req.OldParent, req.NewParent))
-
-	models.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("Directory '%s' moved successfully", req.Name),
-	})
 }
 
 // DownloadFolder handles zipping and downloading a folder.

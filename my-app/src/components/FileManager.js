@@ -41,6 +41,7 @@ import debounce from 'lodash.debounce';
 import BatchActionsMenu from './common/BatchActionsMenu';
 import SelectionHeader from './common/SelectionHeader';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
+import { deleteFolder, confirmFolderDelete, copyFolder, moveFolder, fetchSubFolders } from '../utils/folderOperations';
 import CommonModals from './common/CommonModals';
 import './action-buttons-fix.css'; // Import CSS to fix action buttons
 
@@ -773,10 +774,16 @@ const FileManager = () => {
   const handleDelete = async (record) => {
     try {
       if (record.type === 'directory') {
-        await axios.delete(`${BASE_URL}/directory/delete`, {
-          data: { name: record.name, parent: currentPath },
-          withCredentials: true
-        });
+        // Use the global folder delete function
+        await deleteFolder(
+          record,
+          currentPath,
+          null, // No container needed for FileManager
+          () => {
+            fetchItems();
+            fetchFolderTree();
+          }
+        );
       } else {
         console.log("🗑 Deleting file:", record.name, "from folder:", currentPath);
         await axios.delete(`${BASE_URL}/delete-file`, {
@@ -786,11 +793,8 @@ const FileManager = () => {
           },
           withCredentials: true
         });
-      }
-      message.success(`${record.name} deleted successfully`);
-      fetchItems();
-      if (record.type === 'directory') {
-        fetchFolderTree();
+        message.success(`${record.name} deleted successfully`);
+        fetchItems();
       }
     } catch (error) {
       console.error('Delete error:', error);
@@ -876,6 +880,7 @@ const FileManager = () => {
 
     // Use the original file name instead of generating a new one with a suffix
     setCopyItem(record);
+    // For directories, always use the exact same name to ensure proper merging
     setCopyNewName(name);
     setCopyModalVisible(true);
   };
@@ -901,13 +906,17 @@ const FileManager = () => {
         destinationPath = `${copySelectedMainFolder}/${copySelectedSubFolder}`;
       }
 
-      // For files, check if a file with the same name already exists at the destination
+      // Only check for conflicts if it's a file (folders should automatically merge)
       if (copyItem.type === 'file') {
         const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(destinationPath)}`, {
           withCredentials: true
         });
 
-        const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+        // Get all files in the destination
+        const allItems = Array.isArray(res.data) ? res.data : [];
+        const existingNames = allItems
+          .filter(item => item.type === 'file')
+          .map(item => item.name);
         const nameExists = existingNames.includes(copyNewName);
 
         if (nameExists) {
@@ -950,15 +959,18 @@ const FileManager = () => {
       }
 
       if (copyItem.type === 'directory') {
-        await axios.post(`${BASE_URL}/directory/copy`, {
-          source_name: copyItem.name,
-          source_parent: currentPath,
-          new_name: copyNewName,
-          destination_parent: destinationPath
-        }, { withCredentials: true });
-
-        message.success(`Copied ${copyItem.name} to ${copySelectedMainFolder}${copySelectedSubFolder ? '/' + copySelectedSubFolder : ''}`);
-        fetchFolderTree();
+        // Use the global copyFolder function
+        await copyFolder(
+          copyItem,
+          currentPath,
+          destinationPath,
+          null, // container is not needed for FileManager
+          () => {
+            message.success(`Copied ${copyItem.name} to ${copySelectedMainFolder}${copySelectedSubFolder ? '/' + copySelectedSubFolder : ''}`);
+          },
+          null,
+          fetchFolderTree
+        );
       } else {
         await axios.post(`${BASE_URL}/copy-file`, {
           source_file: copyItem.name,
@@ -997,34 +1009,12 @@ const FileManager = () => {
     }
   };
 
-  const fetchSubFolders = async (mainFolder, forCopy = false) => {
-    try {
-      const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
-        { withCredentials: true }
-      );
-
-      // Filter to only include directories and sort them alphabetically
-      const folders = (res.data || [])
-        .filter(item => item.type === 'directory')
-        .map(folder => ({
-          name: folder.name,
-          path: `${mainFolder}/${folder.name}`
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
-
-      if (forCopy) {
-        setCopySubFolders(folders);
-      } else {
-        setSubFolders(folders);
-      }
-    } catch (error) {
-      console.error('Error fetching subfolders:', error);
-      message.error('Failed to load subfolders');
-      if (forCopy) {
-        setCopySubFolders([]);
-      } else {
-        setSubFolders([]);
-      }
+  // Use the global fetchSubFolders function with a wrapper to handle the forCopy parameter
+  const handleFetchSubFolders = async (mainFolder, forCopy = false) => {
+    if (forCopy) {
+      await fetchSubFolders(mainFolder, setCopySubFolders);
+    } else {
+      await fetchSubFolders(mainFolder, setSubFolders);
     }
   };
 
@@ -1034,7 +1024,7 @@ const FileManager = () => {
     setMoveDestination(value); // Set the destination to the main folder by default
 
     if (value) {
-      fetchSubFolders(value, false);
+      handleFetchSubFolders(value, false);
     } else {
       setSubFolders([]);
     }
@@ -1058,7 +1048,7 @@ const FileManager = () => {
     setSelectedDestination(value); // Set the destination to the main folder by default
 
     if (value) {
-      fetchSubFolders(value, true);
+      handleFetchSubFolders(value, true);
     } else {
       setCopySubFolders([]);
     }
@@ -1177,14 +1167,17 @@ const FileManager = () => {
   const finalizeMove = async (overwrite) => {
     try {
       if (moveItem.type === 'directory') {
-        await axios.post(
-          `${BASE_URL}/directory/move`,
-          {
-            name: moveItem.name,
-            old_parent: currentPath,
-            new_parent: moveDestination
+        // Use the global moveFolder function
+        await moveFolder(
+          moveItem,
+          currentPath,
+          moveDestination,
+          null, // container is not needed for FileManager
+          () => {
+            message.success(`Moved ${moveItem.name} to ${moveDestination}`);
           },
-          { withCredentials: true }
+          null,
+          fetchFolderTree
         );
       } else {
         // First, verify the file exists by trying to get its metadata
@@ -1250,9 +1243,9 @@ const FileManager = () => {
           },
           { withCredentials: true }
         );
-      }
 
-      message.success(`Moved '${moveItem.name}' to ${moveDestination}`);
+        message.success(`Moved '${moveItem.name}' to ${moveDestination}`);
+      }
 
       setMoveModalVisible(false);
       setMoveDestination('');

@@ -50,6 +50,7 @@ import CommonModals from './common/CommonModals';
 import BatchActionsMenu from './common/BatchActionsMenu';
 import ActionButtons from './common/ActionButtons';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
+import { deleteFolder, confirmFolderDelete, copyFolder, fetchSubFolders, moveFolder } from '../utils/folderOperations';
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -708,21 +709,29 @@ const OperationDashboard = () => {
       message.error('Only the owner can delete this item.');
       return;
     }
+
     try {
       if (record.type === 'directory') {
-        await axios.delete('/directory/delete', {
-          data: { name: record.name, parent: currentPath, container: 'operation' },
-          withCredentials: true,
-        });
+        // Use the global folder delete function
+        await deleteFolder(
+          record,
+          currentPath,
+          'operation', // Container for OperationDashboard
+          () => {
+            fetchItems();
+            fetchDirectories();
+            fetchAllFilesWithMessages();
+          }
+        );
       } else {
         await axios.delete('/delete-file', {
           data: { directory: currentPath, filename: record.name, container: 'operation' },
           withCredentials: true,
         });
+        message.success(`${record.name} deleted successfully`);
+        fetchItems();
+        fetchAllFilesWithMessages();
       }
-      message.success(`${record.name} deleted successfully`);
-      fetchItems();
-      fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Delete error:', error);
       message.error(error.response?.data?.error || 'Error deleting item');
@@ -1055,16 +1064,17 @@ const OperationDashboard = () => {
       }
 
       if (copyItem.type === 'directory') {
-        await axios.post(
-          '/directory/copy',
-          {
-            source_name: copyItem.name,
-            source_parent: currentPath,
-            new_name: copyNewName,
-            destination_parent: destinationPath,
-            container: 'operation',
+        // Use the global copyFolder function
+        await copyFolder(
+          copyItem,
+          currentPath,
+          destinationPath,
+          'operation', // container for OperationDashboard
+          () => {
+            message.success(`Copied ${copyItem.name} to ${selectedMainFolder}${selectedSubFolder ? '/' + selectedSubFolder : ''}`);
           },
-          { withCredentials: true }
+          null,
+          fetchDirectories
         );
       } else {
         await axios.post(
@@ -1094,27 +1104,9 @@ const OperationDashboard = () => {
     }
   };
 
-  const fetchSubFolders = async (mainFolder) => {
-    try {
-      const res = await axios.get(`/directory/list?directory=${encodeURIComponent(mainFolder)}`,
-        { withCredentials: true }
-      );
-
-      // Filter to only include directories and sort them alphabetically
-      const folders = (res.data || [])
-        .filter(item => item.type === 'directory')
-        .map(folder => ({
-          name: folder.name,
-          path: `${mainFolder}/${folder.name}`
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
-
-      setSubFolders(folders);
-    } catch (error) {
-      console.error('Error fetching subfolders:', error);
-      message.error('Failed to load subfolders');
-      setSubFolders([]);
-    }
+  // Use the global fetchSubFolders function
+  const handleFetchSubFolders = async (mainFolder) => {
+    await fetchSubFolders(mainFolder, setSubFolders);
   };
 
   const handleMainFolderChange = (value) => {
@@ -1123,7 +1115,7 @@ const OperationDashboard = () => {
     setMoveDestination(value); // Set the destination to the main folder by default
 
     if (value) {
-      fetchSubFolders(value);
+      handleFetchSubFolders(value);
     } else {
       setSubFolders([]);
     }
@@ -1263,15 +1255,17 @@ const OperationDashboard = () => {
   const finalizeMove = async (overwrite) => {
     try {
       if (moveItem.type === 'directory') {
-        await axios.post(
-          '/directory/move',
-          {
-            name: moveItem.name,
-            old_parent: currentPath,
-            new_parent: moveDestination,
-            container: 'operation',
+        // Use the global moveFolder function
+        await moveFolder(
+          moveItem,
+          currentPath,
+          moveDestination,
+          'operation', // container for OperationDashboard
+          () => {
+            // Success callback is handled by the moveFolder function
           },
-          { withCredentials: true }
+          null,
+          fetchDirectories
         );
       } else {
         console.log('Moving file with:', {

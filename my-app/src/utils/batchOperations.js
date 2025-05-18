@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { message } from 'antd';
+import { deleteFolder } from './folderOperations';
 
 /**
  * Utility functions for batch operations on files
@@ -15,20 +16,31 @@ import { message } from 'antd';
 export const batchDelete = async (items, currentPath, container, onSuccess) => {
   if (!items || items.length === 0) return;
 
-  const deletePromises = items.map(item => {
-    const endpoint = item.type === 'directory' ? '/directory/delete' : '/delete-file';
-    const data = item.type === 'directory'
-      ? { name: item.name, parent: currentPath, container }
-      : { filename: item.name, directory: currentPath, container };
-
-    return axios.delete(endpoint, {
-      data,
-      withCredentials: true
-    });
-  });
-
   try {
-    await Promise.all(deletePromises);
+    // Separate directories and files
+    const directories = items.filter(item => item.type === 'directory');
+    const files = items.filter(item => item.type !== 'directory');
+
+    // Delete directories using the global folder delete function
+    const directoryPromises = directories.map(directory =>
+      deleteFolder(directory, currentPath, container)
+    );
+
+    // Delete files using the regular API
+    const filePromises = files.map(file =>
+      axios.delete('/delete-file', {
+        data: {
+          filename: file.name,
+          directory: currentPath,
+          container
+        },
+        withCredentials: true
+      })
+    );
+
+    // Wait for all operations to complete
+    await Promise.all([...directoryPromises, ...filePromises]);
+
     message.success(`${items.length} item(s) deleted successfully`);
     if (onSuccess) onSuccess();
   } catch (error) {

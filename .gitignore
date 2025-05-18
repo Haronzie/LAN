@@ -1,0 +1,30 @@
+# === ENVIRONMENT VARIABLES ===
+.env
+
+# === LOG FILES ===
+*.log
+error.log
+
+# === OS FILES ===
+.DS_Store
+Thumbs.db
+
+# === DEPENDENCIES ===
+vendor/
+node_modules/
+**/node_modules/
+
+# === BUILD OUTPUT ===
+bin/
+dist/
+build/
+**/build/
+**/dist/
+
+# === IDE / EDITOR SETTINGS ===
+.vscode/
+*.code-workspace
+
+# === COVERAGE / TEST OUTPUT ===
+coverage/
+*.out
