@@ -7,7 +7,6 @@ import {
   DeploymentUnitOutlined,
   ReadOutlined,
   ExperimentOutlined,
-  DatabaseOutlined,
   SettingOutlined
 } from '@ant-design/icons';
 import NotificationDropdown from './common/NotificationDropdown';
@@ -16,7 +15,6 @@ import UserDashboardHome from './UserDashboardHome';
 import TrainingDashboard from './TrainingDashboard';
 import OperationDashboard from './OperationDashboard';
 import ResearchDashboard from './ResearchDashboard';
-import InventoryDashboard from './InventoryDashboard';
 import UserSettings from './UserSettings';
 
 const { Header, Content, Sider } = Layout;
@@ -153,9 +151,7 @@ const UserDashboard = () => {
           <Menu.Item key="research" icon={<ExperimentOutlined />}>
             <Link to="/user/research">Research</Link>
           </Menu.Item>
-          <Menu.Item key="inventory" icon={<DatabaseOutlined />}>
-            <Link to="/user/inventory">Inventory</Link>
-          </Menu.Item>
+
           <Menu.Item key="settings" icon={<SettingOutlined />}>
             <Link to="/user/settings">Settings</Link>
           </Menu.Item>
@@ -219,7 +215,7 @@ const UserDashboard = () => {
               <Route path="operation" element={<OperationDashboard />} />
               <Route path="training" element={<TrainingDashboard />} />
               <Route path="research" element={<ResearchDashboard />} />
-              <Route path="inventory" element={<InventoryDashboard />} />
+
               <Route path="settings" element={<UserSettings />} />
               <Route index element={<UserDashboardHome />} />
               <Route path="*" element={<div>Page not found</div>} />

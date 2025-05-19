@@ -14,7 +14,6 @@ import UserDashboardHome from './components/UserDashboardHome';
 import OperationDashboard from './components/OperationDashboard';
 import TrainingDashboard from './components/TrainingDashboard';
 import ResearchDashboard from './components/ResearchDashboard';
-import InventoryDashboard from './components/InventoryDashboard';
 import UserSettings from './components/UserSettings';
 import Settings from './components/Settings';
 import './App.css';
@@ -73,8 +72,7 @@ function App() {
           <Route path="/directory/move" element={<div>Move Directory</div>} />
           <Route path="/download-folder" element={<div>Download Folder</div>} />
 
-          <Route path="/inventory" element={<div>Inventory Listing</div>} />
-          <Route path="/inventory/:id" element={<div>Inventory Detail</div>} />
+
 
           <Route path="/auditlogs" element={<AuditLog />} />
           <Route path="/ws" element={<div>WebSocket Connection</div>} />
@@ -95,7 +93,7 @@ function App() {
             <Route path="operation" element={<OperationDashboard />} />
             <Route path="training" element={<TrainingDashboard />} />
             <Route path="research" element={<ResearchDashboard />} />
-            <Route path="inventory/*" element={<InventoryDashboard />} />
+
             <Route path="settings" element={<UserSettings />} />
           </Route>
 

@@ -320,7 +320,6 @@ func main() {
 	userController := controllers.NewUserController(app)
 	directoryController := controllers.NewDirectoryController(app)
 	auditLogController := controllers.NewAuditLogController(app)
-	inventoryController := controllers.NewInventoryController(app)
 
 	// Define your routes...
 	logger.WithField("function", "main").Debug("Defining application routes...")
@@ -366,13 +365,6 @@ func main() {
 	router.HandleFunc("/directory/tree", directoryController.Tree).Methods("GET")
 	router.HandleFunc("/directory/move", directoryController.Move).Methods("POST")
 	router.HandleFunc("/download-folder", directoryController.DownloadFolder).Methods("GET")
-
-	// Inventory routes
-	router.HandleFunc("/inventory", inventoryController.List).Methods("GET")
-	router.HandleFunc("/inventory", inventoryController.Create).Methods("POST")
-	router.HandleFunc("/inventory/{id}", inventoryController.Get).Methods("GET")
-	router.HandleFunc("/inventory/{id}", inventoryController.Update).Methods("PUT")
-	router.HandleFunc("/inventory/{id}", inventoryController.Delete).Methods("DELETE")
 
 	// Audit logs
 	router.HandleFunc("/auditlogs", auditLogController.List).Methods("GET")

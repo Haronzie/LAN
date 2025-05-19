@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Layout,
   Table,
@@ -46,21 +46,14 @@ import BatchActionsMenu from './common/BatchActionsMenu';
 import ActionButtons from './common/ActionButtons';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
 import { deleteFolder, confirmFolderDelete, copyFolder, fetchSubFolders, moveFolder } from '../utils/folderOperations';
+import { contextAwareSearch, createDebouncedSearch, formatFileSize, generateSearchSuggestions } from '../utils/searchUtils';
+import SearchSuggestions from './common/SearchSuggestions';
 
 const { Content } = Layout;
 const { Option } = Select;
 const BASE_URL = `${window.location.protocol}//${window.location.hostname}:8080`;
 
-/**
- * Helper to format file sizes in human-readable form.
- */
-function formatFileSize(size) {
-  if (size === undefined || size === null) return 'Unknown';
-  if (size === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(size) / Math.log(1024));
-  return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
-}
+
 
 const TrainingDashboard = () => {
   const navigate = useNavigate();
@@ -81,6 +74,10 @@ const TrainingDashboard = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [recentSearches, setRecentSearches] = useState([]);
+  const searchInputRef = useRef(null);
   const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
@@ -239,78 +236,279 @@ const TrainingDashboard = () => {
   }, [currentPath, moveModalVisible, copyModalVisible, renameModalVisible, createFolderModal, uploadModalVisible]);
 
 
-  // Perform global search across all subfolders
-  const performSearch = async (query) => {
-    if (!query.trim()) {
-      setIsSearching(false);
-      setSearchResults([]);
-      return;
+  // Load recent searches from localStorage on component mount
+  useEffect(() => {
+    try {
+      const savedSearches = localStorage.getItem('trainingRecentSearches');
+      if (savedSearches) {
+        setRecentSearches(JSON.parse(savedSearches));
+      }
+    } catch (error) {
+      console.error('Error loading recent searches:', error);
     }
+  }, []);
 
-    setSearchLoading(true);
-    setIsSearching(true);
+  // Save a search term to recent searches
+  const saveToRecentSearches = (query) => {
+    if (!query.trim()) return;
 
     try {
-      // Build the search URL with the main folder parameter for Training
-      const searchUrl = `/search?q=${encodeURIComponent(query)}&main_folder=Training`;
-
-      const response = await axios.get(searchUrl, { withCredentials: true });
-
-      // Format the search results
-      const formattedResults = (response.data || []).map(item => {
-        // Ensure size is a valid number
-        const fileSize = typeof item.size === 'number' ? item.size :
-                        (item.size ? parseInt(item.size, 10) : null);
-
-        return {
-          ...item,
-          size: fileSize,
-          formattedSize: formatFileSize(fileSize),
-        };
-      });
-
-      setSearchResults(formattedResults);
-      console.log(`🔍 Search found ${formattedResults.length} results`);
+      // Add to recent searches, avoid duplicates, and limit to 10 items
+      const updatedSearches = [query, ...recentSearches.filter(s => s !== query)].slice(0, 10);
+      setRecentSearches(updatedSearches);
+      localStorage.setItem('trainingRecentSearches', JSON.stringify(updatedSearches));
     } catch (error) {
-      console.error('Search error:', error);
-      message.error('Error performing search');
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
+      console.error('Error saving recent searches:', error);
     }
   };
 
-  // Debounce the search to avoid too many requests
+  // Debounced search function to avoid too many API calls
   const debouncedSearch = useCallback(
     debounce((query) => {
-      performSearch(query);
+      handleSearch(query);
     }, 500),
-    [currentPath]
+    [handleSearch]
   );
+
+  // Generate search suggestions based on input and file objects
+  const updateSearchSuggestions = useCallback(
+    debounce(async (query) => {
+      if (!query.trim()) {
+        setSearchSuggestions([]);
+        setShowSuggestions(false);
+        return;
+      }
+
+      // First, show local suggestions from current items
+      const matchingItems = items.filter(item =>
+        item.name.toLowerCase().includes(query.toLowerCase())
+      );
+
+      // Sort items: exact matches first, then starts with, then contains
+      const sortedItems = matchingItems.sort((a, b) => {
+        const aName = a.name.toLowerCase();
+        const bName = b.name.toLowerCase();
+        const queryLower = query.toLowerCase();
+
+        // Exact matches first
+        if (aName === queryLower && bName !== queryLower) return -1;
+        if (bName === queryLower && aName !== queryLower) return 1;
+
+        // Then starts with
+        if (aName.startsWith(queryLower) && !bName.startsWith(queryLower)) return -1;
+        if (bName.startsWith(queryLower) && !aName.startsWith(queryLower)) return 1;
+
+        // Then alphabetical
+        return aName.localeCompare(bName);
+      });
+
+      // Limit to top 10 results
+      const limitedItems = sortedItems.slice(0, 10);
+
+      // Update with local suggestions first
+      if (limitedItems.length > 0) {
+        setSearchSuggestions(limitedItems);
+        setShowSuggestions(true);
+      }
+
+      // Always try to get suggestions from the server if query is at least 2 characters
+      // This will search across all files in the Training folder and its subfolders
+      if (query.length >= 2) {
+        try {
+          // Use contextAwareSearch to get suggestions
+          // Pass 'Training' as the main folder but null as the current path to search all Training files
+          const results = await contextAwareSearch(
+            query,
+            'training',
+            currentPath === 'Training' ? null : currentPath, // If at root, search all Training files
+            BASE_URL,
+            null, // No success callback
+            null, // No error callback
+            null  // No loading callback
+          );
+
+          // If we got results from the server, update suggestions
+          if (results && results.length > 0) {
+            // Combine local and server results, remove duplicates
+            const combinedResults = [...limitedItems];
+
+            // Add server results that aren't already in local results
+            results.forEach(result => {
+              if (!combinedResults.some(item =>
+                item.name === result.name &&
+                (item.directory || '') === (result.directory || '')
+              )) {
+                combinedResults.push(result);
+              }
+            });
+
+            // Sort and limit the combined results
+            const sortedCombined = combinedResults.sort((a, b) => {
+              const aName = a.name.toLowerCase();
+              const bName = b.name.toLowerCase();
+              const queryLower = query.toLowerCase();
+
+              // Exact matches first
+              if (aName === queryLower && bName !== queryLower) return -1;
+              if (bName === queryLower && aName !== queryLower) return 1;
+
+              // Then starts with
+              if (aName.startsWith(queryLower) && !bName.startsWith(queryLower)) return -1;
+              if (bName.startsWith(queryLower) && !aName.startsWith(queryLower)) return 1;
+
+              // Then alphabetical
+              return aName.localeCompare(bName);
+            }).slice(0, 10);
+
+            setSearchSuggestions(sortedCombined);
+            setShowSuggestions(true);
+          }
+        } catch (error) {
+          console.error('Error getting search suggestions:', error);
+          // Keep the local suggestions if there was an error
+        }
+      }
+    }, 300), // Reduced debounce time for more responsive suggestions
+    [items, currentPath]
+  );
+
+  // Modified search function to use contextAwareSearch
+  const handleSearch = async (query) => {
+    if (!query.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    // Save the search term to recent searches
+    saveToRecentSearches(query);
+    setSearchLoading(true);
+
+    try {
+      // Use contextAwareSearch to search across all files or within current directory
+      await contextAwareSearch(
+        query,
+        'training', // Component type
+        currentPath === 'Training' ? null : currentPath, // If at root, search all Training files
+        BASE_URL,    // Base URL for API
+        (results) => {
+          console.log('Search results:', results);
+          // Store the results for suggestions, but don't change the table display
+          setSearchResults(results);
+
+          // Update search suggestions with the results
+          if (results.length > 0) {
+            setSearchSuggestions(results);
+            setShowSuggestions(true);
+          } else {
+            setShowSuggestions(false);
+          }
+
+          // We're not actually in "searching" mode since we don't want to change the table
+          setIsSearching(false);
+          setSearchLoading(false);
+        },
+        (error) => {
+          console.error('Search error:', error);
+          setSearchResults([]);
+          setSearchLoading(false);
+          setShowSuggestions(false);
+        },
+        (loading) => {
+          setSearchLoading(loading);
+        }
+      );
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+      setSearchLoading(false);
+      setShowSuggestions(false);
+    }
+  };
+
+  // Handle suggestion selection - navigate to the file instead of filtering
+  const handleSelectSuggestion = (suggestion, closeOnly = false) => {
+    if (closeOnly) {
+      setShowSuggestions(false);
+      return;
+    }
+
+    if (suggestion) {
+      // Find the selected file in search results
+      const selectedFile = searchResults.find(item => item.name === suggestion);
+
+      if (selectedFile) {
+        // If it's a file with a directory, navigate to that directory
+        if (selectedFile.directory) {
+          // Navigate to the directory containing the file
+          handleNavigateToFile(selectedFile);
+        } else {
+          // If it's just a name without directory info, just set the search term
+          setSearchTerm(suggestion);
+        }
+      } else {
+        // If not found in search results, just set the search term
+        setSearchTerm(suggestion);
+      }
+    }
+
+    setShowSuggestions(false);
+  };
+
+  // Navigate to the folder containing a file
+  const handleNavigateToFile = (fileItem) => {
+    if (!fileItem || !fileItem.directory) return;
+
+    // Navigate to the directory containing the file
+    setCurrentPath(fileItem.directory);
+
+    // Clear search
+    setSearchTerm('');
+    setIsSearching(false);
+    setSearchResults([]);
+    setShowSuggestions(false);
+
+    // Highlight the file after navigation (optional)
+    setTimeout(() => {
+      const fileRow = document.querySelector(`tr[data-row-key="${fileItem.type}-${fileItem.id || fileItem.name}"]`);
+      if (fileRow) {
+        fileRow.classList.add('highlight-row');
+        setTimeout(() => {
+          fileRow.classList.remove('highlight-row');
+        }, 2000);
+      }
+    }, 500);
+  };
+
+  // We already have a debouncedSearch function defined above
 
   // Update search when search term changes
   useEffect(() => {
     if (searchTerm.trim()) {
+      // Update suggestions immediately
+      updateSearchSuggestions(searchTerm);
+
+      // Perform the actual search with debounce
       debouncedSearch(searchTerm);
     } else {
       setIsSearching(false);
       setSearchResults([]);
+      setShowSuggestions(false);
     }
-  }, [searchTerm, debouncedSearch]);
+  }, [searchTerm, debouncedSearch, updateSearchSuggestions]);
 
   // Navigate to the folder containing a search result
   const navigateToFolder = (directory) => {
     setSearchTerm('');
     setIsSearching(false);
+    setShowSuggestions(false);
     setCurrentPath(directory);
   };
 
-  // If we're searching, use search results, otherwise show all items or filter by search term
-  const displayItems = isSearching
-    ? searchResults
-    : searchTerm.trim()
-      ? items.filter((item) => (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
-      : items;
+  // Always show all items in the table, regardless of search
+  // This prevents the table from changing when searching
+  const displayItems = items;
 
   // Then sort: directories first (in ascending order), then files (in ascending order)
   const sortedItems = [...displayItems].sort((a, b) => {
@@ -1281,27 +1479,7 @@ const TrainingDashboard = () => {
         return name;
       }
     },
-    // If we're showing search results, add a Location column
-    ...(isSearching ? [{
-      title: 'Location',
-      key: 'location',
-      render: (_, record) => {
-        const directory = record.directory || '';
-        return (
-          <Space>
-            <span>{directory}</span>
-            <Button
-              type="link"
-              size="small"
-              onClick={() => navigateToFolder(directory)}
-              icon={<ArrowLeftOutlined />}
-            >
-              Go to folder
-            </Button>
-          </Space>
-        );
-      }
-    }] : []),
+    // We no longer add a Location column for search results to keep the interface consistent
     {
       title: 'Type',
       dataIndex: 'type',
@@ -1391,34 +1569,85 @@ const TrainingDashboard = () => {
             </Tooltip>
           </Col>
           <Col style={{ width: '40%' }}>
-            <Input.Search
-              placeholder={isSearching
-                ? "Search in Training..."
-                : currentPath
-                  ? `Search in ${currentPath}...`
-                  : "Search in Training..."}
-              value={searchTerm}
-              onChange={(e) => {
-                const value = e.target.value;
-                setSearchTerm(value);
-                // If search is cleared, immediately reset search state
-                if (!value.trim()) {
-                  setIsSearching(false);
-                  setSearchResults([]);
-                }
-              }}
-              onSearch={(value) => {
-                if (value.trim()) {
-                  performSearch(value);
-                } else {
-                  setIsSearching(false);
-                  setSearchResults([]);
-                }
-              }}
-              loading={searchLoading}
-              allowClear
-              enterButton
-            />
+            <div style={{ position: 'relative' }}>
+              <Input.Search
+                ref={searchInputRef}
+                placeholder={currentPath
+                  ? `Filter files in ${currentPath}...`
+                  : "Filter files in Training..."}
+                value={searchTerm}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSearchTerm(value);
+
+                  // If search is cleared, immediately reset search state
+                  if (!value.trim()) {
+                    setIsSearching(false);
+                    setSearchResults([]);
+                    setShowSuggestions(false);
+                    setSearchSuggestions([]);
+                  } else {
+                    // Always update suggestions when typing
+                    updateSearchSuggestions(value);
+
+                    // Keep suggestions visible as long as there's text in the search bar
+                    setShowSuggestions(true);
+
+                    // Only perform the actual search when user presses enter or clicks search button
+                    // This prevents too many re-renders while typing
+                    if (value.length >= 2) { // Reduced to 2 characters for more responsive search
+                      // Use debounced search to avoid too many API calls
+                      debouncedSearch(value);
+                    }
+                  }
+                }}
+                onFocus={() => {
+                  // Show suggestions when input is focused and has value
+                  if (searchTerm.trim()) {
+                    // Refresh suggestions when input is focused
+                    updateSearchSuggestions(searchTerm);
+                    setShowSuggestions(true);
+                  }
+                }}
+                onSearch={(value) => {
+                  if (value.trim()) {
+                    handleSearch(value);
+                  } else {
+                    setIsSearching(false);
+                    setSearchResults([]);
+                    setShowSuggestions(false);
+                  }
+                }}
+                loading={searchLoading}
+                allowClear
+                enterButton
+              />
+            </div>
+
+            {/* Separate container for search suggestions to prevent affecting table layout */}
+            <div style={{
+              position: 'absolute',
+              width: '70%', // Increased width for better visibility
+              zIndex: 1050,
+              pointerEvents: showSuggestions ? 'auto' : 'none',
+              // Prevent layout shifts
+              willChange: 'transform',
+              transform: 'translateZ(0)',
+              // Ensure proper positioning
+              top: '100%',
+              left: 0,
+              maxHeight: '400px', // Add max height to prevent too large dropdown
+              overflow: 'visible' // Allow content to overflow for dropdown
+            }}>
+              <SearchSuggestions
+                suggestions={searchSuggestions}
+                onSelectSuggestion={handleSelectSuggestion}
+                onNavigateToFile={handleNavigateToFile}
+                loading={searchLoading}
+                searchTerm={searchTerm}
+                visible={showSuggestions}
+              />
+            </div>
           </Col>
         </Row>
 

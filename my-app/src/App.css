@@ -195,3 +195,10 @@ body {
 .ant-table-wrapper .ant-table-thead > tr > th:last-child {
   min-width: 200px;
 }
+
+/* Highlight row when navigating to a file */
+.highlight-row {
+  background-color: rgba(24, 144, 255, 0.15) !important;
+  transition: background-color 0.5s ease-in-out;
+  animation: pulse 2s ease-out;
+}

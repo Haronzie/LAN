@@ -1813,12 +1813,34 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	// Get the main folder to search in (if specified)
 	mainFolder := strings.TrimSpace(r.URL.Query().Get("main_folder"))
 
+	// Get the specific directory to search in (if specified)
+	directory := strings.TrimSpace(r.URL.Query().Get("directory"))
+
 	// Build SQL filter
 	pattern := "%" + q + "%"
 	var rows *sql.Rows
 	var err error
 
-	if mainFolder != "" {
+	// Context-aware search logic:
+	// 1. If directory is specified, search only within that directory
+	// 2. If only mainFolder is specified, search within that main folder and all its subfolders
+	// 3. If neither is specified, search everywhere
+
+	if directory != "" {
+		// Search in a specific directory only
+		log.Printf("🔍 Searching for '%s' in specific directory '%s'", q, directory)
+
+		rows, err = fc.App.DB.Query(
+			`SELECT id, file_name, directory, content_type, size, file_path
+             FROM files
+             WHERE directory = $1 AND (
+                 LOWER(file_name) LIKE $2 OR
+                 LOWER(file_path) LIKE $2
+             )
+             ORDER BY directory, file_name`,
+			directory, pattern,
+		)
+	} else if mainFolder != "" {
 		// Search in a specific main folder and all its subfolders
 		log.Printf("🔍 Searching for '%s' in main folder '%s' and all its subfolders", q, mainFolder)
 
