@@ -47,16 +47,6 @@ CREATE TABLE IF NOT EXISTS activity_log (
 );
 CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_log (timestamp);
 
--- Inventory Table
-CREATE TABLE IF NOT EXISTS inventory (
-    id SERIAL PRIMARY KEY,
-    item_name VARCHAR(255) NOT NULL,
-    quantity INT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_inventory_item_name ON inventory (item_name);
-
 -- File Versions Table with ON DELETE CASCADE
 CREATE TABLE IF NOT EXISTS file_versions (
     id SERIAL PRIMARY KEY,
@@ -93,3 +83,14 @@ CREATE TABLE IF NOT EXISTS file_messages (
     is_done BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- Inventory Table (with user tracking)
+CREATE TABLE IF NOT EXISTS inventory (
+    id SERIAL PRIMARY KEY,
+    item_name VARCHAR(255) NOT NULL,
+    quantity INT NOT NULL DEFAULT 0,
+    created_by VARCHAR(50) REFERENCES users(username),
+    updated_by VARCHAR(50) REFERENCES users(username),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_item_name ON inventory (item_name);
