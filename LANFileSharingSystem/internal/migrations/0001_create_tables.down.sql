@@ -1,4 +1,8 @@
+DROP TABLE IF EXISTS file_messages;
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS file_versions;
 DROP TABLE IF EXISTS activity_log;
+DROP TABLE IF EXISTS inventory;
 DROP TABLE IF EXISTS directories;
 DROP TABLE IF EXISTS files;
 DROP TABLE IF EXISTS users;

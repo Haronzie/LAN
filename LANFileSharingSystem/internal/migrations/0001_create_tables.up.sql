@@ -19,12 +19,10 @@ CREATE TABLE IF NOT EXISTS files (
     content_type VARCHAR(255),
     uploader VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata JSONB DEFAULT '{}',
     UNIQUE (directory, file_name)
 );
 CREATE INDEX IF NOT EXISTS idx_files_uploader ON files (uploader);
-
--- ✅ Add dynamic metadata field and index
-ALTER TABLE files ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS idx_metadata ON files USING gin (metadata);
 
 -- Directories Table
@@ -47,7 +45,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
 );
 CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_log (timestamp);
 
--- File Versions Table with ON DELETE CASCADE
+-- File Versions Table
 CREATE TABLE IF NOT EXISTS file_versions (
     id SERIAL PRIMARY KEY,
     file_id INT NOT NULL,
@@ -57,7 +55,7 @@ CREATE TABLE IF NOT EXISTS file_versions (
     FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 );
 
--- Audit Logs Table with ON DELETE SET NULL
+-- Audit Logs Table
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
     user_username VARCHAR(50),
@@ -83,7 +81,10 @@ CREATE TABLE IF NOT EXISTS file_messages (
     is_done BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
--- Inventory Table (with user tracking)
+CREATE INDEX IF NOT EXISTS idx_file_messages_file_id ON file_messages(file_id);
+CREATE INDEX IF NOT EXISTS idx_file_messages_receiver ON file_messages(receiver);
+
+-- Inventory Table
 CREATE TABLE IF NOT EXISTS inventory (
     id SERIAL PRIMARY KEY,
     item_name VARCHAR(255) NOT NULL,

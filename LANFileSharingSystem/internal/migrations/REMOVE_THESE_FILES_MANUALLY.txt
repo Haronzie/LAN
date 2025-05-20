@@ -1,0 +1,14 @@
+The following migration files are now obsolete and should be deleted for a clean, professional migration setup:
+
+- 0002_add_directory_column.up.sql
+- 0002_add_directory_column.down.sql
+- 0003_add_created_at_column.up.sql
+- 0003_add_created_at_column.down.sql
+- 0004_add_file_messages_table.up.sql
+- 0004_add_file_messages_table.down.sql
+- 0005_fix_migration.up.sql
+- 0005_fix_migration.down.sql
+- 0006_add_inventory_logs_table.up.sql
+- 0007_alter_activity_log_add_relations.up.sql
+
+You can safely delete these files from the migrations folder.
