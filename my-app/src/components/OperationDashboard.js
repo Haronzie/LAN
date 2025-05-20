@@ -51,18 +51,13 @@ import ActionButtons from './common/ActionButtons';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
 
 const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+const WS_BASE_URL = process.env.REACT_APP_BACKEND_WS || 'ws://localhost:8080';
 
 const { Content } = Layout;
 const { Option } = Select;
 
-<<<<<<< Updated upstream
-const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
-const WS_BASE_URL = process.env.REACT_APP_BACKEND_WS || 'ws://localhost:8080';
-=======
-
->>>>>>> Stashed changes
-
 function formatFileSize(size) {
+  if (size === undefined || size === null) return '';
   if (size === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(size) / Math.log(1024));
@@ -488,15 +483,12 @@ const OperationDashboard = () => {
     console.log("Uploading to directory:", normalizedPath); // for debugging
 
     try {
-<<<<<<< Updated upstream
-=======
       const existingFilesRes = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`, {
         withCredentials: true
       });
       const existingFiles = existingFilesRes.data || [];
       const existingNames = existingFiles.map(f => f.name);
 
->>>>>>> Stashed changes
       if (uploadingFiles.length === 1) {
         const formData = new FormData();
         formData.append('file', uploadingFiles[0]);
@@ -508,95 +500,7 @@ const OperationDashboard = () => {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
 
-<<<<<<< Updated upstream
         message.success('File uploaded successfully');
-=======
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('directory', normalizedPath);
-          formData.append('container', 'operation');
-
-          // Only one of these should be true at a time
-          if (overwrite) formData.append('overwrite', 'true');
-          else if (skip) formData.append('skip', 'true');
-
-          try {
-            const response = await axios.post(`${BASE_URL}/upload`, formData, {
-              withCredentials: true,
-              headers: { 'Content-Type': 'multipart/form-data' },
-            });
-
-            // Get the destination from the response or fallback to the current path
-            const destination = response.data?.destination || normalizedPath;
-
-            let successMessage;
-            if (overwrite) {
-              successMessage = `Overwritten ${file.name} in ${destination}`;
-            } else {
-              successMessage = `Uploaded ${file.name} to ${destination}`;
-            }
-
-            message.success(successMessage);
-            setUploadModalVisible(false);
-            setUploadingFiles([]);
-            fetchItems(); // refresh file list
-            fetchAllFilesWithMessages(); // refresh files with messages
-          } catch (error) {
-            console.error('Upload failed:', error);
-            const errorMessage = error.response?.data?.error || `Upload failed for ${file.name}`;
-            message.error(errorMessage);
-          }
-        };
-
-        if (fileExists) {
-          // Show conflict resolution modal
-          Modal.info({
-            title: `A file named '${file.name}' already exists.`,
-            icon: <ExclamationCircleOutlined />,
-            content: (
-              <div>
-                <p>Choose an action for this file:</p>
-                <div style={{ marginTop: '16px' }}>
-                  <Button
-                    danger
-                    style={{ width: '100%', marginBottom: '8px' }}
-                    onClick={() => {
-                      Modal.destroyAll();
-                      uploadSingle(true);
-                    }}
-                  >
-                    A. Overwrite - Replace the existing file
-                  </Button>
-
-                  <Button
-                    type="primary"
-                    style={{ width: '100%', marginBottom: '8px' }}
-                    onClick={() => {
-                      Modal.destroyAll();
-                      uploadSingle(false);
-                    }}
-                  >
-                    B. Keep Both - Save with a new name
-                  </Button>
-
-                  <Button
-                    style={{ width: '100%' }}
-                    onClick={() => {
-                      Modal.destroyAll();
-                      uploadSingle(false, true);
-                    }}
-                  >
-                    C. Skip - Cancel this upload
-                  </Button>
-                </div>
-              </div>
-            ),
-            okButtonProps: { style: { display: 'none' } }, // Hide the default OK button
-          });
-        } else {
-          await uploadSingle(false);
-        }
->>>>>>> Stashed changes
       } else {
         const formData = new FormData();
         uploadingFiles.forEach((file) => formData.append('files', file));
@@ -615,97 +519,7 @@ const OperationDashboard = () => {
         const skipped = results.filter(r => r.status === 'skipped').length;
         const failed = results.filter(r => r.status.startsWith('error')).length;
 
-<<<<<<< Updated upstream
         message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
-=======
-          try {
-            const res = await axios.post(`${BASE_URL}/bulk-upload`, formData, {
-              withCredentials: true,
-              headers: { 'Content-Type': 'multipart/form-data' },
-            });
-
-            const results = res.data || [];
-            const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
-            const skipped = results.filter(r => r.status === 'skipped').length;
-            const failed = results.filter(r => r.status.startsWith('error')).length;
-
-            let successMessage;
-            if (overwrite && uploaded > 0) {
-              successMessage = `${uploaded} file(s) overwritten, ${skipped} skipped, ${failed} failed`;
-            } else if (skip && skipped > 0) {
-              successMessage = `${uploaded} file(s) uploaded, ${skipped} skipped, ${failed} failed`;
-            } else {
-              successMessage = `${uploaded} file(s) uploaded, ${skipped} skipped, ${failed} failed`;
-            }
-
-            message.success(successMessage);
-            setUploadModalVisible(false);
-            setUploadingFiles([]);
-            fetchItems(); // refresh file list
-            fetchAllFilesWithMessages(); // refresh files with messages
-          } catch (error) {
-            console.error('Bulk upload failed:', error);
-            const errorMessage = error.response?.data?.error || 'Bulk upload failed';
-            message.error(errorMessage);
-          }
-        };
-
-        if (conflictingFiles.length > 0) {
-          // If there are conflicts, show a modal asking what to do with all conflicting files
-          Modal.info({
-            title: `${conflictingFiles.length} file(s) already exist`,
-            icon: <ExclamationCircleOutlined />,
-            content: (
-              <div>
-                <p>The following files already exist:</p>
-                <ul style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #eee', padding: '8px 16px' }}>
-                  {conflictingFiles.map(file => (
-                    <li key={file.uid}>{file.name}</li>
-                  ))}
-                </ul>
-                <p style={{ marginTop: '16px' }}>Choose an action for these files:</p>
-                <div style={{ marginTop: '16px' }}>
-                  <Button
-                    danger
-                    style={{ width: '100%', marginBottom: '8px' }}
-                    onClick={() => {
-                      Modal.destroyAll();
-                      handleBulkUpload(true, false);
-                    }}
-                  >
-                    A. Overwrite All - Replace existing files
-                  </Button>
-
-                  <Button
-                    type="primary"
-                    style={{ width: '100%', marginBottom: '8px' }}
-                    onClick={() => {
-                      Modal.destroyAll();
-                      handleBulkUpload(false, false);
-                    }}
-                  >
-                    B. Keep Both - Save with new names
-                  </Button>
-
-                  <Button
-                    style={{ width: '100%' }}
-                    onClick={() => {
-                      Modal.destroyAll();
-                      handleBulkUpload(false, true);
-                    }}
-                  >
-                    C. Skip Conflicts - Upload only new files
-                  </Button>
-                </div>
-              </div>
-            ),
-            okButtonProps: { style: { display: 'none' } }, // Hide the default OK button
-          });
-        } else {
-          // If no conflicts, proceed with upload
-          await handleBulkUpload(false, false);
-        }
->>>>>>> Stashed changes
       }
 
       setUploadModalVisible(false);
@@ -995,8 +809,6 @@ const OperationDashboard = () => {
       return;
     }
     try {
-<<<<<<< Updated upstream
-=======
       // Determine the destination path based on main folder and subfolder
       let destinationPath = selectedMainFolder;
       if (selectedSubFolder) {
@@ -1070,7 +882,6 @@ const OperationDashboard = () => {
         destinationPath = `${selectedMainFolder}/${selectedSubFolder}`;
       }
 
->>>>>>> Stashed changes
       if (copyItem.type === 'directory') {
         await axios.post(
           '/directory/copy',
@@ -1220,8 +1031,6 @@ const OperationDashboard = () => {
           setMoveModalVisible(false);
           return;
         }
-<<<<<<< Updated upstream
-=======
 
         // Then check if a file with the same name exists at the destination
         try {
@@ -1257,7 +1066,6 @@ const OperationDashboard = () => {
           console.error('Error checking for existing files at destination:', err);
           // Continue with move operation if we can't check for conflicts
         }
->>>>>>> Stashed changes
       }
 
       if (moveItem.type === 'directory') {
@@ -1312,8 +1120,6 @@ const OperationDashboard = () => {
     }
   };
 
-<<<<<<< Updated upstream
-=======
   const finalizeMove = async (overwrite) => {
     try {
       if (moveItem.type === 'directory') {
@@ -1364,7 +1170,6 @@ const OperationDashboard = () => {
     }
   };
 
->>>>>>> Stashed changes
   const columns = [
     {
       title: 'Name',
@@ -1467,72 +1272,103 @@ const OperationDashboard = () => {
           </Row>
 
           {allFilesWithMessages.map(file => {
-            const filteredMessages = hideDone
-              ? file.messages.filter(msg => !msg.is_done)
-              : file.messages;
+  const filteredMessages = hideDone
+    ? file.messages.filter(msg => !msg.is_done)
+    : file.messages;
 
-            if (filteredMessages.length === 0) return null;
+  if (filteredMessages.length === 0) return null;
 
-            return (
-              <Card
-                key={file.id}
-                type="inner"
+  return (
+    <Card
+      key={file.id}
+      type="inner"
+      size="small"
+      title={
+        <Space>
+          <span style={{ fontWeight: 500 }}>
+            🗂 File: <a style={{ textDecoration: 'underline', color: '#1890ff' }}
+              onClick={() => handleViewFile({
+                id: file.id,
+                name: file.name,
+                directory: file.directory,
+                type: 'file',
+              })}
+            >{file.name}</a>
+          </span>
+          <Badge count={filteredMessages.length} />
+        </Space>
+      }
+      extra={<Button type="link" size="small" onClick={() => setCurrentPath(file.directory)}>
+        Go to Folder
+      </Button>}
+      style={{ marginBottom: 12, borderRadius: 8, background: '#fafafa' }}
+    >
+      {filteredMessages.map(msg => {
+        const isNew = !msg.is_done && !msg.seenAt;
+        const bgColor = msg.is_done ? '#f6ffed' : isNew ? '#e6f7ff' : '#fffbe6';
+        const borderColor = msg.is_done ? '#b7eb8f' : isNew ? '#91d5ff' : '#ffe58f';
+        const statusText = msg.is_done ? '✅ Done' : isNew ? '🟦 New' : '🟨 Pending';
+        const statusColor = msg.is_done ? 'green' : isNew ? '#1890ff' : '#faad14';
+        return (
+          <div
+            key={msg.id}
+            style={{
+              background: bgColor,
+              borderLeft: `4px solid ${borderColor}`,
+              padding: '10px 12px',
+              marginBottom: 10,
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 13, marginBottom: 4 }}>
+                <strong>📝:</strong> <span style={{ fontStyle: 'italic' }}>{msg.message}</span>
+              </div>
+              <div style={{ fontSize: 12, color: '#555' }}>
+                👤 {msg.admin_name || 'N/A'} · 🕓 {new Date(msg.created_at).toLocaleString()}
+              </div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>
+                <strong>Status:</strong>{' '}
+                <span style={{ color: statusColor, fontWeight: 500 }}>{statusText}</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <Button
+                type="link"
                 size="small"
-                title={
-                  <Space>
-                    <span style={{ fontWeight: 500 }}>🗂 File: {file.name}</span>
-                    <Badge count={filteredMessages.length} />
-                  </Space>
-                }
-                extra={<Button type="link" size="small" onClick={() => setCurrentPath(file.directory)}>
-                  Go to Folder
-                </Button>}
-                style={{ marginBottom: 12, borderRadius: 8, background: '#fafafa' }}
-              >
-                {filteredMessages.map(msg => {
-                  const isNew = !msg.is_done && !msg.seenAt;
-                  const bgColor = msg.is_done ? '#f6ffed' : isNew ? '#e6f7ff' : '#fffbe6';
-                  const borderColor = msg.is_done ? '#b7eb8f' : isNew ? '#91d5ff' : '#ffe58f';
-                  const statusText = msg.is_done ? '✅ Done' : isNew ? '🟦 New' : '🟨 Pending';
-                  const statusColor = msg.is_done ? 'green' : isNew ? '#1890ff' : '#faad14';
-
-                  return (
-                    <div
-                      key={msg.id}
-                      style={{
-                        background: bgColor,
-                        borderLeft: `4px solid ${borderColor}`,
-                        padding: '10px 12px',
-                        marginBottom: 10,
-                        borderRadius: 4,
-                      }}
-                    >
-                      <div style={{ fontSize: 13, marginBottom: 4 }}>
-                        <strong>📝:</strong> <span style={{ fontStyle: 'italic' }}>{msg.message}</span>
-                      </div>
-                      <div style={{ fontSize: 12, color: '#555' }}>
-                        👤 {msg.admin_name || 'N/A'} · 🕓 {new Date(msg.created_at).toLocaleString()}
-                      </div>
-                      <div style={{ fontSize: 12, marginTop: 4 }}>
-                        <strong>Status:</strong>{' '}
-                        <span style={{ color: statusColor, fontWeight: 500 }}>{statusText}</span>
-                      </div>
-                      {!msg.is_done && (
-                        <Button
-                          type="primary"
-                          size="small"
-                          style={{ marginTop: 6 }}
-                          onClick={() => markAsDone(msg.id, file.id)}
-                        >
-                          Mark as Done
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })}
-              </Card>
-            );
-          })}
+                style={{ padding: 0, color: '#1890ff' }}
+                onClick={() => {
+                  setCurrentPath(file.directory);
+                  setTimeout(() => {
+                    handleViewFile({
+                      id: file.id,
+                      name: file.name,
+                      directory: file.directory,
+                      type: 'file',
+                    });
+                  }, 300);
+                }}
+              >Go to File</Button>
+              {!msg.is_done && (
+                <Button
+                  type="primary"
+                  size="small"
+                  style={{ marginTop: 6 }}
+                  onClick={() => markAsDone(msg.id, file.id)}
+                >
+                  Mark as Done
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </Card>
+  );
+})}
         </div>
 
         {/* Dashboard UI */}
@@ -1624,20 +1460,20 @@ const OperationDashboard = () => {
 
 
         <Table
-          columns={columns}
-          dataSource={sortedItems}
-          rowKey={(record) => (record.id ? record.id : record.name + record.type)}
-          loading={loading}
-          pagination={false}
-          scroll={{ y: '49vh', x: '100%' }}  // for content scrolling on table
-          rowSelection={rowSelection}
-          className="action-buttons-table"
-          tableLayout="fixed"
-          onRow={(record) => ({
-            onClick: () => handleRowClick(record),
-            style: { cursor: record.type === 'directory' ? 'pointer' : 'default' } // Only show pointer cursor for directories
-          })}
-        />
+  columns={columns}
+  dataSource={sortedItems}
+  rowKey={(record) => (record.id ? record.id : record.name + record.type)}
+  loading={loading}
+  pagination={false}
+  scroll={{ y: '49vh', x: '100%' }}  // for content scrolling on table
+  rowSelection={rowSelection}
+  className="action-buttons-table"
+  tableLayout="fixed"
+  onRow={(record) => ({
+    onClick: () => handleRowClick(record),
+    style: { cursor: record.type === 'directory' ? 'pointer' : 'default' }
+  })}
+/>
         <Modal
           title="File Information"
           visible={infoModalVisible}

@@ -47,17 +47,13 @@ import { batchDelete, batchDownload } from '../utils/batchOperations';
 
 const { Content } = Layout;
 const { Option } = Select;
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 /**
  * Helper to format file sizes in human-readable form.
  */
 function formatFileSize(size) {
-  if (size === undefined || size === null) return 'Unknown';
+  if (size === undefined || size === null) return '';
   if (size === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(size) / Math.log(1024));
@@ -117,6 +113,9 @@ const TrainingDashboard = () => {
   // Upload
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState([]);
+
+  // File Instructions
+  const [hideDone, setHideDone] = useState(false);
 
   // ----------------------------------
   // Initial Load: set user and fetch directories
@@ -397,37 +396,6 @@ const TrainingDashboard = () => {
     setUploadModalVisible(true);
   };
 
-<<<<<<< Updated upstream
-  const doModalUpload = async () => {
-    if (!uploadingFiles) {
-      message.error('Please select a file first');
-      return;
-    }
-    if (!currentPath) {
-      message.error('Please select or create a folder first');
-      return;
-    }
-    const formData = new FormData();
-    formData.append('file', uploadingFiles);
-    formData.append('directory', currentPath);
-    formData.append('container', 'training');
-    try {
-      const res = await axios.post(`${BASE_URL}/upload`, formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      message.success(res.data.message || 'File uploaded successfully');
-      setUploadModalVisible(false);
-      setUploadingFiles(null);
-      fetchItems();
-    } catch (error) {
-      console.error('Modal-based upload error:', error);
-      message.error(error.response?.data?.error || 'Error uploading file');
-    }
-  };
-
-=======
->>>>>>> Stashed changes
   const handleModalUpload = async () => {
     if (uploadingFiles.length === 0) {
       message.error('Please select one or more files first');
@@ -439,15 +407,6 @@ const TrainingDashboard = () => {
     console.log("Uploading to directory:", normalizedPath);
 
     try {
-<<<<<<< Updated upstream
-=======
-      const existingFilesRes = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`, {
-        withCredentials: true
-      });
-      const existingFiles = Array.isArray(existingFilesRes.data) ? existingFilesRes.data : [];
-      const existingNames = existingFiles.map(f => f.name);
-
->>>>>>> Stashed changes
       if (uploadingFiles.length === 1) {
         const formData = new FormData();
         formData.append('file', uploadingFiles[0]);
@@ -459,7 +418,6 @@ const TrainingDashboard = () => {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
 
-<<<<<<< Updated upstream
         message.success('File uploaded successfully');
       } else {
         const formData = new FormData();
@@ -480,138 +438,6 @@ const TrainingDashboard = () => {
         const failed = results.filter(r => r.status.startsWith('error')).length;
 
         message.success(`${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
-=======
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('directory', normalizedPath);
-          formData.append('container', 'training');
-          if (overwrite) formData.append('overwrite', 'true');
-          else if (skip) formData.append('skip', 'true');
-
-          try {
-            const response = await axios.post(`${BASE_URL}/upload`, formData, {
-              withCredentials: true,
-              headers: { 'Content-Type': 'multipart/form-data' },
-            });
-
-            const destination = response.data?.destination || normalizedPath;
-            let successMessage = overwrite
-              ? `Overwritten ${file.name} in ${destination}`
-              : `Uploaded ${file.name} to ${destination}`;
-
-            message.success(successMessage);
-            setUploadModalVisible(false);
-            setUploadingFiles([]);
-            fetchItems();
-            fetchAllFilesWithMessages();
-          } catch (error) {
-            console.error('Upload failed:', error);
-            const errorMessage = error.response?.data?.error || `Upload failed for ${file.name}`;
-            message.error(errorMessage);
-          }
-        };
-
-        if (fileExists) {
-          Modal.info({
-            title: `A file named '${file.name}' already exists.`,
-            icon: <ExclamationCircleOutlined />,
-            content: (
-              <div>
-                <p>Choose an action for this file:</p>
-                <div style={{ marginTop: '16px' }}>
-                  <Button danger style={{ width: '100%', marginBottom: '8px' }} onClick={() => { Modal.destroyAll(); uploadSingle(true); }}>
-                    A. Overwrite - Replace the existing file
-                  </Button>
-                  <Button type="primary" style={{ width: '100%', marginBottom: '8px' }} onClick={() => { Modal.destroyAll(); uploadSingle(false); }}>
-                    B. Keep Both - Save with a new name
-                  </Button>
-                  <Button style={{ width: '100%' }} onClick={() => { Modal.destroyAll(); uploadSingle(false, true); }}>
-                    C. Skip - Cancel this upload
-                  </Button>
-                </div>
-              </div>
-            ),
-            okButtonProps: { style: { display: 'none' } },
-          });
-        } else {
-          await uploadSingle(false);
-        }
-      } else {
-        // Multiple files
-        const conflictingFiles = uploadingFiles.filter(file => existingNames.includes(file.name));
-
-        const handleBulkUpload = async (overwrite, skip) => {
-          const formData = new FormData();
-          uploadingFiles.forEach(file => formData.append('files', file));
-          formData.append('directory', normalizedPath);
-          formData.append('container', 'training');
-          if (overwrite) {
-            formData.append('overwrite', 'true');
-            formData.append('skip', 'false');
-          } else if (skip) {
-            formData.append('overwrite', 'false');
-            formData.append('skip', 'true');
-          } else {
-            formData.append('overwrite', 'false');
-            formData.append('skip', 'false');
-          }
-
-          try {
-            const res = await axios.post(`${BASE_URL}/bulk-upload`, formData, {
-              withCredentials: true,
-              headers: { 'Content-Type': 'multipart/form-data' },
-            });
-
-            const results = Array.isArray(res.data) ? res.data : [];
-            const uploaded = results.filter(r => r.status === 'uploaded' || r.status === 'overwritten').length;
-            const skipped = results.filter(r => r.status === 'skipped').length;
-            const failed = results.filter(r => r.status && r.status.startsWith('error')).length;
-
-            let successMessage = `${uploaded} file(s) uploaded, ${skipped} skipped, ${failed} failed`;
-            message.success(successMessage);
-            setUploadModalVisible(false);
-            setUploadingFiles([]);
-            fetchItems();
-            fetchAllFilesWithMessages();
-          } catch (error) {
-            console.error('Bulk upload failed:', error);
-            const errorMessage = error.response?.data?.error || 'Bulk upload failed';
-            message.error(errorMessage);
-          }
-        };
-
-        if (conflictingFiles.length > 0) {
-          Modal.info({
-            title: `${conflictingFiles.length} file(s) already exist`,
-            icon: <ExclamationCircleOutlined />,
-            content: (
-              <div>
-                <p>The following files already exist:</p>
-                <ul style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #eee', padding: '8px 16px' }}>
-                  {conflictingFiles.map(file => (
-                    <li key={file.uid}>{file.name}</li>
-                  ))}
-                </ul>
-                <p style={{ marginTop: '16px' }}>Choose an action for these files:</p>
-                <div style={{ marginTop: '16px' }}>
-                  <Button danger style={{ width: '100%', marginBottom: '8px' }} onClick={() => { Modal.destroyAll(); handleBulkUpload(true, false); }}>
-                    A. Overwrite All - Replace existing files
-                  </Button>
-                  <Button type="primary" style={{ width: '100%', marginBottom: '8px' }} onClick={() => { Modal.destroyAll(); handleBulkUpload(false, false); }}>
-                    B. Keep Both - Save with new names
-                  </Button>
-                  <Button style={{ width: '100%' }} onClick={() => { Modal.destroyAll(); handleBulkUpload(false, true); }}>
-                    C. Skip Conflicts - Upload only new files
-                  </Button>
-                </div>
-              </div>
-            ),
-            okButtonProps: { style: { display: 'none' } },
-          });
-        } else {
-          await handleBulkUpload(false, false);
-        }
->>>>>>> Stashed changes
       }
 
       setUploadModalVisible(false);
@@ -981,96 +807,6 @@ const TrainingDashboard = () => {
 
     try {
       if (moveItem.type === 'file') {
-        // First, verify the file exists by trying to get its metadata
-        try {
-          const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
-          const checkRes = await axios.get(checkUrl, { withCredentials: true });
-
-          const fileExists = (checkRes.data || []).some(f =>
-            f.name === moveItem.name && (f.directory === currentPath || f.directory === undefined)
-          );
-
-          if (!fileExists) {
-            throw new Error("Source file not found. It may have been deleted or moved.");
-          }
-        } catch (checkErr) {
-          console.error('File existence check failed:', checkErr);
-          message.error('Could not verify file existence. Please refresh and try again.');
-          setMoveModalVisible(false);
-          return;
-        }
-      }
-
-      if (moveItem.type === 'directory') {
-        await axios.post(
-          `${BASE_URL}/directory/move`,
-          {
-            name: moveItem.name,
-            old_parent: currentPath,
-            new_parent: moveDestination,
-            container: 'training'
-          },
-          { withCredentials: true }
-        );
-      } else {
-        console.log('Moving file with:', {
-          id: moveItem.id.toString(),
-          filename: moveItem.name,
-          old_parent: currentPath,
-          new_parent: moveDestination,
-          overwrite: false
-        });
-
-        await axios.post(
-          `${BASE_URL}/move-file`,
-          {
-            id: moveItem.id.toString(),
-            filename: moveItem.name,
-            old_parent: currentPath,
-            new_parent: moveDestination,
-<<<<<<< Updated upstream
-            overwrite: false
-=======
-          overwrite: overwrite,
-          container: 'training'
->>>>>>> Stashed changes
-          },
-          { withCredentials: true }
-        );
-      }
-      message.success(`Moved '${moveItem.name}' successfully`);
-      setMoveModalVisible(false);
-      setMoveItem(null);
-      setMoveDestination('');
-      fetchItems();
-    } catch (error) {
-      console.error('Move error:', error);
-
-      // Handle specific error cases
-      if (error.response?.data?.error === "Source file does not exist on disk") {
-        message.error('The file no longer exists on the server. Please refresh the page.');
-      } else {
-        message.error(error.response?.data?.error || 'Error moving item');
-      }
-
-      setMoveModalVisible(false);
-    }
-  };
-
-<<<<<<< Updated upstream
-=======
-  const handleMoveConfirm = async () => {
-    if (!moveDestination.trim()) {
-      message.error('Please select a destination folder');
-      return;
-    }
-    if (!moveItem) {
-      message.error('No item selected to move');
-      return;
-    }
-
-    try {
-      if (moveItem.type === 'file') {
         // First, verify the source file exists
         try {
           const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`;
@@ -1136,7 +872,6 @@ const TrainingDashboard = () => {
     }
   };
 
->>>>>>> Stashed changes
   // ----------------------------------
   // View File
   // ----------------------------------
@@ -1367,8 +1102,123 @@ const TrainingDashboard = () => {
           <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
         )}
 
-
-
+        {/* File Instructions Section */}
+        <div style={{ marginBottom: 24 }}>
+          <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
+            <Col><h3 style={{ margin: 0 }}>📬 File Instructions</h3></Col>
+            <Col>
+              <Space>
+                <Checkbox checked={hideDone} onChange={(e) => setHideDone(e.target.checked)}>
+                  Hide Completed
+                </Checkbox>
+                <Button
+                  type="dashed"
+                  icon={<DownloadOutlined />}
+                  size="small"
+                  onClick={fetchAllFilesWithMessages}
+                >
+                  Refresh
+                </Button>
+              </Space>
+            </Col>
+          </Row>
+          {allFilesWithMessages && allFilesWithMessages.map(file => {
+            const filteredMessages = hideDone
+              ? file.messages.filter(msg => !msg.is_done)
+              : file.messages;
+            if (!filteredMessages || filteredMessages.length === 0) return null;
+            return (
+              <Card
+                key={file.id}
+                type="inner"
+                size="small"
+                title={
+                  <Space>
+                    <span style={{ fontWeight: 500 }}>
+                      🗂 File: <a style={{ textDecoration: 'underline', color: '#1890ff' }}
+                        onClick={() => handleViewFile({
+                          id: file.id,
+                          name: file.name,
+                          directory: file.directory,
+                          type: 'file',
+                        })}
+                      >{file.name}</a>
+                    </span>
+                    <Badge count={filteredMessages.length} />
+                  </Space>
+                }
+                extra={<Button type="link" size="small" onClick={() => setCurrentPath(file.directory)}>
+                  Go to Folder
+                </Button>}
+                style={{ marginBottom: 12, borderRadius: 8, background: '#fafafa' }}
+              >
+                {filteredMessages.map(msg => {
+                  const isNew = !msg.is_done && !msg.seenAt;
+                  const bgColor = msg.is_done ? '#f6ffed' : isNew ? '#e6f7ff' : '#fffbe6';
+                  const borderColor = msg.is_done ? '#b7eb8f' : isNew ? '#91d5ff' : '#ffe58f';
+                  const statusText = msg.is_done ? '✅ Done' : isNew ? '🟦 New' : '🟨 Pending';
+                  const statusColor = msg.is_done ? 'green' : isNew ? '#1890ff' : '#faad14';
+                  return (
+                    <div
+                      key={msg.id}
+                      style={{
+                        background: bgColor,
+                        borderLeft: `4px solid ${borderColor}`,
+                        padding: '10px 12px',
+                        marginBottom: 10,
+                        borderRadius: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 13, marginBottom: 4 }}>
+                          <strong>📝:</strong> <span style={{ fontStyle: 'italic' }}>{msg.message}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#555' }}>
+                          👤 {msg.admin_name || 'N/A'} · 🕓 {new Date(msg.created_at).toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: 12, marginTop: 4 }}>
+                          <strong>Status:</strong>{' '}
+                          <span style={{ color: statusColor, fontWeight: 500 }}>{statusText}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                        <Button
+                          type="link"
+                          size="small"
+                          style={{ padding: 0, color: '#1890ff' }}
+                          onClick={() => {
+                            setCurrentPath(file.directory);
+                            setTimeout(() => {
+                              handleViewFile({
+                                id: file.id,
+                                name: file.name,
+                                directory: file.directory,
+                                type: 'file',
+                              });
+                            }, 300);
+                          }}
+                        >Go to File</Button>
+                        {!msg.is_done && (
+                          <Button
+                            type="primary"
+                            size="small"
+                            style={{ marginTop: 6 }}
+                            onClick={() => markAsDone(msg.id, file.id)}
+                          >
+                            Mark as Done
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </Card>
+            );
+          })}
+        </div>
 
         <Table
           columns={columns}

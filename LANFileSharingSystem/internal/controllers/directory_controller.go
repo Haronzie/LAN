@@ -661,7 +661,9 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.NewParent != "" {
+	// Allow root folders as valid destinations even if not in DB
+	rootFolders := map[string]bool{"Operation": true, "Research": true, "Training": true, "": true}
+	if req.NewParent != "" && !rootFolders[req.NewParent] {
 		destExists, err := dc.App.DirectoryExists(req.NewParent, "")
 		if err != nil {
 			models.RespondError(w, http.StatusInternalServerError, "Error checking destination folder")

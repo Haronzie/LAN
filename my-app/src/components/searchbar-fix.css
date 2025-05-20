@@ -1,0 +1,17 @@
+.ant-input-search {
+  min-width: 250px;
+  max-width: 100%;
+  flex: 1 1 300px;
+}
+
+@media (max-width: 600px) {
+  .ant-input-search {
+    min-width: 120px;
+    font-size: 14px;
+  }
+}
+
+.ant-row > .ant-col[style*="width: 40%"] {
+  min-width: 250px;
+  max-width: 100%;
+}

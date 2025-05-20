@@ -43,6 +43,7 @@ import SelectionHeader from './common/SelectionHeader';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
 import CommonModals from './common/CommonModals';
 import './action-buttons-fix.css'; // Import CSS to fix action buttons
+import './searchbar-fix.css'; // Import CSS to fix search bar overlap and ensure responsive layout
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -123,7 +124,7 @@ function getPathSegments(p) {
 }
 
 function formatFileSize(size) {
-  if (size === undefined || size === null) return 'Unknown';
+  if (size === undefined || size === null) return '';
   if (size === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(size) / Math.log(1024));

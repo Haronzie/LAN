@@ -259,6 +259,36 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		fc.App.NotificationHub.Broadcast(notification)
 	}
 
+	// --- File instruction/message logic ---
+	messageText := r.FormValue("message")
+	receiver := r.FormValue("receiver")
+	if messageText != "" && receiver != "" && user.Role == "admin" && fileID > 0 {
+		// Get the exact username with correct capitalization from the database
+		var exactUsername string
+		err := fc.App.DB.QueryRow(`SELECT username FROM users WHERE LOWER(username) = LOWER($1)`, receiver).Scan(&exactUsername)
+		if err != nil {
+			exactUsername = receiver // fallback
+		}
+		// Prevent sending to self
+		if !strings.EqualFold(user.Username, exactUsername) {
+			_, err := fc.App.DB.Exec(`INSERT INTO file_messages (file_id, sender, receiver, message) VALUES ($1, $2, $3, $4)`, fileID, user.Username, exactUsername, messageText)
+			if err == nil && fc.App.NotificationHub != nil {
+				var filePath string
+				_ = fc.App.DB.QueryRow(`SELECT file_path FROM files WHERE id = $1`, fileID).Scan(&filePath)
+				notification := map[string]string{
+					"type":      "new_instruction",
+					"receiver":  exactUsername,
+					"message":   messageText,
+					"file_id":   fmt.Sprintf("%d", fileID),
+					"sender":    user.Username,
+					"file_path": filePath,
+				}
+				notifBytes, _ := json.Marshal(notification)
+				fc.App.NotificationHub.SendToUser(exactUsername, notifBytes)
+			}
+		}
+	}
+
 	models.RespondJSON(w, http.StatusOK, map[string]interface{}{
 		"message": fmt.Sprintf("File '%s' uploaded (version 1) successfully", rawFileName),
 		"file_id": fileID,
@@ -554,6 +584,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		SourceFile        string `json:"source_file"`
 		NewFileName       string `json:"new_file_name"`
 		DestinationFolder string `json:"destination_folder"`
+		Overwrite         bool   `json:"overwrite"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
@@ -581,7 +612,6 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	if finalName == "" {
 		finalName = filepath.Base(req.SourceFile)
 	}
-
 	destFolder := req.DestinationFolder
 	if destFolder == "" {
 		destFolder = filepath.Dir(oldFR.FilePath)
@@ -600,12 +630,20 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		}
 		newRelativePath = filepath.Join(destFolder, finalName)
 
-		if _, err := fc.App.GetFileRecordByPath(newRelativePath); err != nil {
+		existingFR, err := fc.App.GetFileRecordByPath(newRelativePath)
+		if err != nil {
+			// No file exists at this path, break and use this name
+			break
+		}
+		if req.Overwrite {
+			// Overwrite: delete file on disk and DB record
+			_ = os.Remove(filepath.Join("Cdrrmo", existingFR.FilePath))
+			_ = fc.App.DeleteFileVersions(existingFR.ID)
+			_, _ = fc.App.DeleteFileRecordByPath(existingFR.FilePath)
 			break
 		}
 		counter++
 	}
-
 	dstPath := filepath.Join("Cdrrmo", newRelativePath)
 
 	in, err := os.Open(srcPath)
@@ -615,7 +653,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer in.Close()
 
-	if _, err := os.Stat(dstPath); err == nil {
+	if _, err := os.Stat(dstPath); err == nil && !req.Overwrite {
 		models.RespondError(w, http.StatusConflict, "Target file already exists on disk")
 		return
 	}
