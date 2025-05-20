@@ -10,7 +10,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"LANFileSharingSystem/internal/config"
 	"LANFileSharingSystem/internal/controllers"
@@ -388,21 +387,9 @@ func main() {
 		ws.ServeWs(hub, w, r)
 	})
 
-	// Wrap your router with CORS middleware.
-	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
-	var allowedOrigins []string
-	if allowedOriginsEnv != "" {
-		for _, origin := range strings.Split(allowedOriginsEnv, ",") {
-			trimmed := strings.TrimSpace(origin)
-			if trimmed != "" {
-				allowedOrigins = append(allowedOrigins, trimmed)
-			}
-		}
-	} else {
-		// Allow all origins in development
-		allowedOrigins = []string{"*"}
-	}
-
+	// Configure CORS
+	allowedOrigins := []string{"http://localhost:3000"} // Explicitly allow the React dev server
+	
 	// Log allowed origins for debugging CORS issues
 	logger.WithField("allowedOrigins", allowedOrigins).Info("CORS allowed origins")
 
