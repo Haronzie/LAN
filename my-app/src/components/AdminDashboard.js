@@ -49,11 +49,21 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post('/logout', {}, { withCredentials: true });
-      await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080'}/logout`, {}, { withCredentials: true });
+      const baseUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+      await axios.post(`${baseUrl}/logout`, {}, { 
+        withCredentials: true,
+        timeout: 5000 // Add timeout to prevent long-waiting requests
+      });
+
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
+      message.success('Logout successful');
       navigate('/login');
-    } catch {
-      message.error('Logout failed.');
+    } catch (error) {
+      console.log('Logout error:', error);
+      message.warning('Logout from server failed, but you\'ve been logged out locally.');
+      navigate('/login');
     }
   };
 
