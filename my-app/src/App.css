@@ -195,3 +195,86 @@ body {
 .ant-table-wrapper .ant-table-thead > tr > th:last-child {
   min-width: 200px;
 }
+
+/* Responsive Action Buttons: Wrap and resize on small screens */
+.ant-table-cell .ant-space {
+  flex-wrap: wrap !important;
+  gap: 4px !important;
+}
+
+.ant-table-cell .ant-btn {
+  min-width: 32px;
+  min-height: 32px;
+  font-size: 1rem;
+  padding: 0 8px;
+}
+
+/* On mobile, make buttons full width and stack vertically if needed */
+@media (max-width: 600px) {
+  .ant-table-cell .ant-space {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+  }
+  .ant-table-cell .ant-btn {
+    width: 100%;
+    min-width: 0;
+    font-size: 1.1rem;
+    padding: 8px 0;
+    margin-right: 0 !important;
+  }
+  .ant-table-wrapper .ant-table-thead > tr > th,
+  .ant-table-wrapper .ant-table-tbody > tr > td {
+    font-size: 0.95rem;
+    padding: 8px 4px !important;
+  }
+  .ant-table-wrapper .ant-table-thead > tr > th:last-child,
+  .ant-table-wrapper .ant-table-tbody > tr > td:last-child {
+    min-width: 120px !important;
+    padding-right: 4px !important;
+  }
+  .App-main, .App {
+    padding: 0.5rem !important;
+  }
+  .ant-input, .ant-select, .ant-btn {
+    font-size: 1rem !important;
+  }
+}
+
+/* For tablets/laptops: slightly smaller buttons and tighter spacing */
+@media (min-width: 601px) and (max-width: 1024px) {
+  .ant-table-cell .ant-btn {
+    font-size: 0.95rem;
+    padding: 0 6px;
+  }
+  .ant-table-wrapper .ant-table-thead > tr > th,
+  .ant-table-wrapper .ant-table-tbody > tr > td {
+    font-size: 1rem;
+    padding: 10px 6px !important;
+  }
+}
+
+/* Ensure modals and forms are responsive */
+@media (max-width: 600px) {
+  .ant-modal {
+    width: 98vw !important;
+    max-width: 98vw !important;
+    padding: 0 !important;
+  }
+  .ant-modal-content {
+    padding: 8px !important;
+  }
+  .ant-form-item {
+    margin-bottom: 10px !important;
+  }
+}
+
+/* Responsive table: horizontal scroll on small screens */
+@media (max-width: 600px) {
+  .ant-table-wrapper {
+    overflow-x: auto;
+  }
+  .ant-table {
+    min-width: 600px;
+  }
+}
