@@ -67,11 +67,7 @@ const UserManagement = () => {
       setUsers(Array.isArray(res.data) ? res.data : []);
 
       // Get the first admin information
-<<<<<<< Updated upstream
-      const firstAdminRes = await axios.get('/admin-exits');
-=======
-      const firstAdminRes = await axios.get(`${BASE_URL}/admin-exists`, { withCredentials: true });
->>>>>>> Stashed changes
+      const firstAdminRes = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080'}/admin-exists`, { withCredentials: true });
       if (firstAdminRes.data.exists) {
         const firstAdminInfo = await axios.get(`${BASE_URL}/get-first-admin`, { withCredentials: true });
         setFirstAdmin(firstAdminInfo.data);

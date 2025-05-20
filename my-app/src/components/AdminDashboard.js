@@ -49,11 +49,7 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     try {
-<<<<<<< Updated upstream
-      await axios.get('/logout', { withCredentials: true });
-=======
-      await axios.post(`${BASE_URL}/logout`, {}, { withCredentials: true });
->>>>>>> Stashed changes
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080'}/logout`, {}, { withCredentials: true });
       navigate('/login');
     } catch {
       message.error('Logout failed.');

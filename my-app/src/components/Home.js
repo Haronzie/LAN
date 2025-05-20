@@ -8,18 +8,19 @@ const { Header, Content, Footer } = Layout;
 const { Title, Paragraph } = Typography;
 
 
-
-
 const Home = () => {
   const [adminExists, setAdminExists] = useState(false);
   const navigate = useNavigate();
 
+  const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exist',{ withCredentials: true });
+        const res = await axios.get(`${BASE_URL}/admin-exists`, { withCredentials: true });
         setAdminExists(res.data.exists);
       } catch (error) {
+        console.error('Error checking admin status:', error);
         message.error('Failed to check admin status.');
       }
     };

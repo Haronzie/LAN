@@ -17,6 +17,7 @@ import {
   Checkbox,
   TreeSelect,
   Spin,
+  Badge,
 
 } from 'antd';
 import {
@@ -754,6 +755,37 @@ const TrainingDashboard = () => {
     } else {
       // If no subfolder is selected, use just the main folder
       setMoveDestination(selectedMainFolder);
+    }
+  };
+
+  const finalizeMove = async (overwrite) => {
+    try {
+      const formData = new FormData();
+      formData.append('sourcePath', moveItem.path || path.join(currentPath, moveItem.name));
+      formData.append('destinationPath', path.join(moveDestination, moveItem.name));
+      formData.append('overwrite', overwrite);
+      formData.append('isDirectory', moveItem.type === 'directory');
+
+      await axios.post(
+        `${BASE_URL}/directory/move`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          withCredentials: true,
+        }
+      );
+
+      message.success(`Successfully moved ${moveItem.name}`);
+      fetchItems();
+      fetchDirectories();
+    } catch (error) {
+      console.error('Error in finalizeMove:', error);
+      message.error(error.response?.data?.error || 'Error moving item');
+      throw error;
+    } finally {
+      setMoveModalVisible(false);
     }
   };
 
