@@ -21,7 +21,7 @@ import NotificationDropdown from './common/NotificationDropdown';
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
 
-const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+// Using relative URLs - proxy in package.json will handle the backend URL
 
 const AdminDashboard = () => {
   const [adminName, setAdminName] = useState('Admin');
@@ -49,6 +49,7 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     try {
+      await axios.post('/logout', {}, { withCredentials: true });
       await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080'}/logout`, {}, { withCredentials: true });
       navigate('/login');
     } catch {

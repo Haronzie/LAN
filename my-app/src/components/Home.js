@@ -12,16 +12,26 @@ const Home = () => {
   const [adminExists, setAdminExists] = useState(false);
   const navigate = useNavigate();
 
-  const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
-
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get(`${BASE_URL}/admin-exists`, { withCredentials: true });
+        // Use relative URL - the proxy in package.json will handle the backend URL
+        const res = await axios.get('/admin-exists', { 
+          withCredentials: true
+        });
         setAdminExists(res.data.exists);
       } catch (error) {
         console.error('Error checking admin status:', error);
-        message.error('Failed to check admin status.');
+        if (error.response) {
+          console.error('Response data:', error.response.data);
+          console.error('Response status:', error.response.status);
+          console.error('Response headers:', error.response.headers);
+        } else if (error.request) {
+          console.error('No response received:', error.request);
+        } else {
+          console.error('Error setting up request:', error.message);
+        }
+        message.error('Failed to check admin status. ' + (error.message || ''));
       }
     };
     checkAdmin();

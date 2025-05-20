@@ -5,8 +5,6 @@ import { Column } from '@ant-design/charts';
 import { UserOutlined, FileOutlined, TeamOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
-const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
-
 const { Text, Title } = Typography;
 
 const AdminDashboardHome = () => {
@@ -56,11 +54,11 @@ const AdminDashboardHome = () => {
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
-      const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
-      console.log("Fetched users:", res.data); // helpful for debugging
+      const res = await axios.get('/users', { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
-    } catch {
-      message.error('Error fetching users');
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      message.error('Failed to fetch users: ' + (error.message || 'Unknown error'));
     } finally {
       setLoadingUsers(false);
     }
@@ -69,10 +67,11 @@ const AdminDashboardHome = () => {
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get(`${BASE_URL}/files`, { withCredentials: true });
+      const res = await axios.get('/files', { withCredentials: true });
       setFiles(Array.isArray(res.data) ? res.data : []);
-    } catch {
-      message.error('Error fetching files');
+    } catch (error) {
+      console.error('Error fetching files:', error);
+      message.error('Failed to fetch files: ' + (error.message || 'Unknown error'));
     } finally {
       setLoadingFiles(false);
     }
@@ -80,10 +79,11 @@ const AdminDashboardHome = () => {
 
   const fetchAuditLogs = async () => {
     try {
-      const res = await axios.get(`${BASE_URL}/auditlogs`, { withCredentials: true });
+      const res = await axios.get('/auditlogs', { withCredentials: true });
       setAuditLogs(Array.isArray(res.data) ? res.data : []);
-    } catch {
-      message.error('Error fetching audit logs');
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+      message.error('Failed to fetch audit logs: ' + (error.message || 'Unknown error'));
     }
   };
 

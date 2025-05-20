@@ -16,7 +16,7 @@ import { batchDeleteUsers } from '../utils/batchOperations';
 
 const { Content } = Layout;
 
-const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+// Using relative URLs - proxy in package.json will handle the backend URL
 
 // Password policy text from your RegisterForm
 const passwordPolicyContent = (
@@ -63,18 +63,27 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
-      setUsers(Array.isArray(res.data) ? res.data : []);
+      // Get users list
+      const [usersRes, firstAdminRes] = await Promise.all([
+        axios.get('/users', { withCredentials: true }),
+        axios.get('/admin-exists', { withCredentials: true })
+      ]);
+      
+      setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
 
-      // Get the first admin information
-      const firstAdminRes = await axios.get(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080'}/admin-exists`, { withCredentials: true });
+      // Get the first admin information if admin exists
       if (firstAdminRes.data.exists) {
-        const firstAdminInfo = await axios.get(`${BASE_URL}/get-first-admin`, { withCredentials: true });
-        setFirstAdmin(firstAdminInfo.data);
+        try {
+          const firstAdminInfo = await axios.get('/get-first-admin', { withCredentials: true });
+          setFirstAdmin(firstAdminInfo.data);
+        } catch (adminError) {
+          console.error('Error fetching first admin:', adminError);
+        }
       }
     } catch (error) {
-      const errMsg = error.response?.data?.error || 'Error fetching users';
-      message.error(errMsg);
+      console.error('Error in fetchUsers:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Error fetching users';
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -124,12 +133,13 @@ const UserManagement = () => {
       cancelText: 'No',
       onOk: async () => {
         try {
-          await axios.post(`${BASE_URL}/revoke-admin`, { username }, { withCredentials: true });
+          await axios.post('/revoke-admin', { username }, { withCredentials: true });
           message.success(`Admin privileges revoked from '${username}'`);
           fetchUsers();
         } catch (error) {
-          const errMsg = error.response?.data?.error || 'Error revoking admin privileges';
-          message.error(errMsg);
+          console.error('Error revoking admin:', error);
+          const errorMessage = error.response?.data?.error || error.message || 'Error revoking admin privileges';
+          message.error(errorMessage);
         }
       }
     });
@@ -140,7 +150,7 @@ const UserManagement = () => {
     try {
       const values = await addUserForm.validateFields();
       await axios.post(
-        `${BASE_URL}/user/add`,
+        '/user/add',
         { username: values.username, password: values.password },
         { withCredentials: true }
       );
@@ -149,8 +159,9 @@ const UserManagement = () => {
       addUserForm.resetFields();
       fetchUsers();
     } catch (error) {
-      const errMsg = error.response?.data?.error || 'Error adding user';
-      message.error(errMsg);
+      console.error('Error adding user:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Error adding user';
+      message.error(errorMessage);
     }
   };
 
@@ -164,15 +175,16 @@ const UserManagement = () => {
       cancelText: 'No',
       onOk: async () => {
         try {
-          await axios.delete(`${BASE_URL}/user/delete`, {
+          await axios.delete('/user/delete', {
             data: { username },
             withCredentials: true
           });
           message.success(`User '${username}' has been deleted successfully`);
           fetchUsers();
         } catch (error) {
-          const errMsg = error.response?.data?.error || 'Error deleting user';
-          message.error(errMsg);
+          console.error('Error deleting user:', error);
+          const errorMessage = error.response?.data?.error || error.message || 'Error deleting user';
+          message.error(errorMessage);
         }
       }
     });
@@ -193,7 +205,7 @@ const UserManagement = () => {
     try {
       const values = await updateForm.validateFields();
       await axios.put(
-        `${BASE_URL}/user/update`,
+        '/user/update',
         {
           old_username: values.old_username,
           new_username: values.new_username,
@@ -205,13 +217,14 @@ const UserManagement = () => {
       setIsUpdateUserModalOpen(false);
       fetchUsers();
     } catch (error) {
-      const errMsg = error.response?.data?.error || 'Error updating user';
+      console.error('Error updating user:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Error updating user';
 
       // Highlight conflict more clearly
-      if (errMsg.toLowerCase().includes("already exists")) {
-        message.warning(errMsg); // or message.info() for a softer tone
+      if (errorMessage.toLowerCase().includes("already exists")) {
+        message.warning(errorMessage);
       } else {
-        message.error(errMsg);
+        message.error(errorMessage);
       }
     }
   };
@@ -219,12 +232,13 @@ const UserManagement = () => {
   // Handler for promoting a user to admin
   const handleAssignAdmin = async (username) => {
     try {
-      await axios.post(`${BASE_URL}/assign-admin`, { username }, { withCredentials: true });
+      await axios.post('/assign-admin', { username }, { withCredentials: true });
       message.success(`User '${username}' is now an admin`);
       fetchUsers();
     } catch (error) {
-      const errMsg = error.response?.data?.error || 'Error assigning admin role';
-      message.error(errMsg);
+      console.error('Error assigning admin role:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Error assigning admin role';
+      message.error(errorMessage);
     }
   };
 

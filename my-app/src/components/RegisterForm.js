@@ -6,8 +6,7 @@ import { useNavigate } from 'react-router-dom';
 
 const { Title } = Typography;
 
-// ✅ Define the API base URL
-const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+// Using relative URLs - proxy in package.json will handle the backend URL
 
 const passwordPolicyContent = (
   <div style={{ maxWidth: 250 }}>
@@ -30,10 +29,17 @@ const RegisterForm = () => {
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get(`${API_BASE}/admin-exists`, { withCredentials: true });
+        const res = await axios.get('/admin-exists', { 
+          withCredentials: true 
+        });
         setAdminExists(res.data.exists);
       } catch (error) {
-        message.error('Failed to check admin status.');
+        console.error('Admin check error:', error);
+        if (error.response) {
+          console.error('Response data:', error.response.data);
+          console.error('Status:', error.response.status);
+        }
+        message.error('Failed to check admin status: ' + (error.message || 'Unknown error'));
       } finally {
         setLoading(false);
       }
@@ -43,13 +49,17 @@ const RegisterForm = () => {
 
   const onFinish = async (values) => {
     try {
-      const res = await axios.post(`${API_BASE}/register`, values, { withCredentials: true });
+      const res = await axios.post('/register', values, { 
+        withCredentials: true 
+      });
       message.success(res.data.message);
       // Automatically log in after registration
-      await axios.post(`${API_BASE}/login`, {
+      await axios.post('/login', {
         username: values.username,
         password: values.password
-      }, { withCredentials: true });
+      }, { 
+        withCredentials: true 
+      });
       // Save username to localStorage for adminName
       localStorage.setItem('username', values.username);
       navigate('/admin');

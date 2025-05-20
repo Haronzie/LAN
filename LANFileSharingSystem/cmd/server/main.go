@@ -399,8 +399,8 @@ func main() {
 			}
 		}
 	} else {
-		// fallback to localhost if not set
-		allowedOrigins = []string{"http://localhost:3000"}
+		// Allow all origins in development
+		allowedOrigins = []string{"*"}
 	}
 
 	// Log allowed origins for debugging CORS issues
@@ -420,15 +420,16 @@ func main() {
 	corsRouterWithMiddleware = middleware.RateLimitMiddleware(corsRouterWithMiddleware)
 
 	// Start the HTTP server.
+	serverAddr := fmt.Sprintf("%s:%s", "0.0.0.0", cfg.Port)
 	logger.WithField("function", "main").
-		WithField("port", cfg.Port).
+		WithField("address", serverAddr).
 		Info("Starting server")
-	if err := http.ListenAndServe(":"+cfg.Port, corsRouterWithMiddleware); err != nil {
+	if err := http.ListenAndServe(serverAddr, corsRouterWithMiddleware); err != nil {
 		// SERVER_ERR: Server startup errors.
-		wrappedErr := fmt.Errorf("server failed on port %s: %w", cfg.Port, err)
+		wrappedErr := fmt.Errorf("server failed on %s: %w", serverAddr, err)
 		logger.WithField("function", "main").
 			WithField("errorCode", "SERVER_ERR").
-			WithField("port", cfg.Port).
+			WithField("address", serverAddr).
 			WithError(wrappedErr).
 			Error("Server error")
 		logrus.Exit(1)
