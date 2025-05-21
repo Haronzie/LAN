@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -60,19 +61,45 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	allowedExtensions := map[string]bool{
+		// Word documents
 		".doc":  true,
 		".docx": true,
+		// Excel spreadsheets
 		".xls":  true,
 		".xlsx": true,
-		".pdf":  true,
+		// PowerPoint presentations
+		".ppt":  true,
+		".pptx": true,
+		// PDF documents
+		".pdf": true,
+		// Image formats
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".gif":  true,
+		".bmp":  true,
+		".tiff": true,
+		".tif":  true,
 	}
 
 	allowedMIMETypes := map[string]bool{
+		// Word documents
 		"application/msword": true,
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+		// Excel spreadsheets
 		"application/vnd.ms-excel": true,
 		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
+		// PowerPoint presentations
+		"application/vnd.ms-powerpoint":                                             true,
+		"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
+		// PDF documents
 		"application/pdf": true,
+		// Image formats
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/gif":  true,
+		"image/bmp":  true,
+		"image/tiff": true,
 	}
 
 	ext := strings.ToLower(filepath.Ext(handler.Filename))
@@ -80,7 +107,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Uploaded file: %s, MIME type: %s\n", handler.Filename, mime)
 
 	if !allowedExtensions[ext] || !allowedMIMETypes[mime] {
-		models.RespondError(w, http.StatusBadRequest, "Only Word, Excel, and PDF files with valid MIME types are allowed")
+		models.RespondError(w, http.StatusBadRequest, "Only Word, Excel, PowerPoint, PDF, and image files (JPG, PNG, GIF) with valid MIME types are allowed")
 		return
 	}
 
@@ -982,11 +1009,160 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 
 	// Determine if conversion to PDF is needed
 	ext := strings.ToLower(filepath.Ext(fr.FileName))
-	supported := map[string]bool{".pdf": true, ".jpg": true, ".jpeg": true, ".png": true, ".gif": true}
+	// Files that can be directly displayed in the browser
+	supported := map[string]bool{
+		".pdf": true,
+		".jpg": true, ".jpeg": true, ".png": true, ".gif": true,
+		".bmp": true, ".tiff": true, ".tif": true,
+		".svg": true, ".webp": true,
+	}
+	// Store the path to final file we'll serve and its content type
 	finalPath, contentType := tempDecryptedPath, fr.ContentType
 
 	if !supported[ext] {
-		// … (LibreOffice conversion code stays exactly the same) …
+		// Convert non-supported files to PDF using LibreOffice
+		convertibleExts := map[string]bool{
+			".doc": true, ".docx": true, // Word documents
+			".xls": true, ".xlsx": true, // Excel spreadsheets
+			".ppt": true, ".pptx": true, // PowerPoint presentations
+			".odt": true, ".ods": true, ".odp": true, // OpenDocument formats
+			".txt": true, ".rtf": true, // Text formats
+		}
+
+		if convertibleExts[ext] {
+			// Create a temporary directory for the conversion
+			tempDir, err := os.MkdirTemp("", "libreoffice-convert-*")
+			if err != nil {
+				log.Printf("Failed to create temp directory for conversion: %v", err)
+				// If conversion fails, fall back to download behavior
+				w.Header().Set("Content-Type", contentType)
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+				f, _ := os.Open(tempDecryptedPath)
+				defer f.Close()
+				io.Copy(w, f)
+				return
+			}
+			defer os.RemoveAll(tempDir)
+
+			// Copy the decrypted file to the temp directory
+			tempFilePath := filepath.Join(tempDir, fr.FileName)
+			// Copy the file manually using io operations
+			srcFile, err := os.Open(tempDecryptedPath)
+			if err != nil {
+				log.Printf("Failed to open source file for conversion: %v", err)
+				// If conversion fails, fall back to download behavior
+				w.Header().Set("Content-Type", contentType)
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+				f, _ := os.Open(tempDecryptedPath)
+				if f != nil {
+					defer f.Close()
+					io.Copy(w, f)
+				} else {
+					models.RespondError(w, http.StatusInternalServerError, "Error opening file for download")
+				}
+				return
+			}
+			defer srcFile.Close()
+
+			dstFile, err := os.Create(tempFilePath)
+			if err != nil {
+				log.Printf("Failed to create destination file for conversion: %v", err)
+				// If conversion fails, fall back to download behavior
+				w.Header().Set("Content-Type", contentType)
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+				f, _ := os.Open(tempDecryptedPath)
+				if f != nil {
+					defer f.Close()
+					io.Copy(w, f)
+				} else {
+					models.RespondError(w, http.StatusInternalServerError, "Error opening file for download")
+				}
+				return
+			}
+			defer dstFile.Close()
+
+			// Copy contents
+			if _, err := io.Copy(dstFile, srcFile); err != nil {
+				log.Printf("Failed to copy file contents for conversion: %v", err)
+				// If conversion fails, fall back to download behavior
+				w.Header().Set("Content-Type", contentType)
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+				f, _ := os.Open(tempDecryptedPath)
+				if f != nil {
+					defer f.Close()
+					io.Copy(w, f)
+				} else {
+					models.RespondError(w, http.StatusInternalServerError, "Error opening file for download")
+				}
+				return
+			}
+
+			// Run LibreOffice to convert to PDF
+			// Use default installations paths for LibreOffice on Windows
+			libreOfficePaths := []string{
+				`C:\Program Files\LibreOffice\program\soffice.exe`,
+				`C:\Program Files (x86)\LibreOffice\program\soffice.exe`,
+				"soffice", // Try the command directly if in PATH
+			}
+
+			var cmd *exec.Cmd
+			var execErr error
+			var output []byte
+
+			// Try each possible LibreOffice path
+			for _, path := range libreOfficePaths {
+				log.Printf("Attempting to use LibreOffice at: %s", path)
+				cmd = exec.Command(path, "--headless", "--convert-to", "pdf", "--outdir", tempDir, tempFilePath)
+				output, execErr = cmd.CombinedOutput()
+				if execErr == nil {
+					// Successfully executed
+					log.Printf("Successfully executed LibreOffice conversion using: %s", path)
+					break
+				}
+				log.Printf("Failed with path %s: %v", path, execErr)
+			}
+
+			// Check if any of the attempts succeeded
+			if execErr != nil {
+				log.Printf("LibreOffice conversion failed: %v, Output: %s", execErr, output)
+				// If conversion fails, fall back to download behavior
+				w.Header().Set("Content-Type", contentType)
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+				f, _ := os.Open(tempDecryptedPath)
+				defer f.Close()
+				io.Copy(w, f)
+				return
+			}
+
+			// Get the generated PDF file path
+			baseName := strings.TrimSuffix(fr.FileName, ext)
+			pdfFilePath := filepath.Join(tempDir, baseName+".pdf")
+
+			// Check if PDF was created
+			if _, err := os.Stat(pdfFilePath); err != nil {
+				log.Printf("PDF file not created: %v", err)
+				// If conversion fails, fall back to download behavior
+				w.Header().Set("Content-Type", contentType)
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+				f, _ := os.Open(tempDecryptedPath)
+				defer f.Close()
+				io.Copy(w, f)
+				return
+			}
+
+			// Update the path and content type to the converted PDF
+			finalPath = pdfFilePath
+			contentType = "application/pdf"
+			log.Printf("Successfully converted %s to PDF for preview", fr.FileName)
+		} else {
+			// For other file types that can't be converted, fall back to download behavior
+			w.Header().Set("Content-Type", contentType)
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fr.FileName))
+			f, _ := os.Open(tempDecryptedPath)
+			defer f.Close()
+			io.Copy(w, f)
+			return
+		}
 	}
 
 	// Stream out inline
@@ -1008,6 +1184,8 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 
 	fc.App.LogActivity(fmt.Sprintf("User '%s' previewed file '%s' (ID: %d)", user.Username, fr.FileName, fr.ID))
 }
+
+// Note: copyFile is already defined in directory_controller.go
 
 // inside SendFileMessage, add filePath before building the notification
 
@@ -1305,19 +1483,45 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	allowedExtensions := map[string]bool{
+		// Word documents
 		".doc":  true,
 		".docx": true,
+		// Excel spreadsheets
 		".xls":  true,
 		".xlsx": true,
-		".pdf":  true,
+		// PowerPoint presentations
+		".ppt":  true,
+		".pptx": true,
+		// PDF documents
+		".pdf": true,
+		// Image formats
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".gif":  true,
+		".bmp":  true,
+		".tiff": true,
+		".tif":  true,
 	}
 
 	allowedMIMETypes := map[string]bool{
+		// Word documents
 		"application/msword": true,
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+		// Excel spreadsheets
 		"application/vnd.ms-excel": true,
 		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
+		// PowerPoint presentations
+		"application/vnd.ms-powerpoint":                                             true,
+		"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
+		// PDF documents
 		"application/pdf": true,
+		// Image formats
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/gif":  true,
+		"image/bmp":  true,
+		"image/tiff": true,
 	}
 
 	results := []map[string]string{}
