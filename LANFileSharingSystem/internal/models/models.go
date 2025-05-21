@@ -606,6 +606,7 @@ func (app *App) ListFilesInDirectory(dir string) ([]FileRecord, error) {
 
 // DirectoryExists checks if a directory with the given name exists under the specified parent.
 func (app *App) DirectoryExists(name, parent string) (bool, error) {
+	// First check the database
 	var count int
 	query := `
         SELECT COUNT(*)
@@ -614,7 +615,77 @@ func (app *App) DirectoryExists(name, parent string) (bool, error) {
           AND parent_directory = $2
     `
 	err := app.DB.QueryRow(query, name, parent).Scan(&count)
-	return count > 0, err
+	if err != nil {
+		return false, err
+	}
+
+	// If found in database, return true
+	if count > 0 {
+		return true, nil
+	}
+
+	// If not in database, also check the filesystem for newly created folders
+	// that might exist on disk but not yet in the database
+	dirPath := filepath.Join("Cdrrmo")
+	if parent != "" {
+		dirPath = filepath.Join(dirPath, parent)
+	}
+	if name != "" {
+		dirPath = filepath.Join(dirPath, name)
+	}
+
+	// Check if directory exists on filesystem
+	fileInfo, err := os.Stat(dirPath)
+	if err == nil && fileInfo.IsDir() {
+		// Found on filesystem but not in database - add it to database to maintain consistency
+		log.Printf("📂 Found directory %s on filesystem but not in database - adding to database", dirPath)
+		_ = app.EnsureDirectoryInDB(name, parent) // Best effort - don't fail if this doesn't work
+		return true, nil
+	}
+
+	// Not found in database or filesystem
+	return false, nil
+}
+
+// EnsureDirectoryInDB adds a directory to the database if it doesn't already exist.
+// This helps with synchronization between filesystem and database, especially for
+// newly created directories that may exist on disk but not in the database yet.
+func (app *App) EnsureDirectoryInDB(name, parent string) error {
+	if name == "" {
+		return nil // Cannot add a directory with empty name
+	}
+
+	// First check if it already exists to avoid duplicates
+	var count int
+	query := `
+        SELECT COUNT(*)
+        FROM directories
+        WHERE directory_name = $1
+          AND parent_directory = $2
+    `
+	err := app.DB.QueryRow(query, name, parent).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	// If already in database, nothing to do
+	if count > 0 {
+		return nil
+	}
+
+	// Insert the directory record
+	query = `
+        INSERT INTO directories (directory_name, parent_directory)
+        VALUES ($1, $2)
+    `
+	_, err = app.DB.Exec(query, name, parent)
+	if err != nil {
+		log.Printf("⚠️ Error adding directory to database: %v", err)
+		return err
+	}
+
+	log.Printf("✅ Added directory '%s' (parent: '%s') to database", name, parent)
+	return nil
 }
 
 // Enhance this method to update both file_name AND file_path
@@ -646,20 +717,66 @@ func (app *App) DeleteFileRecord(fileName string) (int, error) {
 	return fileID, err
 }
 
-// UpdateFilePathsForRenamedFolder updates the file paths of all files
-// whose file_path starts with oldFolderPath by replacing that prefix with newFolderPath.
+// UpdateFilePathsForRenamedFolder updates both file_path and directory fields of all files
+// whose file_path or directory starts with oldFolderPath by replacing that prefix with newFolderPath.
 func (app *App) UpdateFilePathsForRenamedFolder(oldFolderPath, newFolderPath string) error {
-	query := `
+	// Log the operation for debugging
+	log.Printf("📂 Updating file paths from '%s' to '%s'", oldFolderPath, newFolderPath)
+
+	// 1. First update the file_path field which contains the full path to the file
+	filePathQuery := `
         UPDATE files
         SET file_path = regexp_replace(file_path, $1, $2)
         WHERE file_path LIKE $3
     `
-	// Create a pattern that matches the beginning of the file_path.
+	// Create a pattern that matches the beginning of the file_path
 	pattern := "^" + oldFolderPath
-	// Build the LIKE pattern (files whose file_path starts with oldFolderPath).
+	// Build the LIKE pattern (files whose file_path starts with oldFolderPath)
 	likePattern := oldFolderPath + "%"
-	_, err := app.DB.Exec(query, pattern, newFolderPath, likePattern)
-	return err
+
+	// Execute the query to update file_path
+	_, err := app.DB.Exec(filePathQuery, pattern, newFolderPath, likePattern)
+	if err != nil {
+		log.Printf("⚠️ Error updating file_path: %v", err)
+		return err
+	}
+
+	// 2. Now update the directory field which is used for organizing files in the frontend
+	// Split the old and new paths to get just the parent directory components
+	oldDir := oldFolderPath
+	newDir := newFolderPath
+
+	// Update the directory field for all files that were inside the moved folder
+	directoryQuery := `
+        UPDATE files
+        SET directory = $1
+        WHERE directory = $2
+    `
+	// Execute the query to update directory for direct children
+	_, err = app.DB.Exec(directoryQuery, newDir, oldDir)
+	if err != nil {
+		log.Printf("⚠️ Error updating directory field (direct children): %v", err)
+		return err
+	}
+
+	// 3. Also update files in subdirectories by replacing just the prefix
+	subdirQuery := `
+        UPDATE files
+        SET directory = regexp_replace(directory, $1, $2)
+        WHERE directory LIKE $3
+    `
+	subdirPattern := "^" + oldFolderPath + "/"
+	subdirLikePattern := oldFolderPath + "/%"
+
+	// Execute the query to update directory for nested files
+	_, err = app.DB.Exec(subdirQuery, subdirPattern, newFolderPath + "/", subdirLikePattern)
+	if err != nil {
+		log.Printf("⚠️ Error updating directory field (subdirectories): %v", err)
+		return err
+	}
+
+	log.Printf("✅ Successfully updated file paths from '%s' to '%s'", oldFolderPath, newFolderPath)
+	return nil
 }
 
 func (app *App) DeleteFilesInFolder(folderPath string) error {

@@ -1975,17 +1975,24 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
-	if q == "" {
+	// Get search query and preserve numbers (don't convert numbers to lowercase)
+	rawQ := strings.TrimSpace(r.URL.Query().Get("q"))
+	if rawQ == "" {
 		models.RespondError(w, http.StatusBadRequest, "Search query is required")
 		return
 	}
+	
+	// Create a case-insensitive version for text matching but preserve the original value
+	// This ensures numbers are not affected by lowercase conversion
+	q := strings.ToLower(rawQ)
 
 	// Get the main folder to search in (if specified)
 	mainFolder := strings.TrimSpace(r.URL.Query().Get("main_folder"))
 
 	// Build SQL filter
+	// Create pattern for both the lowercase version (for text) and the raw version (for numbers)
 	pattern := "%" + q + "%"
+	rawPattern := "%" + rawQ + "%"
 	var rows *sql.Rows
 	var err error
 
@@ -2005,12 +2012,14 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
                  directory LIKE $2 OR
                  file_path LIKE $2
              ) AND (
-                 -- Match the search term in filename or path
+                 -- Match the search term in filename or path (both lowercase and raw for numbers)
                  LOWER(file_name) LIKE $3 OR
-                 LOWER(file_path) LIKE $3
+                 LOWER(file_path) LIKE $3 OR
+                 file_name LIKE $4 OR
+                 file_path LIKE $4
              )
              ORDER BY directory, file_name`,
-			mainFolder, folderPattern, pattern,
+			mainFolder, folderPattern, pattern, rawPattern,
 		)
 	} else {
 		// Search everywhere
@@ -2019,10 +2028,15 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 			`SELECT id, file_name, directory, content_type, size, file_path
              FROM files
              WHERE LOWER(file_name) LIKE $1 OR
-                   LOWER(file_path) LIKE $1
+                   LOWER(file_path) LIKE $1 OR
+                   file_name LIKE $2 OR
+                   file_path LIKE $2
              ORDER BY directory, file_name`,
-			pattern,
+			pattern, rawPattern,
 		)
+		
+		// Debug log for troubleshooting
+		log.Printf("🧪 DEBUG - Search parameters: lowercase='%s', raw='%s'", pattern, rawPattern)
 	}
 
 	if err != nil {
