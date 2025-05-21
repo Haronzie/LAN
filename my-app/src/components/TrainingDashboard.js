@@ -122,11 +122,33 @@ const TrainingDashboard = () => {
   // Initial Load: set user and fetch directories
   // ----------------------------------
   useEffect(() => {
-    const storedUsername = localStorage.getItem('username');
-    const storedRole = localStorage.getItem('role');
-    if (storedUsername) {
-      setCurrentUser(storedUsername);
+    const username = localStorage.getItem('username');
+    if (!username) return;
+    setCurrentUser(username);
+    
+    // Check if there's a file to open after navigation
+    const fileToOpen = localStorage.getItem('openFileAfterNavigation');
+    if (fileToOpen) {
+      try {
+        const fileData = JSON.parse(fileToOpen);
+        // Only handle if this is the correct dashboard for the file
+        if (fileData.directory.startsWith('Training')) {
+          // Set current path to the file's directory
+          setCurrentPath(fileData.directory);
+          
+          // Open the file after a short delay to ensure path is set
+          setTimeout(() => {
+            handleViewFile(fileData);
+          }, 500);
+        }
+        // Clear the stored file data regardless of which dashboard opened it
+        localStorage.removeItem('openFileAfterNavigation');
+      } catch (e) {
+        console.error('Error parsing file data from localStorage:', e);
+        localStorage.removeItem('openFileAfterNavigation');
+      }
     }
+    const storedRole = localStorage.getItem('role');
     if (storedRole === 'admin') {
       setIsAdmin(true);
     }
@@ -403,8 +425,51 @@ const TrainingDashboard = () => {
       return;
     }
 
-    // Normalize path
-    const normalizedPath = currentPath.split(/[/\\]/).map(part => part.toLowerCase()).join('/');
+    // Validate file types
+    const allowedExtensions = [
+      // Word documents
+      '.doc', '.docx',
+      // Excel spreadsheets
+      '.xls', '.xlsx',
+      // PowerPoint presentations
+      '.ppt', '.pptx',
+      // PDF documents
+      '.pdf',
+      // Image formats
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif'
+    ];
+  
+    const allowedTypes = [
+      // Word documents
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      // Excel spreadsheets
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      // PowerPoint presentations
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      // PDF documents
+      'application/pdf',
+      // Image formats
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/bmp',
+      'image/tiff'
+    ];
+
+    // Check each file type
+    for (const file of uploadingFiles) {
+      const ext = path.extname(file.name).toLowerCase();
+      if (!allowedExtensions.includes(ext) || !allowedTypes.includes(file.type)) {
+        message.error(`Unsupported file: ${file.name} (${file.type})`);
+        return;
+      }
+    }
+
+    // Ensure consistent directory path format - always use forward slashes for database
+    const normalizedPath = currentPath.split(/[\/\\]/).join('/');
     console.log("Uploading to directory:", normalizedPath);
 
     try {

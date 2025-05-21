@@ -109,6 +109,29 @@ const OperationDashboard = () => {
     const username = localStorage.getItem('username');
     if (!username) return;
     setCurrentUser(username);
+    
+    // Check if there's a file to open after navigation
+    const fileToOpen = localStorage.getItem('openFileAfterNavigation');
+    if (fileToOpen) {
+      try {
+        const fileData = JSON.parse(fileToOpen);
+        // Only handle if this is the correct dashboard for the file
+        if (fileData.directory.startsWith('Operation')) {
+          // Set current path to the file's directory
+          setCurrentPath(fileData.directory);
+          
+          // Open the file after a short delay to ensure path is set
+          setTimeout(() => {
+            handleViewFile(fileData);
+          }, 500);
+        }
+        // Clear the stored file data regardless of which dashboard opened it
+        localStorage.removeItem('openFileAfterNavigation');
+      } catch (e) {
+        console.error('Error parsing file data from localStorage:', e);
+        localStorage.removeItem('openFileAfterNavigation');
+      }
+    }
 
     // WebSocket connection with reconnection logic
     let reconnectAttempts = 0;
@@ -142,19 +165,61 @@ const OperationDashboard = () => {
           console.log('📬 Message received:', data);
 
           if (data.event === 'new_instruction' && data.receiver === username) {
+            // Function to handle file navigation
+            const navigateToFile = () => {
+              // First set the current path to the file's directory
+              setCurrentPath(data.file_path);
+              message.destroy(`instruction-${data.file_id}`);
+              
+              // Then fetch the file details and open it
+              setTimeout(async () => {
+                try {
+                  // Get files in the current directory
+                  const fileRes = await axios.get(
+                    `${BASE_URL}/files?directory=${encodeURIComponent(data.file_path)}`, 
+                    { withCredentials: true }
+                  );
+                  
+                  // Find the file with matching ID
+                  const files = fileRes.data || [];
+                  const fileToOpen = files.find(file => file.id.toString() === data.file_id.toString());
+                  
+                  if (fileToOpen) {
+                    // Open the file
+                    handleViewFile({
+                      id: fileToOpen.id,
+                      name: fileToOpen.name,
+                      directory: data.file_path,
+                      type: 'file'
+                    });
+                  } else {
+                    console.error('File not found in directory');
+                    message.error('File not found. It may have been moved or deleted.');
+                  }
+                } catch (err) {
+                  console.error('Error fetching file details:', err);
+                  message.error('Error opening file. Please try again.');
+                }
+              }, 500); // Give time for path to update
+            };
+            
             message.open({
               type: 'info',
-              content: `📬 New instruction for you: "${data.message}"`,
+              content: (
+                <span 
+                  onClick={navigateToFile}
+                  style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  📬 New instruction for you: "{data.message}"
+                </span>
+              ),
               duration: 0, // 0 = persist until manually closed
               key: `instruction-${data.file_id}`, // key prevents stacking if same file gets multiple instructions
               btn: (
                 <Button
                   type="primary"
                   size="small"
-                  onClick={() => {
-                    setCurrentPath(data.file_path); // if you're sending path in WS
-                    message.destroy(`instruction-${data.file_id}`);
-                  }}
+                  onClick={navigateToFile}
                 >
                   View Now
                 </Button>
@@ -477,6 +542,49 @@ const OperationDashboard = () => {
     if (uploadingFiles.length === 0) {
       message.error('Please select one or more files first');
       return;
+    }
+
+    // Validate file types
+    const allowedExtensions = [
+      // Word documents
+      '.doc', '.docx',
+      // Excel spreadsheets
+      '.xls', '.xlsx',
+      // PowerPoint presentations
+      '.ppt', '.pptx',
+      // PDF documents
+      '.pdf',
+      // Image formats
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif'
+    ];
+  
+    const allowedTypes = [
+      // Word documents
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      // Excel spreadsheets
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      // PowerPoint presentations
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      // PDF documents
+      'application/pdf',
+      // Image formats
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/bmp',
+      'image/tiff'
+    ];
+
+    // Check each file type
+    for (const file of uploadingFiles) {
+      const ext = path.extname(file.name).toLowerCase();
+      if (!allowedExtensions.includes(ext) || !allowedTypes.includes(file.type)) {
+        message.error(`Unsupported file: ${file.name} (${file.type})`);
+        return;
+      }
     }
 
     // Ensure consistent directory path format - always use forward slashes
@@ -1327,7 +1435,20 @@ const OperationDashboard = () => {
           >
             <div>
               <div style={{ fontSize: 13, marginBottom: 4 }}>
-                <strong>📝:</strong> <span style={{ fontStyle: 'italic' }}>{msg.message}</span>
+                <strong>📝:</strong> <span 
+                  style={{ fontStyle: 'italic', cursor: 'pointer', textDecoration: 'underline' }}
+                  onClick={() => {
+                    setCurrentPath(file.directory);
+                    setTimeout(() => {
+                      handleViewFile({
+                        id: file.id,
+                        name: file.name,
+                        directory: file.directory,
+                        type: 'file',
+                      });
+                    }, 100);
+                  }}
+                >{msg.message}</span>
               </div>
               <div style={{ fontSize: 12, color: '#555' }}>
                 👤 {msg.admin_name || 'N/A'} · 🕓 {new Date(msg.created_at).toLocaleString()}

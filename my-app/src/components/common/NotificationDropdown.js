@@ -87,9 +87,17 @@ const NotificationDropdown = () => {
     }
   };
 
-  const navigateToFile = (directory) => {
+  const navigateToFile = (file) => {
+    // Store file information in localStorage to retrieve after navigation
+    localStorage.setItem('openFileAfterNavigation', JSON.stringify({
+      id: file.id,
+      name: file.name,
+      directory: file.directory,
+      type: 'file'
+    }));
+    
     // Extract the main folder from the directory path
-    const mainFolder = directory.split('/')[0].toLowerCase();
+    const mainFolder = file.directory.split('/')[0].toLowerCase();
 
     // Navigate to the appropriate dashboard based on the main folder
     if (mainFolder === 'operation') {
@@ -133,7 +141,7 @@ const NotificationDropdown = () => {
                 <List.Item>
                   <List.Item.Meta
                     avatar={<Avatar icon={<FileOutlined />} style={{ backgroundColor: '#1890ff' }} />}
-                    title={<a onClick={() => navigateToFile(file.directory)}>{file.name}</a>}
+                    title={<a onClick={() => navigateToFile(file)}>{file.name}</a>}
                     description={
                       <div>
                         {file.messages.map(msg => (
@@ -144,7 +152,14 @@ const NotificationDropdown = () => {
                             borderRadius: 4,
                             borderLeft: `3px solid ${msg.is_done ? '#52c41a' : '#1890ff'}`
                           }}>
-                            <div>{msg.message}</div>
+                            <div>
+                              <a 
+                                onClick={() => navigateToFile(file)}
+                                style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                              >
+                                {msg.message}
+                              </a>
+                            </div>
                             <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
                               From: {msg.sender} · {new Date(msg.created_at).toLocaleString()}
                             </div>
