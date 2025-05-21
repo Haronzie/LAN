@@ -311,13 +311,44 @@ const FileManager = () => {
     return () => clearInterval(interval);
   }, [currentPath, moveModalVisible, copyModalVisible, renameModalVisible, createFolderModal, uploadModalVisible]);
 
+  // Perform search for files and folders, with special handling for numeric searches
   const performSearch = async (query) => {
+    if (!query.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      return;
+    }
+
+    setSearchLoading(true);
+    setIsSearching(true);
+
     try {
-      const res = await axios.get(`${BASE_URL}/files/search?query=${encodeURIComponent(query)}`, {
-        withCredentials: true
+      // Convert the query to string to ensure it works with numbers
+      const queryStr = String(query).trim();
+      
+      // Build the search URL with the main folder parameter if we're in a specific folder
+      const searchUrl = mainFolder
+        ? `${BASE_URL}/search?q=${encodeURIComponent(queryStr)}&main_folder=${encodeURIComponent(mainFolder)}`
+        : `${BASE_URL}/search?q=${encodeURIComponent(queryStr)}`;
+
+      console.log('Searching with URL:', searchUrl);
+      const response = await axios.get(searchUrl, { withCredentials: true });
+
+      // Format the search results
+      const formattedResults = (response.data || []).map(item => {
+        // Ensure size is a valid number
+        const fileSize = typeof item.size === 'number' ? item.size :
+                        (item.size ? parseInt(item.size, 10) : null);
+
+        return {
+          ...item,
+          size: fileSize,
+          formattedSize: formatFileSize(fileSize),
+        };
       });
-      const results = res.data || [];
-      const sortedResults = [...results].sort((a, b) => {
+
+      // Sort the results: directories first, then files (both in alphabetical order)
+      const sortedResults = [...formattedResults].sort((a, b) => {
         // If types are different (directory vs file)
         if (a.type !== b.type) {
           // Directories come before files
