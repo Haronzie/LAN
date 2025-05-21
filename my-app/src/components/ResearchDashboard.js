@@ -345,24 +345,98 @@ const ResearchDashboard = () => {
     
     // Check if there's a file to open after navigation
     const fileToOpen = localStorage.getItem('openFileAfterNavigation');
+    const forceOpenFile = localStorage.getItem('forceOpenFile');
+    
     if (fileToOpen) {
       try {
+        console.log('Found file to open in localStorage:', fileToOpen);
         const fileData = JSON.parse(fileToOpen);
+        
         // Only handle if this is the correct dashboard for the file
         if (fileData.directory.startsWith('Research')) {
-          // Set current path to the file's directory
-          setCurrentPath(fileData.directory);
+          console.log('File belongs to Research dashboard, directory:', fileData.directory);
           
-          // Open the file after a short delay to ensure path is set
-          setTimeout(() => {
-            handleViewFile(fileData);
-          }, 500);
+          // Handle file opening differently if forceOpenFile is set
+          if (forceOpenFile === 'true') {
+            console.log('Force open file flag is set');
+            
+            // This is a more step-by-step approach to ensure we reach the right directory
+            const navigateToFileStepByStep = async () => {
+              // Break the path into segments
+              const pathParts = fileData.directory.split('/');
+              console.log('Path parts:', pathParts);
+              
+              // Navigate to each directory level
+              let currentDir = '';
+              
+              // Start with the first level (Research)
+              currentDir = pathParts[0];
+              console.log(`Setting path to: ${currentDir}`);
+              setCurrentPath(currentDir);
+              
+              // Wait a bit for the navigation to take effect
+              await new Promise(resolve => setTimeout(resolve, 300));
+              
+              // If we have nested directories, navigate through them
+              if (pathParts.length > 1) {
+                for (let i = 1; i < pathParts.length; i++) {
+                  currentDir = `${currentDir}/${pathParts[i]}`;
+                  console.log(`Navigating to: ${currentDir}`);
+                  setCurrentPath(currentDir);
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                }
+              }
+              
+              // Once we're at the right directory, fetch files and open the specific one
+              const fileRes = await axios.get(
+                `${BASE_URL}/files?directory=${encodeURIComponent(fileData.directory)}`,
+                { withCredentials: true }
+              );
+              
+              const files = fileRes.data || [];
+              console.log('Files in directory:', files);
+              const targetFile = files.find(f => f.id.toString() === fileData.id.toString());
+              
+              if (targetFile) {
+                console.log('Found and opening file:', targetFile);
+                handleViewFile({
+                  id: targetFile.id,
+                  name: targetFile.name,
+                  directory: fileData.directory,
+                  type: 'file'
+                });
+              } else {
+                console.error('File not found in directory');
+                message.error('File not found. It may have been moved or deleted.');
+              }
+            };
+            
+            // Execute the step-by-step navigation
+            navigateToFileStepByStep().catch(err => {
+              console.error('Error navigating to file:', err);
+              message.error('Error opening file. Please try again.');
+            });
+          } else {
+            // Default behavior (for backward compatibility)
+            console.log('Using default file opening behavior');
+            setCurrentPath(fileData.directory);
+            
+            // Open the file after a short delay to ensure path is set
+            setTimeout(() => {
+              handleViewFile(fileData);
+            }, 500);
+          }
+        } else {
+          console.log('File does not belong to Research dashboard:', fileData.directory);
         }
+        
         // Clear the stored file data regardless of which dashboard opened it
         localStorage.removeItem('openFileAfterNavigation');
+        localStorage.removeItem('forceOpenFile');
       } catch (e) {
         console.error('Error parsing file data from localStorage:', e);
         localStorage.removeItem('openFileAfterNavigation');
+        localStorage.removeItem('forceOpenFile');
       }
     }
     const storedUsername = localStorage.getItem('username');
@@ -648,31 +722,53 @@ const ResearchDashboard = () => {
   // Delete
   // ----------------------------------
   const handleDelete = async (record) => {
-    const isOwner =
-      record.type === 'directory'
-        ? record.created_by === currentUser
-        : record.uploader === currentUser;
-    if (!isOwner) {
-      message.error('Only the owner can delete this item.');
-      return;
-    }
     try {
+      setLoading(true);
       if (record.type === 'directory') {
         await axios.delete(`${BASE_URL}/directory/delete`, {
           data: { name: record.name, parent: currentPath, container: 'research' },
           withCredentials: true
         });
       } else {
+        // First check if this file has any messages/instructions
+        const fileId = record.id;
+        const fileWithMessages = allFilesWithMessages.find(file => file.id === fileId);
+        
+        // Delete the file
         await axios.delete(`${BASE_URL}/delete-file`, {
-          data: { directory: currentPath, filename: record.name, container: 'research' },
+          data: { filename: record.name, directory: currentPath },
           withCredentials: true
         });
+        
+        // If the file had messages, also clean them up from the database
+        if (fileWithMessages && fileWithMessages.messages && fileWithMessages.messages.length > 0) {
+          console.log(`File had ${fileWithMessages.messages.length} task notifications, cleaning up...`);
+          try {
+            // Delete messages associated with this file
+            await axios.delete(`${BASE_URL}/file/${fileId}/messages`, {
+              withCredentials: true
+            });
+            console.log('Task notifications for deleted file were removed successfully');
+          } catch (msgError) {
+            console.error('Error cleaning up file messages:', msgError);
+            // Non-critical error, so we don't show a user message
+          }
+        }
       }
-      message.success(`${record.name} deleted successfully`);
+      setLoading(false);
+      message.success(`${record.type === 'directory' ? 'Directory' : 'File'} deleted successfully`);
+      
+      // Refresh the data
       fetchItems();
+      fetchAllFilesWithMessages();
+      
+      // Trigger refresh in notification dropdown
+      const notificationDropdownRefreshEvent = new CustomEvent('refreshNotifications');
+      window.dispatchEvent(notificationDropdownRefreshEvent);
     } catch (error) {
-      console.error('Delete error:', error);
-      message.error(error.response?.data?.error || 'Error deleting item');
+      console.error('Error deleting item:', error);
+      setLoading(false);
+      message.error(error.response?.data?.error || 'Failed to delete item');
     }
   };
 

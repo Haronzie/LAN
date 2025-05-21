@@ -389,7 +389,7 @@ func main() {
 
 	// Configure CORS
 	allowedOrigins := []string{"http://localhost:3000"} // Explicitly allow the React dev server
-	
+
 	// Log allowed origins for debugging CORS issues
 	logger.WithField("allowedOrigins", allowedOrigins).Info("CORS allowed origins")
 

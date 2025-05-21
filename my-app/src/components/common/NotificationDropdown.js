@@ -13,9 +13,23 @@ const NotificationDropdown = () => {
 
   useEffect(() => {
     fetchNotifications();
+    
     // Set up polling to check for new notifications every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    
+    // Add event listener for file deletion or other actions that should trigger a refresh
+    const handleRefreshEvent = () => {
+      console.log('Received notification refresh event - refreshing notifications');
+      fetchNotifications();
+    };
+    
+    window.addEventListener('refreshNotifications', handleRefreshEvent);
+    
+    // Clean up event listeners and intervals on component unmount
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('refreshNotifications', handleRefreshEvent);
+    };
   }, []);
 
   const fetchNotifications = async () => {
@@ -88,16 +102,28 @@ const NotificationDropdown = () => {
   };
 
   const navigateToFile = (file) => {
-    // Store file information in localStorage to retrieve after navigation
+    console.log('Navigating to file in dropdown:', file);
+    
+    // Store complete file navigation information
     localStorage.setItem('openFileAfterNavigation', JSON.stringify({
       id: file.id,
       name: file.name,
       directory: file.directory,
-      type: 'file'
+      type: 'file',
+      timestamp: new Date().getTime(), // Add timestamp to ensure it's treated as a new request
+      source: 'notification', // Mark that this navigation came from a notification
+      pathSegments: file.directory.split('/') // Store path segments for step navigation
     }));
+    
+    // Add a flag to indicate we should force open the file
+    localStorage.setItem('forceOpenFile', 'true');
+    
+    // Also set a flag specifically for notification-based navigation
+    localStorage.setItem('notificationNavigation', 'true');
     
     // Extract the main folder from the directory path
     const mainFolder = file.directory.split('/')[0].toLowerCase();
+    console.log('Main folder determined as:', mainFolder);
 
     // Navigate to the appropriate dashboard based on the main folder
     if (mainFolder === 'operation') {
@@ -108,6 +134,7 @@ const NotificationDropdown = () => {
       navigate('/user/training');
     } else {
       // Default to operation if we can't determine
+      console.log('Could not determine folder, defaulting to operation');
       navigate('/user/operation');
     }
   };

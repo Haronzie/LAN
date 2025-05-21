@@ -27,7 +27,7 @@ func LoadConfig() Config {
 	}
 
 	if cfg.DatabaseURL == "" {
-		cfg.DatabaseURL = "postgres://postgres:myung@localhost:5432/Cdrrmo?sslmode=disable"
+		cfg.DatabaseURL = "postgres://postgres:haron@localhost:5432/Cdrrmo?sslmode=disable"
 	}
 
 	if cfg.SessionKey == "" {

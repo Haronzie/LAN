@@ -1833,6 +1833,138 @@ func (fc *FileController) GetFilesWithMessagesForUser(w http.ResponseWriter, r *
 	models.RespondJSON(w, http.StatusOK, files)
 }
 
+// DeleteFileMessages deletes all messages associated with a specific file ID
+func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers for API requests
+	if origin := r.Header.Get("Origin"); origin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
+
+	// Handle preflight OPTIONS request
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodDelete {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Get user from session
+	user, err := fc.App.GetUserFromSession(r)
+	if err != nil {
+		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Extract file ID from URL path
+	vars := mux.Vars(r)
+	fileID := vars["id"]
+
+	if fileID == "" {
+		models.RespondError(w, http.StatusBadRequest, "Missing file ID")
+		return
+	}
+
+	// Convert fileID to integer
+	fileIDInt, err := strconv.Atoi(fileID)
+	if err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid file ID format")
+		return
+	}
+
+	// First check if the file exists
+	var fileExists bool
+	err = fc.App.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM files WHERE id = $1)", fileIDInt).Scan(&fileExists)
+	if err != nil {
+		log.Printf("Error checking if file exists: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Get the number of rows affected
+	var rowsAffected int64
+	result, err := fc.App.DB.Exec("DELETE FROM file_messages WHERE file_id = $1", fileIDInt)
+	if err != nil {
+		log.Printf("Error deleting file messages: %v", err)
+		// Continue with file deletion even if message deletion fails
+	}
+	rowsAffected, err = result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+	
+	// Log the number of messages deleted
+	log.Printf("Deleted %d messages for file ID %s", rowsAffected, fileID)
+
+	// Start a transaction
+	tx, err := fc.App.DB.Begin()
+	if err != nil {
+		log.Printf("Error starting transaction: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Set up transaction rollback in case of errors
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+	}()
+
+	// First, delete any messages associated with this file
+	log.Printf("Cleaning up messages for file ID %d", fileID)
+	msgResult, err := tx.Exec("DELETE FROM file_messages WHERE file_id = $1", fileID)
+	if err != nil {
+		log.Printf("Error deleting file messages: %v", err)
+		// Continue with file deletion even if message deletion fails
+	}
+	
+	// Get number of messages deleted (for logging)
+	msgRowsAffected := int64(0)
+	if msgResult != nil {
+		if count, err := msgResult.RowsAffected(); err == nil {
+			msgRowsAffected = count
+			log.Printf("Deleted %d messages for file ID %d", msgRowsAffected, fileID)
+		}
+	}
+
+	// Delete the file record from the database
+	_, err = tx.Exec("DELETE FROM files WHERE id = $1", fileID)
+	if err != nil {
+		log.Printf("Error deleting file record: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Error deleting file record")
+		return
+	}
+	
+	// Commit the transaction
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("Error committing transaction: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+	
+	// Log the successful deletion and message cleanup
+	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file ID %d and cleaned up %d associated messages",
+		user.Username, fileID, msgRowsAffected))
+
+
+
+	// Send success response
+	models.RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"message":       "File messages deleted successfully",
+		"rows_affected": rowsAffected,
+	})
+}
+
 func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
