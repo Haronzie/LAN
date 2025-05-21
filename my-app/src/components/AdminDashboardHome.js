@@ -11,6 +11,7 @@ const AdminDashboardHome = () => {
   const [users, setUsers] = useState([]);
   const [files, setFiles] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [activities, setActivities] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const navigate = useNavigate();
@@ -87,10 +88,21 @@ const AdminDashboardHome = () => {
     }
   };
 
+  const fetchActivities = async () => {
+    try {
+      const res = await axios.get('/activities', { withCredentials: true });
+      setActivities(Array.isArray(res.data) ? res.data : []);
+    } catch (error) {
+      console.error('Error fetching activities:', error);
+      message.error('Failed to fetch activities: ' + (error.message || 'Unknown error'));
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchFiles();
     fetchAuditLogs();
+    fetchActivities();
   }, []);
 
   return (
@@ -164,7 +176,7 @@ const AdminDashboardHome = () => {
         <Col xs={24} lg={12}>
           <Card 
             title="Recent Audit Logs"
-            style={{ borderRadius: 8 }}
+            style={{ borderRadius: 8, marginBottom: 24 }}
             headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
             bodyStyle={{ padding: '16px 24px' }}
             extra={
@@ -197,6 +209,34 @@ const AdminDashboardHome = () => {
               />
             ) : (
               <Text type="secondary">No audit logs available</Text>
+            )}
+          </Card>
+          
+          <Card 
+            title="Recent User Activities"
+            style={{ borderRadius: 8 }}
+            headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
+            bodyStyle={{ padding: '16px 24px' }}
+          >
+            {activities.length > 0 ? (
+              <List
+                size="small"
+                dataSource={activities.slice(0, 5)}
+                renderItem={(item) => (
+                  <List.Item style={{ padding: '8px 0' }}>
+                    <div style={{ width: '100%' }}>
+                      <Text strong style={{ display: 'block' }}>
+                        {new Date(item.timestamp).toLocaleString()}
+                      </Text>
+                      <Text type="secondary" style={{ display: 'block' }}>
+                        {item.event}
+                      </Text>
+                    </div>
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <Text type="secondary">No user activities available</Text>
             )}
           </Card>
         </Col>

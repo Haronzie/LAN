@@ -313,77 +313,81 @@ const FileManager = () => {
 
   // Perform search for files and folders, with special handling for numeric searches
   const performSearch = async (query) => {
-    if (!query.trim()) {
-      setIsSearching(false);
-      setSearchResults([]);
-      return;
-    }
+  if (!query.trim()) {
+    setIsSearching(false);
+    setSearchResults([]);
+    return;
+  }
 
-    setSearchLoading(true);
-    setIsSearching(true);
+  setSearchLoading(true);
+  setIsSearching(true);
 
-    try {
-      // Convert the query to string to ensure it works with numbers
-      const queryStr = String(query).trim();
+  try {
+    const queryStr = String(query).trim();
+    console.log('Searching for:', queryStr, 'in folder:', currentPath || 'root');
 
-      console.log('Searching for:', queryStr, 'in folder:', mainFolder || 'root');
-
-      // Always use server-side search to handle numeric searches properly
-      const params = new URLSearchParams({
-        q: queryStr,
-        main_folder: mainFolder || ''
-      });
-
-      const response = await axios.get(`${BASE_URL}/files/search?${params.toString()}`, {
+    // Use the search endpoint for root directory searches
+    if (currentPath === '') {
+      const response = await axios.get(`${BASE_URL}/search`, {
+        params: {
+          q: queryStr
+        },
         withCredentials: true
       });
 
-      // Convert the server response to match our items format
-      const searchResults = response.data.map(item => ({
-        name: item.name,
-        type: item.type,
-        size: item.size,
+      console.log('Search response:', response.data);
+      const searchResults = (response.data || []).map(item => ({
+        name: item.name || '',
+        type: item.type || 'file',
+        size: item.size || 0,
         formattedSize: formatFileSize(item.size),
-        contentType: item.contentType,
-        id: item.id,
-        directory: item.directory
+        contentType: item.contentType || '',
+        id: item.id || null,
+        directory: item.directory || '',
+        path: item.path || ''
       }));
 
-      // Sort the results: directories first, then files (both in alphabetical order)
-      const sortedResults = [...searchResults].sort((a, b) => {
-        // If types are different (directory vs file)
-        if (a.type !== b.type) {
-          // Directories come before files
-          return a.type === 'directory' ? -1 : 1;
-        }
-        // If types are the same, sort alphabetically by name
-        return a.name.localeCompare(b.name);
+      console.log('Processed search results:', searchResults);
+      setSearchResults(searchResults);
+      console.log(`🔍 Search found ${searchResults.length} results`);
+      
+    } else {
+      // Use directory listing + filtering for subfolder searches
+      const directoryParam = encodeURIComponent(currentPath);
+      const response = await axios.get(`${BASE_URL}/files?directory=${directoryParam}`, {
+        withCredentials: true
       });
 
-      setSearchResults(sortedResults);
-      console.log(`🔍 Search found ${sortedResults.length} results`);
-    } catch (error) {
-      console.error('Error performing search:', error);
-      message.error('Error performing search');
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-        setSearchResults(filteredItems);
-        console.log(`🔍 Client-side search found ${filteredItems.length} results`);
-        setSearchLoading(false);
-        return;
-      }
+      console.log('Files response:', response.data);
+      const responseData = response.data || [];
+      
+      const searchResults = responseData
+        .filter(item => 
+          item.name.toLowerCase().includes(queryStr.toLowerCase())
+        )
+        .map(item => ({
+          name: item.name || '',
+          type: item.type || 'file',
+          size: item.size || 0,
+          formattedSize: formatFileSize(item.size),
+          contentType: item.contentType || '',
+          id: item.id || null,
+          directory: currentPath || '',
+          path: item.path || ''
+        }));
 
-
-    } catch (error) {
-      console.error('Search error:', error);
-      message.error('Error performing search');
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
+      console.log('Processed search results:', searchResults);
+      setSearchResults(searchResults);
+      console.log(`🔍 Search found ${searchResults.length} results`);
     }
-  };
+  } catch (error) {
+    console.error('Error performing search:', error);
+    message.error('Error performing search');
+    setSearchResults([]);
+  } finally {
+    setSearchLoading(false);
+  }
+};
 
   // Debounce the search to avoid too many requests
   const debouncedSearch = useCallback(

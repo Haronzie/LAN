@@ -30,3 +30,18 @@ func (alc *AuditLogController) List(w http.ResponseWriter, r *http.Request) {
 	}
 	models.RespondJSON(w, http.StatusOK, auditLogs)
 }
+
+// ListActivities returns the system activity logs.
+func (alc *AuditLogController) ListActivities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	activities, err := alc.App.ListActivities()
+	if err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error retrieving activities")
+		return
+	}
+	models.RespondJSON(w, http.StatusOK, activities)
+}

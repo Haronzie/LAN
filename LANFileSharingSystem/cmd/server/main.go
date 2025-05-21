@@ -377,6 +377,7 @@ func main() {
 
 	// Audit logs
 	router.HandleFunc("/auditlogs", auditLogController.List).Methods("GET")
+	router.HandleFunc("/activities", auditLogController.ListActivities).Methods("GET")
 
 	// WebSocket route
 	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
