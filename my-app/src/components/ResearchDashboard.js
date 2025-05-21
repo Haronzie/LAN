@@ -541,9 +541,30 @@ const ResearchDashboard = () => {
     setIsSearching(true);
 
     try {
+      // Convert the query to string to ensure it works with numbers
+      const queryStr = String(query).trim();
+      console.log('Searching for:', queryStr, 'in current path:', currentPath);
+      
+      // If we're inside a specific folder within Research, do client-side filtering
+      // This works better for numeric searches in the current folder
+      if (currentPath !== 'Research') {
+        const filteredItems = items.filter(item => {
+          const itemNameStr = String(item.name || '').toLowerCase();
+          const searchTermStr = queryStr.toLowerCase();
+          return itemNameStr.includes(searchTermStr);
+        });
+        
+        setSearchResults(filteredItems);
+        console.log(`🔍 Client-side search found ${filteredItems.length} results`);
+        setSearchLoading(false);
+        return;
+      }
+      
+      // For searching in the main Research folder, use the server API
       // Build the search URL with the main folder parameter for Research
-      const searchUrl = `/search?q=${encodeURIComponent(query)}&main_folder=Research`;
-
+      const searchUrl = `${BASE_URL}/search?q=${encodeURIComponent(queryStr)}&main_folder=Research`;
+      console.log('Searching with URL:', searchUrl);
+      
       const response = await axios.get(searchUrl, { withCredentials: true });
 
       // Format the search results
@@ -595,12 +616,15 @@ const ResearchDashboard = () => {
     setCurrentPath(directory);
   };
 
-  // If we're searching, use search results, otherwise show all items or filter by search term
-  const displayItems = isSearching
-    ? searchResults
-    : searchTerm.trim()
-      ? items.filter((item) => (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
-      : items;
+  // If we're searching, use search results, otherwise show directory contents
+  const displayItems = isSearching ? searchResults : searchTerm.trim() 
+    ? items.filter(item => {
+        // Handle local filtering for visible items (for numeric searches)
+        const itemNameStr = String(item.name || '').toLowerCase();
+        const searchTermStr = String(searchTerm).toLowerCase().trim();
+        return itemNameStr.includes(searchTermStr);
+      })
+    : items;
 
   // Then sort: directories first (in ascending order), then files (in ascending order)
   const sortedItems = [...displayItems].sort((a, b) => {

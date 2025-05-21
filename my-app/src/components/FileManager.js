@@ -325,7 +325,25 @@ const FileManager = () => {
     try {
       // Convert the query to string to ensure it works with numbers
       const queryStr = String(query).trim();
+
+      console.log('Searching for:', queryStr, 'in folder:', mainFolder || 'root');
       
+      if (currentPath) {
+        // For searches within a folder, we can do client-side filtering
+        // This works better for numeric searches in the current folder
+        const filteredItems = items.filter(item => {
+          const itemNameStr = String(item.name || '').toLowerCase();
+          const searchTermStr = queryStr.toLowerCase();
+          return itemNameStr.includes(searchTermStr);
+        });
+        
+        setSearchResults(filteredItems);
+        console.log(`🔍 Client-side search found ${filteredItems.length} results`);
+        setSearchLoading(false);
+        return;
+      }
+
+      // For global searches, use the server API
       // Build the search URL with the main folder parameter if we're in a specific folder
       const searchUrl = mainFolder
         ? `${BASE_URL}/search?q=${encodeURIComponent(queryStr)}&main_folder=${encodeURIComponent(mainFolder)}`
@@ -394,17 +412,11 @@ const FileManager = () => {
     setCurrentPath(directory);
   };
 
-  // If we're searching, use search results, otherwise show all items or filter by search term
-  const displayItems = isSearching
-    ? searchResults
-    : searchTerm.trim()
-      ? items.filter((item) => {
-          // Convert both the search term and item name to strings to ensure proper comparison
-          const itemNameStr = String(item.name || '').toLowerCase();
-          const searchTermStr = String(searchTerm).toLowerCase().trim();
-          return itemNameStr.includes(searchTermStr);
-        })
-      : items;
+  // If we're searching, use search results, otherwise show regular items
+  // Note: We no longer do local filtering here since all filtering is handled in performSearch
+  const displayItems = isSearching 
+    ? searchResults 
+    : items;
 
   // Then sort: directories first (in ascending order), then files (in ascending order)
   const sortedItems = [...displayItems].sort((a, b) => {

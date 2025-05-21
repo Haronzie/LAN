@@ -355,6 +355,7 @@ func main() {
 	router.HandleFunc("/file/messages", fileController.GetFileMessages).Methods("GET")
 	router.HandleFunc("/file/versions", fileController.GetFileVersions).Methods("GET")
 	router.HandleFunc("/files-with-messages", fileController.GetFilesWithMessagesForUser).Methods("GET")
+	router.HandleFunc("/search", fileController.SearchFiles).Methods("GET")
 
 	// Directory routes
 	router.HandleFunc("/directory/create", directoryController.Create).Methods("POST")

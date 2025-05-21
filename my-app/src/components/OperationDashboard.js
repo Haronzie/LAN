@@ -566,9 +566,30 @@ const OperationDashboard = () => {
     setIsSearching(true);
 
     try {
+      // Convert the query to string to ensure it works with numbers
+      const queryStr = String(query).trim();
+      console.log('Searching for:', queryStr, 'in current path:', currentPath);
+      
+      // If we're inside a specific folder within Operation, do client-side filtering
+      // This works better for numeric searches in the current folder
+      if (currentPath !== 'Operation') {
+        const filteredItems = items.filter(item => {
+          const itemNameStr = String(item.name || '').toLowerCase();
+          const searchTermStr = queryStr.toLowerCase();
+          return itemNameStr.includes(searchTermStr);
+        });
+        
+        setSearchResults(filteredItems);
+        console.log(`🔍 Client-side search found ${filteredItems.length} results`);
+        setSearchLoading(false);
+        return;
+      }
+      
+      // For searching in the main Operation folder, use the server API
       // Build the search URL with the main folder parameter for Operation
-      const searchUrl = `${BASE_URL}/search?q=${encodeURIComponent(query)}&main_folder=Operation`;
-
+      const searchUrl = `${BASE_URL}/search?q=${encodeURIComponent(queryStr)}&main_folder=Operation`;
+      console.log('Searching with URL:', searchUrl);
+      
       const response = await axios.get(searchUrl, { withCredentials: true });
 
       // Format the search results
@@ -599,24 +620,6 @@ const OperationDashboard = () => {
     }
   };
 
-  // Debounce the search to avoid too many requests
-  const debouncedSearch = useCallback(
-    debounce((query) => {
-      performSearch(query);
-    }, 500),
-    [currentPath]
-  );
-
-  // Update search when search term changes
-  useEffect(() => {
-    if (searchTerm.trim()) {
-      debouncedSearch(searchTerm);
-    } else {
-      setIsSearching(false);
-      setSearchResults([]);
-    }
-  }, [searchTerm, debouncedSearch]);
-
   // Navigate to the folder containing a search result
   const navigateToFolder = (directory) => {
     setSearchTerm('');
@@ -624,14 +627,32 @@ const OperationDashboard = () => {
     setCurrentPath(directory);
   };
 
-  // If we're searching, use search results, otherwise show all items or filter by search term
-  const displayItems = isSearching
-    ? searchResults
-    : searchTerm.trim()
-      ? items.filter((item) => (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
-      : items;
+  // Handle input change for search
+  const handleSearchInputChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    
+    // If we're inside a folder and user types a search term, we need to directly perform a search
+    // This fixes the issue with searching for numeric values in subfolders
+    if (value.trim() && currentPath !== 'Operation') {
+      performSearch(value);
+    } else if (!value.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+    }
+  };
 
-  // Then sort: directories first (in ascending order), then files (in ascending order)
+  // If we're searching, use search results, otherwise show directory contents
+  const displayItems = isSearching ? searchResults : searchTerm.trim() 
+    ? items.filter(item => {
+        // Handle local filtering for visible items (for numeric searches)
+        const itemNameStr = String(item.name || '').toLowerCase();
+        const searchTermStr = String(searchTerm).toLowerCase().trim();
+        return itemNameStr.includes(searchTermStr);
+      })
+    : items;
+
+  // Sort directories first, then files (both in ascending order)
   const sortedItems = [...displayItems].sort((a, b) => {
     // If types are different (directory vs file)
     if (a.type !== b.type) {
@@ -1742,15 +1763,7 @@ const OperationDashboard = () => {
                   ? `Search in ${currentPath}...`
                   : "Search in Operation..."}
               value={searchTerm}
-              onChange={(e) => {
-                const value = e.target.value;
-                setSearchTerm(value);
-                // If search is cleared, immediately reset search state
-                if (!value.trim()) {
-                  setIsSearching(false);
-                  setSearchResults([]);
-                }
-              }}
+              onChange={handleSearchInputChange}
               onSearch={(value) => {
                 if (value.trim()) {
                   performSearch(value);
