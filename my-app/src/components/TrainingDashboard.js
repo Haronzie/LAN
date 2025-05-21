@@ -128,7 +128,10 @@ const TrainingDashboard = () => {
     
     // Check if there's a file to open after navigation
     const fileToOpen = localStorage.getItem('openFileAfterNavigation');
+    const isNotificationNavigation = localStorage.getItem('notificationNavigation') === 'true';
     const forceOpenFile = localStorage.getItem('forceOpenFile');
+    const isDirectNavigation = localStorage.getItem('directNavigation') === 'true';
+    const isHighPriorityNav = localStorage.getItem('highPriorityNavigation') === 'true';
     
     if (fileToOpen) {
       try {
@@ -139,12 +142,24 @@ const TrainingDashboard = () => {
         if (fileData.directory.startsWith('Training')) {
           console.log('File belongs to Training dashboard, directory:', fileData.directory);
           
+          // Check if this navigation came from a notification click
+          const isFromNotification = fileData.source === 'notification';
+          if (isFromNotification) {
+            console.log('Navigation request came from notification click');
+          }
+          
           // Handle file opening differently if forceOpenFile is set
           if (forceOpenFile === 'true') {
             console.log('Force open file flag is set');
             
             // This is a more step-by-step approach to ensure we reach the right directory
             const navigateToFileStepByStep = async () => {
+              // If this came from a notification, prioritize it
+              const isFromNotification = fileData.source === 'notification';
+              if (isFromNotification) {
+                console.log('Prioritizing notification navigation');
+              }
+              
               // Break the path into segments
               const pathParts = fileData.directory.split('/');
               console.log('Path parts:', pathParts);
@@ -194,11 +209,57 @@ const TrainingDashboard = () => {
               }
             };
             
-            // Execute the step-by-step navigation
-            navigateToFileStepByStep().catch(err => {
-              console.error('Error navigating to file:', err);
-              message.error('Error opening file. Please try again.');
-            });
+            // For notification-based navigation, we want to ensure we go directly to the exact file
+            if (isHighPriorityNav || isDirectNavigation || isNotificationNavigation || fileData.source === 'notification') {
+              // Clear the high priority flag immediately
+              localStorage.removeItem('highPriorityNavigation');
+              console.log('Using direct navigation for notification click');
+              console.log('File directory path:', fileData.directory);
+              
+              // CRITICAL: Set the full path immediately to navigate to subfolder
+              setCurrentPath(fileData.directory);
+              
+              // Signal the UI to update the path
+              console.log('DIRECT NAVIGATION TO:', fileData.directory);
+              
+              // Use a longer delay (1200ms) for notification navigation to ensure the UI fully updates
+              // This is critical for ensuring subfolder navigation completes before opening the file
+              setTimeout(async () => {
+                try {
+                  console.log('Fetching files in directory:', fileData.directory);
+                  const res = await axios.get(
+                    `${BASE_URL}/files?directory=${encodeURIComponent(fileData.directory)}`,
+                    { withCredentials: true }
+                  );
+                  
+                  const files = res.data || [];
+                  console.log('Found files:', files);
+                  
+                  const targetFile = files.find(f => f.id.toString() === fileData.id.toString());
+                  if (targetFile) {
+                    console.log('Found target file, opening:', targetFile);
+                    handleViewFile({
+                      id: targetFile.id,
+                      name: targetFile.name,
+                      directory: fileData.directory,
+                      type: 'file'
+                    });
+                  } else {
+                    console.error('Target file not found in directory');
+                    message.error('The specified file could not be found. It may have been moved or deleted.');
+                  }
+                } catch (err) {
+                  console.error('Error during direct file navigation:', err);
+                  message.error('Error navigating to file. Please try again.');
+                }
+              }, 1200); // Increased from 800ms to 1200ms for more reliable navigation
+            } else {
+              // For non-notification navigation, use the step-by-step approach
+              navigateToFileStepByStep().catch(err => {
+                console.error('Error navigating to file:', err);
+                message.error('Error opening file. Please try again.');
+              });
+            }
           } else {
             // Default behavior (for backward compatibility)
             console.log('Using default file opening behavior');

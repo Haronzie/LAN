@@ -104,7 +104,10 @@ const NotificationDropdown = () => {
   const navigateToFile = (file) => {
     console.log('Navigating to file in dropdown:', file);
     
-    // Store complete file navigation information
+    // Force a reload approach to ensure a clean navigation state
+    // First, let's set up the required information in localStorage
+    
+    // Store ALL the details about the file and directory
     localStorage.setItem('openFileAfterNavigation', JSON.stringify({
       id: file.id,
       name: file.name,
@@ -112,19 +115,23 @@ const NotificationDropdown = () => {
       type: 'file',
       timestamp: new Date().getTime(), // Add timestamp to ensure it's treated as a new request
       source: 'notification', // Mark that this navigation came from a notification
-      pathSegments: file.directory.split('/') // Store path segments for step navigation
+      pathSegments: file.directory.split('/'), // Store path segments for step navigation
+      exactLocation: true, // Flag to indicate we want to go to the exact location
+      fullPath: file.directory // Store the complete path for direct navigation
     }));
     
-    // Add a flag to indicate we should force open the file
+    // Enable force flags with higher priority
     localStorage.setItem('forceOpenFile', 'true');
-    
-    // Also set a flag specifically for notification-based navigation
     localStorage.setItem('notificationNavigation', 'true');
+    localStorage.setItem('directNavigation', 'true'); // New flag for direct navigation
     
     // Extract the main folder from the directory path
-    const mainFolder = file.directory.split('/')[0].toLowerCase();
+    const pathParts = file.directory.split('/');
+    const mainFolder = pathParts[0].toLowerCase();
     console.log('Main folder determined as:', mainFolder);
-
+    console.log('Full directory path:', file.directory);
+    console.log('Path segments:', pathParts);
+    
     // Navigate to the appropriate dashboard based on the main folder
     if (mainFolder === 'operation') {
       navigate('/user/operation');
@@ -181,8 +188,14 @@ const NotificationDropdown = () => {
                           }}>
                             <div>
                               <a 
-                                onClick={() => navigateToFile(file)}
-                                style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  console.log('Notification message clicked, navigating to:', file.name, 'in', file.directory);
+                                  // Ensure we navigate with high priority
+                                  localStorage.setItem('highPriorityNavigation', 'true');
+                                  navigateToFile(file);
+                                }}
+                                style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 'bold' }}
                               >
                                 {msg.message}
                               </a>

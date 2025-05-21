@@ -1920,7 +1920,7 @@ func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Requ
 	}()
 
 	// First, delete any messages associated with this file
-	log.Printf("Cleaning up messages for file ID %d", fileID)
+	log.Printf("Cleaning up messages for file ID %s", fileID)
 	msgResult, err := tx.Exec("DELETE FROM file_messages WHERE file_id = $1", fileID)
 	if err != nil {
 		log.Printf("Error deleting file messages: %v", err)
@@ -1932,7 +1932,7 @@ func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Requ
 	if msgResult != nil {
 		if count, err := msgResult.RowsAffected(); err == nil {
 			msgRowsAffected = count
-			log.Printf("Deleted %d messages for file ID %d", msgRowsAffected, fileID)
+			log.Printf("Deleted %d messages for file ID %s", msgRowsAffected, fileID)
 		}
 	}
 
@@ -1953,7 +1953,7 @@ func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Requ
 	}
 	
 	// Log the successful deletion and message cleanup
-	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file ID %d and cleaned up %d associated messages",
+	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file ID %s and cleaned up %d associated messages",
 		user.Username, fileID, msgRowsAffected))
 
 
