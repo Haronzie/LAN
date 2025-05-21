@@ -618,6 +618,7 @@ type MoveDirectoryRequest struct {
 	Name      string `json:"name"`       // Directory name to move.
 	OldParent string `json:"old_parent"` // Current parent folder (can be empty for root).
 	NewParent string `json:"new_parent"` // Destination parent folder (must exist).
+	Merge     bool   `json:"merge"`      // Whether to merge if destination exists
 }
 
 // Move handles moving a directory (folder) from one parent to another.
@@ -651,6 +652,7 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if source directory exists
 	exists, err := dc.App.DirectoryExists(req.Name, req.OldParent)
 	if err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error checking directory existence")
@@ -661,36 +663,98 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Allow root folders as valid destinations even if not in DB
-	rootFolders := map[string]bool{"Operation": true, "Research": true, "Training": true, "": true}
-	if req.NewParent != "" && !rootFolders[req.NewParent] {
+	// Check if destination path is valid
+	if req.NewParent != "" {
+		// Check if destination parent exists in DB
 		destExists, err := dc.App.DirectoryExists(req.NewParent, "")
 		if err != nil {
 			models.RespondError(w, http.StatusInternalServerError, "Error checking destination folder")
 			return
 		}
 		if !destExists {
-			models.RespondError(w, http.StatusBadRequest, "Destination folder does not exist")
+			// Check if destination exists on disk
+			destPath := filepath.Join("Cdrrmo", req.NewParent)
+			if stat, statErr := os.Stat(destPath); statErr == nil && stat.IsDir() {
+				// Create DB record for the destination parent if it exists on disk
+				if createErr := dc.App.CreateDirectoryRecord(filepath.Base(req.NewParent), filepath.Dir(req.NewParent), user.Username); createErr != nil {
+					models.RespondError(w, http.StatusInternalServerError, "Destination folder exists on disk but could not create DB record")
+					return
+				}
+			} else {
+				models.RespondError(w, http.StatusBadRequest, "Destination folder does not exist")
+				return
+			}
+		}
+
+		// Check if destination path is a valid parent (not a subfolder of the source)
+		sourcePath := filepath.Join(req.OldParent, req.Name)
+		destPath := req.NewParent
+		if strings.HasPrefix(destPath, sourcePath) {
+			models.RespondError(w, http.StatusBadRequest, "Cannot move a folder into one of its subfolders")
 			return
 		}
 	}
 
+	// Get the full paths
 	oldPath := filepath.Join("Cdrrmo", req.OldParent, req.Name)
 	newPath := filepath.Join("Cdrrmo", req.NewParent, req.Name)
 
 	if _, err := os.Stat(newPath); err == nil {
-		models.RespondError(w, http.StatusConflict, "A folder with that name already exists in the destination")
+		if req.Merge {
+			// Merge logic: recursively move all files and subfolders from oldPath into newPath
+			err := mergeFoldersAndUpdateDB(dc, oldPath, newPath, filepath.Join(req.OldParent, req.Name), filepath.Join(req.NewParent, req.Name))
+			if err != nil {
+				models.RespondError(w, http.StatusInternalServerError, "Error merging folders: "+err.Error())
+				return
+			}
+			// Remove the now-empty source folder
+			_ = os.RemoveAll(oldPath)
+			dc.App.LogActivity(fmt.Sprintf("User '%s' merged directory '%s' from '%s' to '%s'.", user.Username, req.Name, req.OldParent, req.NewParent))
+			dc.App.LogAudit(user.Username, 0, "MERGE_FOLDER", fmt.Sprintf("User '%s' merged folder '%s' from '%s' to '%s'.", user.Username, req.Name, req.OldParent, req.NewParent))
+			models.RespondJSON(w, http.StatusOK, map[string]string{
+				"message": fmt.Sprintf("Directory '%s' merged successfully", req.Name),
+			})
+			return
+		}
+		// Destination exists, generate a unique name
+		newName, err := generateUniqueFolderName(req.Name, req.NewParent)
+		if err != nil {
+			models.RespondError(w, http.StatusInternalServerError, "Error generating unique folder name")
+			return
+		}
+		newPath = filepath.Join("Cdrrmo", req.NewParent, newName)
+	}
+
+	// Create destination path if it doesn't exist
+	if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
+		models.RespondError(w, http.StatusInternalServerError, "Error creating destination path")
 		return
 	}
 
+	// Move the directory
 	if err := os.Rename(oldPath, newPath); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error moving directory on disk")
 		return
 	}
 
+	// Update directory record in database
 	if err := dc.App.MoveDirectoryRecord(req.Name, req.OldParent, req.NewParent); err != nil {
 		os.Rename(newPath, oldPath) // rollback
 		models.RespondError(w, http.StatusInternalServerError, "Error updating directory records")
+		return
+	}
+
+	// Update all subdirectory records
+	if err := dc.App.UpdateSubdirectoryPaths(req.Name, req.OldParent, req.NewParent); err != nil {
+		os.Rename(newPath, oldPath) // rollback
+		models.RespondError(w, http.StatusInternalServerError, "Error updating subdirectory records")
+		return
+	}
+
+	// Update file records in the moved directory and its subdirectories
+	if err := dc.App.UpdateFileDirectoryPaths(req.Name, req.OldParent, req.NewParent); err != nil {
+		os.Rename(newPath, oldPath) // rollback
+		models.RespondError(w, http.StatusInternalServerError, "Error updating file records")
 		return
 	}
 
@@ -835,4 +899,52 @@ func generateCopyName(original string) string {
 		}
 	}
 	return original + "_copy"
+}
+
+// mergeFoldersAndUpdateDB recursively merges srcDir into dstDir and updates DB records.
+func mergeFoldersAndUpdateDB(dc *DirectoryController, srcDir, dstDir, srcRel, dstRel string) error {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		srcEntryPath := filepath.Join(srcDir, entry.Name())
+		dstEntryPath := filepath.Join(dstDir, entry.Name())
+		srcEntryRel := filepath.Join(srcRel, entry.Name())
+		dstEntryRel := filepath.Join(dstRel, entry.Name())
+		if entry.IsDir() {
+			if _, err := os.Stat(dstEntryPath); err == nil {
+				// Recursively merge subfolders
+				if err := mergeFoldersAndUpdateDB(dc, srcEntryPath, dstEntryPath, srcEntryRel, dstEntryRel); err != nil {
+					return err
+				}
+			} else {
+				// Move the whole subfolder
+				if err := os.Rename(srcEntryPath, dstEntryPath); err != nil {
+					return err
+				}
+				// Update DB: move directory record and subdirectories
+				_ = dc.App.MoveDirectoryRecord(entry.Name(), srcRel, dstRel)
+				_ = dc.App.UpdateSubdirectoryPaths(entry.Name(), srcRel, dstRel)
+				_ = dc.App.UpdateFileDirectoryPaths(entry.Name(), srcRel, dstRel)
+			}
+		} else {
+			// File: if exists, overwrite
+			if _, err := os.Stat(dstEntryPath); err == nil {
+				_ = os.Remove(dstEntryPath)
+			}
+			if err := os.Rename(srcEntryPath, dstEntryPath); err != nil {
+				return err
+			}
+			// Update DB: move file record
+			fr, err := dc.App.GetFileRecordByPath(srcEntryRel)
+			if err == nil {
+				// Update file_path and directory
+				newFilePath := dstEntryRel
+				newDirectory := dstRel
+				_, _ = dc.App.DB.Exec(`UPDATE files SET file_path = $1, directory = $2 WHERE id = $3`, newFilePath, newDirectory, fr.ID)
+			}
+		}
+	}
+	return nil
 }

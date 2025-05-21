@@ -54,7 +54,10 @@ const CommonModals = ({
   uploadingFiles,
   setUploadingFiles,
   handleModalUpload,
-  container
+  container,
+
+  // New prop for folder tree data
+  folderTreeData
 }) => {
   return (
     <>
@@ -120,8 +123,15 @@ const CommonModals = ({
               onChange={(val) => setSelectedDestination(val)}
               allowClear
             >
+              {/* Always show main folders as possible destinations */}
+              {['Operation', 'Research', 'Training'].sort().map(folder => (
+                <Option key={folder} value={folder}>
+                  {folder}
+                </Option>
+              ))}
+              {/* Then show subfolders of the current path, if any */}
               {directoryItems && directoryItems
-                .filter((item) => item.type === 'directory')
+                .filter((item) => item.type === 'directory' && !['Operation', 'Research', 'Training'].includes(item.name))
                 .map((folder) => {
                   const folderPath = path.join(currentPath, folder.name);
                   return (
@@ -144,43 +154,18 @@ const CommonModals = ({
         okText="Move"
       >
         <Form layout="vertical">
-          <Form.Item label="Main Folder" required>
-            <Select
+          <Form.Item label="Destination Folder" required>
+            <TreeSelect
               style={{ width: '100%' }}
-              placeholder="Select main folder"
-              value={selectedMainFolder}
-              onChange={handleMainFolderChange}
+              value={moveDestination}
+              dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
+              treeData={folderTreeData}
+              placeholder="Select destination folder"
+              treeDefaultExpandAll
               allowClear
-            >
-              {/* Sort main folders alphabetically */}
-              {['Operation', 'Research', 'Training'].sort().map(folder => (
-                <Option key={folder} value={folder}>
-                  {folder}
-                </Option>
-              ))}
-            </Select>
+              onChange={setMoveDestination}
+            />
           </Form.Item>
-
-          {selectedMainFolder && (
-            <Form.Item label="Destination Folder">
-              <Select
-                style={{ width: '100%' }}
-                placeholder="Select destination folder (optional)"
-                value={selectedSubFolder}
-                onChange={handleSubFolderChange}
-                allowClear
-              >
-                {/* Sort subfolders alphabetically */}
-                {subFolders
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map(folder => (
-                    <Option key={folder.path} value={folder.name}>
-                      {folder.name}
-                    </Option>
-                  ))}
-              </Select>
-            </Form.Item>
-          )}
         </Form>
       </Modal>
 

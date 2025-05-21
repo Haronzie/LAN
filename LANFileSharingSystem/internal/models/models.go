@@ -769,7 +769,7 @@ func (app *App) UpdateFilePathsForRenamedFolder(oldFolderPath, newFolderPath str
 	subdirLikePattern := oldFolderPath + "/%"
 
 	// Execute the query to update directory for nested files
-	_, err = app.DB.Exec(subdirQuery, subdirPattern, newFolderPath + "/", subdirLikePattern)
+	_, err = app.DB.Exec(subdirQuery, subdirPattern, newFolderPath+"/", subdirLikePattern)
 	if err != nil {
 		log.Printf("⚠️ Error updating directory field (subdirectories): %v", err)
 		return err
@@ -1292,4 +1292,27 @@ func (app *App) DeleteFileRecordByPath(filePath string) (int, error) {
 	log.Printf("Deleted %d rows for file ID %d", rowsAffected, fileID)
 
 	return fileID, nil
+}
+
+// UpdateSubdirectoryPaths updates all subdirectory records when a folder is moved.
+func (app *App) UpdateSubdirectoryPaths(dirName, oldParent, newParent string) error {
+	// TODO: Implement actual DB update logic for subdirectory paths
+	log.Printf("[STUB] UpdateSubdirectoryPaths called for dirName='%s', oldParent='%s', newParent='%s'", dirName, oldParent, newParent)
+	return nil
+}
+
+// UpdateFileDirectoryPaths updates all file records in a moved directory and its subdirectories.
+func (app *App) UpdateFileDirectoryPaths(dirName, oldParent, newParent string) error {
+	// Build old and new directory prefixes
+	oldPrefix := strings.Trim(filepath.Join(oldParent, dirName), "/")
+	newPrefix := strings.Trim(filepath.Join(newParent, dirName), "/")
+
+	// Update directory and file_path for all files whose directory starts with oldPrefix
+	_, err := app.DB.Exec(`
+		UPDATE files
+		SET directory = regexp_replace(directory, $1, $2, 'i'),
+		    file_path = regexp_replace(file_path, $1, $2, 'i')
+		WHERE directory LIKE $3 OR file_path LIKE $3
+	`, oldPrefix, newPrefix, oldPrefix+"%")
+	return err
 }

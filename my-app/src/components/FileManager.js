@@ -327,46 +327,30 @@ const FileManager = () => {
       const queryStr = String(query).trim();
 
       console.log('Searching for:', queryStr, 'in folder:', mainFolder || 'root');
-      
-      if (currentPath) {
-        // For searches within a folder, we can do client-side filtering
-        // This works better for numeric searches in the current folder
-        const filteredItems = items.filter(item => {
-          const itemNameStr = String(item.name || '').toLowerCase();
-          const searchTermStr = queryStr.toLowerCase();
-          return itemNameStr.includes(searchTermStr);
-        });
-        
-        setSearchResults(filteredItems);
-        console.log(`🔍 Client-side search found ${filteredItems.length} results`);
-        setSearchLoading(false);
-        return;
-      }
 
-      // For global searches, use the server API
-      // Build the search URL with the main folder parameter if we're in a specific folder
-      const searchUrl = mainFolder
-        ? `${BASE_URL}/search?q=${encodeURIComponent(queryStr)}&main_folder=${encodeURIComponent(mainFolder)}`
-        : `${BASE_URL}/search?q=${encodeURIComponent(queryStr)}`;
-
-      console.log('Searching with URL:', searchUrl);
-      const response = await axios.get(searchUrl, { withCredentials: true });
-
-      // Format the search results
-      const formattedResults = (response.data || []).map(item => {
-        // Ensure size is a valid number
-        const fileSize = typeof item.size === 'number' ? item.size :
-                        (item.size ? parseInt(item.size, 10) : null);
-
-        return {
-          ...item,
-          size: fileSize,
-          formattedSize: formatFileSize(fileSize),
-        };
+      // Always use server-side search to handle numeric searches properly
+      const params = new URLSearchParams({
+        q: queryStr,
+        main_folder: mainFolder || ''
       });
 
+      const response = await axios.get(`${BASE_URL}/files/search?${params.toString()}`, {
+        withCredentials: true
+      });
+
+      // Convert the server response to match our items format
+      const searchResults = response.data.map(item => ({
+        name: item.name,
+        type: item.type,
+        size: item.size,
+        formattedSize: formatFileSize(item.size),
+        contentType: item.contentType,
+        id: item.id,
+        directory: item.directory
+      }));
+
       // Sort the results: directories first, then files (both in alphabetical order)
-      const sortedResults = [...formattedResults].sort((a, b) => {
+      const sortedResults = [...searchResults].sort((a, b) => {
         // If types are different (directory vs file)
         if (a.type !== b.type) {
           // Directories come before files
@@ -378,6 +362,20 @@ const FileManager = () => {
 
       setSearchResults(sortedResults);
       console.log(`🔍 Search found ${sortedResults.length} results`);
+    } catch (error) {
+      console.error('Error performing search:', error);
+      message.error('Error performing search');
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+        setSearchResults(filteredItems);
+        console.log(`🔍 Client-side search found ${filteredItems.length} results`);
+        setSearchLoading(false);
+        return;
+      }
+
+
     } catch (error) {
       console.error('Search error:', error);
       message.error('Error performing search');
@@ -1870,7 +1868,6 @@ const FileManager = () => {
           setMoveModalVisible={setMoveModalVisible}
           moveDestination={moveDestination}
           setMoveDestination={setMoveDestination}
-          handleMoveConfirm={handleMoveConfirm}
           selectedMainFolder={selectedMainFolder}
           selectedSubFolder={selectedSubFolder}
           subFolders={subFolders}
@@ -1884,6 +1881,7 @@ const FileManager = () => {
           setUploadingFiles={setUploadingFile}
           handleModalUpload={handleUpload}
           container=""
+          folderTreeData={folderTreeData}
         />
 
         {/* File Information Modal */}

@@ -80,6 +80,7 @@ const OperationDashboard = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchDebounceTimer, setSearchDebounceTimer] = useState(null);
+  const [isSearchingRecursively, setIsSearchingRecursively] = useState(false);
 
   // Operation related variables
   const [selectedItems, setSelectedItems] = useState([]);
@@ -579,7 +580,47 @@ const OperationDashboard = () => {
     return () => clearInterval(interval);
   }, [currentPath, moveModalVisible, copyModalVisible, renameModalVisible, createFolderModal, uploadModalVisible, infoModalVisible]);
 
-  // Perform global search across all subfolders
+  // Helper function to fetch all items recursively
+  const fetchAllItemsRecursively = async (dir = 'Operation') => {
+    try {
+      const dirParam = encodeURIComponent(dir);
+      const [dirRes, fileRes] = await Promise.all([
+        axios.get(`${BASE_URL}/directory/list?directory=${dirParam}`, { withCredentials: true }),
+        axios.get(`${BASE_URL}/files?directory=${dirParam}`, { withCredentials: true })
+      ]);
+
+      const folders = (dirRes.data || []).map(folder => ({
+        ...folder,
+        id: `folder-${folder.name}`,
+        type: 'directory',
+        directory: dir,
+      }));
+
+      const files = (fileRes.data || []).map(file => ({
+        ...file,
+        type: 'file',
+        directory: dir,
+      }));
+
+      // Recursively fetch subdirectories
+      const subfolderItems = await Promise.all(
+        folders.map(folder => 
+          fetchAllItemsRecursively(path.join(dir, folder.name))
+        )
+      );
+
+      return [
+        ...folders,
+        ...files,
+        ...subfolderItems.flat()
+      ];
+    } catch (error) {
+      console.error(`Error fetching items from ${dir}:`, error);
+      return [];
+    }
+  };
+
+  // Perform search across all subfolders
   const performSearch = async (query) => {
     if (!query.trim()) {
       setIsSearching(false);
@@ -589,52 +630,63 @@ const OperationDashboard = () => {
 
     setSearchLoading(true);
     setIsSearching(true);
+    setIsSearchingRecursively(currentPath !== 'Operation');
 
     try {
-      // Convert the query to string to ensure it works with numbers
-      const queryStr = String(query).trim();
-      console.log('Searching for:', queryStr, 'in current path:', currentPath);
+      const queryStr = String(query).trim().toLowerCase();
+      console.log('Searching for:', queryStr, 'in path:', currentPath);
       
-      // Log available items to help with debugging
-      console.log('Available items for search:', items.map(item => item?.name || 'unnamed'));
+      // Get items to search through
+      let itemsToSearch = [];
       
-      // Better string normalization for search
-      const searchTermStr = queryStr.toLowerCase();
+      if (currentPath === 'Operation') {
+        // If in root, search all items
+        itemsToSearch = await fetchAllItemsRecursively();
+      } else {
+        // If in a subfolder, search the current folder first for immediate feedback
+        itemsToSearch = items;
+        
+        // Then search the rest in the background
+        fetchAllItemsRecursively('Operation')
+          .then(allItems => {
+            const filtered = allItems.filter(item => 
+              String(item.name).toLowerCase().includes(queryStr) &&
+              !itemsToSearch.some(i => i.id === item.id)
+            );
+            
+            if (filtered.length > 0) {
+              setSearchResults(prev => {
+                const combined = [...prev, ...filtered];
+                return [...new Map(combined.map(item => [item.id, item])).values()];
+              });
+            }
+          })
+          .catch(console.error);
+      }
       
-      // Fixed filtering that properly handles numeric filenames and hyphens
-      const filteredItems = items.filter(item => {
-        // Skip items without names
+      // Filter the items
+      const filteredItems = itemsToSearch.filter(item => {
         if (!item || !item.name) return false;
-        
-        // Always convert item name to string to handle numeric filenames
-        const itemNameStr = String(item.name);
-        
-        // Use simple includes for most accurate matching with lowercase
-        return itemNameStr.toLowerCase().includes(searchTermStr);
+        return String(item.name).toLowerCase().includes(queryStr);
       });
       
-      // Log search results for debugging
-      console.log(`Search results for "${queryStr}": `, filteredItems.map(i => i.name));
-      
-      // Set results with proper formatting
+      console.log(`Search results for "${queryStr}":`, filteredItems.map(i => i.name));
+
       const formattedResults = filteredItems.map(item => ({
         ...item,
         formattedSize: formatFileSize(item.size || 0),
       }));
-      
-      // Sort the results: directories first, then files (both in ascending order)
+
+      // Sort results: directories first, then files, then alphabetically
       const sortedResults = [...formattedResults].sort((a, b) => {
-        // If types are different (directory vs file)
         if (a.type !== b.type) {
-          // Directories come before files
           return a.type === 'directory' ? -1 : 1;
         }
-        // If types are the same, sort alphabetically by name
         return a.name.localeCompare(b.name);
       });
       
       setSearchResults(sortedResults);
-      console.log(`🔍 Client-side search found ${sortedResults.length} results`);
+      console.log(`🔍 Search found ${sortedResults.length} results`);
     } catch (error) {
       console.error('Search error:', error);
       message.error('Error performing search');
@@ -656,33 +708,35 @@ const OperationDashboard = () => {
     const value = e.target.value;
     setSearchTerm(value);
     
-    // Immediately search as user types regardless of folder
-    // This ensures all searches work and results are immediate
+    // Clear any existing timer
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer);
+    }
+    
     if (value.trim()) {
-      // Add a small debounce to prevent too many searches while typing
-      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-      
+      // Set a new timer with debounce
       const timer = setTimeout(() => {
         performSearch(value);
-      }, 100); // Short delay for better performance while typing
+      }, 300); // 300ms debounce for better performance
       
       setSearchDebounceTimer(timer);
-    } else if (!value.trim()) {
-      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    } else {
       setIsSearching(false);
       setSearchResults([]);
     }
   };
+  
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+      }
+    };
+  }, [searchDebounceTimer]);
 
   // If we're searching, use search results, otherwise show directory contents
-  const displayItems = isSearching ? searchResults : searchTerm.trim() 
-    ? items.filter(item => {
-        // Handle local filtering for visible items (for numeric searches)
-        const itemNameStr = String(item.name || '').toLowerCase();
-        const searchTermStr = String(searchTerm).toLowerCase().trim();
-        return itemNameStr.includes(searchTermStr);
-      })
-    : items;
+  const displayItems = isSearching ? searchResults : items;
 
   // Sort directories first, then files (both in ascending order)
   const sortedItems = [...displayItems].sort((a, b) => {
@@ -1789,11 +1843,13 @@ const OperationDashboard = () => {
           </Col>
           <Col style={{ width: '40%' }}>
             <Input.Search
-              placeholder={isSearching
-                ? "Search in Operation..."
-                : currentPath
-                  ? `Search in ${currentPath}...`
-                  : "Search in Operation..."}
+              placeholder={
+                isSearchingRecursively 
+                  ? "Searching all folders..." 
+                  : currentPath === 'Operation' 
+                    ? "Search in all folders..." 
+                    : `Search in ${currentPath}...`
+              }
               value={searchTerm}
               onChange={handleSearchInputChange}
               onSearch={(value) => {
