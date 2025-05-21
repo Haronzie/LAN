@@ -209,6 +209,10 @@ const FileManager = () => {
         axios.get(`${BASE_URL}/directory/list?directory=${directoryParam}`, { withCredentials: true })
       ]);
 
+      // Add a delay to ensure folders have time to process on the backend
+      // This helps with the issue of folders appearing empty after move operations
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       const files = (filesRes.data || [])
       const normalizePath = path => (path || '').replace(/^\/|\/$/g, '').toLowerCase()
 
@@ -307,45 +311,13 @@ const FileManager = () => {
     return () => clearInterval(interval);
   }, [currentPath, moveModalVisible, copyModalVisible, renameModalVisible, createFolderModal, uploadModalVisible]);
 
-  // We're no longer auto-generating a new name with a suffix when destination changes
-  // This allows the conflict detection to work properly
-
-  // Perform global search across all subfolders
   const performSearch = async (query) => {
-    if (!query.trim()) {
-      setIsSearching(false);
-      setSearchResults([]);
-      return;
-    }
-
-    setSearchLoading(true);
-    setIsSearching(true);
-
     try {
-      // Use the mainFolder variable we defined earlier
-
-      // Build the search URL with the main folder parameter if we're in a specific folder
-      const searchUrl = mainFolder
-        ? `${BASE_URL}/search?q=${encodeURIComponent(query)}&main_folder=${encodeURIComponent(mainFolder)}`
-        : `${BASE_URL}/search?q=${encodeURIComponent(query)}`;
-
-      const response = await axios.get(searchUrl, { withCredentials: true });
-
-      // Format the search results
-      const formattedResults = (response.data || []).map(item => {
-        // Ensure size is a valid number
-        const fileSize = typeof item.size === 'number' ? item.size :
-                        (item.size ? parseInt(item.size, 10) : null);
-
-        return {
-          ...item,
-          size: fileSize,
-          formattedSize: formatFileSize(fileSize),
-        };
+      const res = await axios.get(`${BASE_URL}/files/search?query=${encodeURIComponent(query)}`, {
+        withCredentials: true
       });
-
-      // Sort the results: directories first (in ascending order), then files (in ascending order)
-      const sortedResults = [...formattedResults].sort((a, b) => {
+      const results = res.data || [];
+      const sortedResults = [...results].sort((a, b) => {
         // If types are different (directory vs file)
         if (a.type !== b.type) {
           // Directories come before files
@@ -395,7 +367,12 @@ const FileManager = () => {
   const displayItems = isSearching
     ? searchResults
     : searchTerm.trim()
-      ? items.filter((item) => (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
+      ? items.filter((item) => {
+          // Convert both the search term and item name to strings to ensure proper comparison
+          const itemNameStr = String(item.name || '').toLowerCase();
+          const searchTermStr = String(searchTerm).toLowerCase().trim();
+          return itemNameStr.includes(searchTermStr);
+        })
       : items;
 
   // Then sort: directories first (in ascending order), then files (in ascending order)
@@ -465,7 +442,7 @@ const FileManager = () => {
       message.error('Please select an existing folder before uploading a file.');
       return;
     }
-    setUploadingFile([]); // ✅ now an empty array
+    setUploadingFile([]); // now an empty array
     setUploadModalVisible(true);
   };
 
@@ -904,12 +881,14 @@ const FileManager = () => {
     setCopyItem(record);
     setCopyNewName(name);
     setCopyModalVisible(true);
+    
+    // Initialize with root folders if at top level
+    fetchSubFolders('', true, true);
   };
 
   const handleCopyConfirm = async () => {
     if (!copyNewName.trim()) {
       message.error('New name cannot be empty');
-      return;
     }
     if (!copyItem) {
       message.error('No item selected to copy');
@@ -1008,7 +987,7 @@ const FileManager = () => {
 
       // Handle specific error cases
       if (err.response?.data?.error === "Source file not found on disk") {
-        message.error('The file no longer exists on the server. Please refresh the page and try again.');
+        message.error('The file no longer exists on the server. Please refresh the page.');
       } else if (err.response?.data?.error === "Permission denied when accessing source file") {
         message.error('Permission denied when accessing the file. Please contact your administrator.');
       } else if (err.response?.data?.error === "Invalid encryption key configuration") {
@@ -1023,8 +1002,26 @@ const FileManager = () => {
     }
   };
 
-  const fetchSubFolders = async (mainFolder, forCopy = false) => {
+  const fetchSubFolders = async (mainFolder, forCopy = false, includeRoot = true) => {
     try {
+      // First, ensure we get all main folders if we're at the root level and need to include them
+      if (mainFolder === '' && includeRoot) {
+        // Always include the main folders (Research, Training, Operation) when at root level
+        const rootFolders = ['Research', 'Training', 'Operation'].map(folder => ({
+          name: folder,
+          path: folder,
+          isRoot: true
+        }));
+
+        if (forCopy) {
+          setCopySubFolders(rootFolders);
+        } else {
+          setSubFolders(rootFolders);
+        }
+        return;
+      }
+
+      // Then fetch the actual contents of the specified folder
       const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
         { withCredentials: true }
       );
@@ -1034,7 +1031,8 @@ const FileManager = () => {
         .filter(item => item.type === 'directory')
         .map(folder => ({
           name: folder.name,
-          path: `${mainFolder}/${folder.name}`
+          path: mainFolder ? `${mainFolder}/${folder.name}` : folder.name,
+          isRoot: false
         }))
         .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
 
@@ -1043,6 +1041,10 @@ const FileManager = () => {
       } else {
         setSubFolders(folders);
       }
+
+      // For debugging
+      console.log(`Fetched subfolders for ${mainFolder || 'root'}:`, folders);
+
     } catch (error) {
       console.error('Error fetching subfolders:', error);
       message.error('Failed to load subfolders');
@@ -1060,9 +1062,11 @@ const FileManager = () => {
     setMoveDestination(value); // Set the destination to the main folder by default
 
     if (value) {
-      fetchSubFolders(value, false);
+      // When a main folder is selected, fetch its subfolders
+      fetchSubFolders(value, false, false);
     } else {
-      setSubFolders([]);
+      // When no main folder is selected, fetch root folders
+      fetchSubFolders('', false, true);
     }
   };
 
@@ -1084,9 +1088,11 @@ const FileManager = () => {
     setSelectedDestination(value); // Set the destination to the main folder by default
 
     if (value) {
-      fetchSubFolders(value, true);
+      // When a main folder is selected, fetch its subfolders
+      fetchSubFolders(value, true, false);
     } else {
-      setCopySubFolders([]);
+      // When no main folder is selected, fetch root folders
+      fetchSubFolders('', true, true);
     }
   };
 
@@ -1147,14 +1153,15 @@ const FileManager = () => {
     setSelectedSubFolder('');
     setSubFolders([]);
     setMoveModalVisible(true);
+    
+    // Initialize with root folders if at top level
+    fetchSubFolders('', false, true);
   };
 
   const handleMoveConfirm = async () => {
     if (!moveDestination?.trim()) {
       message.error('Please select a destination folder');
-      return;
     }
-
     if (!moveItem) {
       message.error('No item selected to move');
       return;
@@ -1200,9 +1207,68 @@ const FileManager = () => {
     }
   };
 
+  // Helper function to clean up after move operations
+  const completeMoveCleanup = () => {
+    setMoveModalVisible(false);
+    setMoveDestination('');
+    setMoveItem(null);
+
+    // Refresh both current folder and folder tree
+    fetchItems();
+    fetchFolderTree();
+  };
+
   const finalizeMove = async (overwrite) => {
     try {
       if (moveItem.type === 'directory') {
+        // Check if a folder with the same name exists at the destination
+        try {
+          const destinationFoldersRes = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(moveDestination)}`,
+            { withCredentials: true }
+          );
+          
+          const destinationFolders = (destinationFoldersRes.data || [])
+            .filter(item => item.type === 'directory')
+            .map(folder => folder.name);
+            
+          const folderExists = destinationFolders.includes(moveItem.name);
+          
+          if (folderExists) {
+            // Show specific message for folder conflict (can't merge automatically)
+            Modal.confirm({
+              title: 'Folder with same name exists',
+              content: `A folder named '${moveItem.name}' already exists in the destination. Do you want to merge the contents?`,
+              okText: 'Merge contents',
+              cancelText: 'Cancel',
+              onOk: async () => {
+                try {
+                  // Use special merge parameter
+                  await axios.post(
+                    `${BASE_URL}/directory/move`,
+                    {
+                      name: moveItem.name,
+                      old_parent: currentPath,
+                      new_parent: moveDestination,
+                      merge: true
+                    },
+                    { withCredentials: true }
+                  );
+                  message.success(`Merged '${moveItem.name}' into ${moveDestination}/${moveItem.name}`); 
+                  completeMoveCleanup();
+                } catch (mergeErr) {
+                  console.error('Error merging folders:', mergeErr);
+                  message.error(mergeErr.response?.data?.error || 'Error merging folders');
+                }
+              }
+            });
+            return;
+          }
+        } catch (checkErr) {
+          console.error('Error checking for existing folders:', checkErr);
+          // Continue with the move if we cannot check for conflicts
+        }
+        
+        // Regular folder move (when no conflicts)
         await axios.post(
           `${BASE_URL}/directory/move`,
           {
