@@ -481,14 +481,38 @@ const FileManager = () => {
       message.error('Please select files first');
       return;
     }
-    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
+    const allowedExtensions = [
+      // Word documents
+      '.doc', '.docx',
+      // Excel spreadsheets
+      '.xls', '.xlsx',
+      // PowerPoint presentations
+      '.ppt', '.pptx',
+      // PDF documents
+      '.pdf',
+      // Image formats
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif'
+    ];
+  
     const allowedTypes = [
-      'application/pdf',
+      // Word documents
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      // Excel spreadsheets
       'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    ];
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      // PowerPoint presentations
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      // PDF documents
+      'application/pdf',
+      // Image formats
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/bmp',
+      'image/tiff'
+    ];  
 
     for (const file of uploadingFile) {
       const ext = path.extname(file.name).toLowerCase();
