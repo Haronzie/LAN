@@ -68,39 +68,64 @@ function formatFileSize(size) {
 }
 
 const OperationDashboard = () => {
+  // Core state variables
   const [currentPath, setCurrentPath] = useState('Operation');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // For backward compatibility
   const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
+
+  // Search related variables
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [createFolderModal, setCreateFolderModal] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
-  const [renameModalVisible, setRenameModalVisible] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [renameNewName, setRenameNewName] = useState('');
-  const [copyModalVisible, setCopyModalVisible] = useState(false);
-  const [copyItem, setCopyItem] = useState(null);
-  const [copyNewName, setCopyNewName] = useState('');
-  const [selectedDestination, setSelectedDestination] = useState('');
-  const [moveModalVisible, setMoveModalVisible] = useState(false);
-  const [moveItem, setMoveItem] = useState(null);
-  const [moveDestination, setMoveDestination] = useState('');
+  const [searchDebounceTimer, setSearchDebounceTimer] = useState(null);
+
+  // Operation related variables
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [isCopying, setIsCopying] = useState(false);
+  const [isMoving, setIsMoving] = useState(false);
+  const [selectedItemForMenu, setSelectedItemForMenu] = useState(null);
+  const [directories, setDirectories] = useState([]);
+
+  // User related variables
+  const [currentUser, setCurrentUser] = useState('');
+
+  // Folder selection related variables
   const [selectedMainFolder, setSelectedMainFolder] = useState('');
   const [selectedSubFolder, setSelectedSubFolder] = useState('');
   const [subFolders, setSubFolders] = useState([]);
-  const [currentUser, setCurrentUser] = useState('');
-  const [directories, setDirectories] = useState([]);
+
+  // Move operation variables
+  const [moveItem, setMoveItem] = useState(null);
+  const [moveDestination, setMoveDestination] = useState('');
+
+  // Modal related variables
+  const [moveModalVisible, setMoveModalVisible] = useState(false);
+  const [copyModalVisible, setCopyModalVisible] = useState(false);
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [createFolderModal, setCreateFolderModal] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+
+  // Selected items and form values
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedDestination, setSelectedDestination] = useState('');
+  const [copyItem, setCopyItem] = useState(null);
+  const [copyNewName, setCopyNewName] = useState('');
+  const [renameNewName, setRenameNewName] = useState('');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [selectedFileInfo, setSelectedFileInfo] = useState(null);
+
+  // Other functionality
   const [uploadingFiles, setUploadingFiles] = useState([]);
   const [fileMessages, setFileMessages] = useState({});
+  const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [hideDone, setHideDone] = useState(false);
-  const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
   const [ws, setWs] = useState(null);
-  const [infoModalVisible, setInfoModalVisible] = useState(false);
-  const [selectedFileInfo, setSelectedFileInfo] = useState(null);
+
+  // Selection related
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -494,7 +519,7 @@ const OperationDashboard = () => {
   };
 
   const fetchItems = async () => {
-    setLoading(true);
+    setIsLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
 
@@ -534,7 +559,7 @@ const OperationDashboard = () => {
       console.error('Error loading items:', error);
       message.error('Failed to fetch files or folders.');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -570,35 +595,34 @@ const OperationDashboard = () => {
       const queryStr = String(query).trim();
       console.log('Searching for:', queryStr, 'in current path:', currentPath);
       
-      // If we're inside a specific folder within Operation, do client-side filtering
-      // This works better for numeric searches in the current folder
-      if (currentPath !== 'Operation') {
-        const filteredItems = items.filter(item => {
-          const itemNameStr = String(item.name || '').toLowerCase();
-          const searchTermStr = queryStr.toLowerCase();
-          return itemNameStr.includes(searchTermStr);
-        });
+      // Log available items to help with debugging
+      console.log('Available items for search:', items.map(item => item?.name || 'unnamed'));
+      
+      // Better string normalization for search
+      const searchTermStr = queryStr.toLowerCase();
+      
+      // Fixed filtering that properly handles numeric filenames and hyphens
+      const filteredItems = items.filter(item => {
+        // Skip items without names
+        if (!item || !item.name) return false;
         
-        setSearchResults(filteredItems);
-        console.log(`🔍 Client-side search found ${filteredItems.length} results`);
-        setSearchLoading(false);
-        return;
-      }
+        // Always convert item name to string to handle numeric filenames
+        const itemNameStr = String(item.name);
+        
+        // Use simple includes for most accurate matching with lowercase
+        return itemNameStr.toLowerCase().includes(searchTermStr);
+      });
       
-      // For searching in the main Operation folder, use the server API
-      // Build the search URL with the main folder parameter for Operation
-      const searchUrl = `${BASE_URL}/search?q=${encodeURIComponent(queryStr)}&main_folder=Operation`;
-      console.log('Searching with URL:', searchUrl);
+      // Log search results for debugging
+      console.log(`Search results for "${queryStr}": `, filteredItems.map(i => i.name));
       
-      const response = await axios.get(searchUrl, { withCredentials: true });
-
-      // Format the search results
-      const formattedResults = (response.data || []).map(item => ({
+      // Set results with proper formatting
+      const formattedResults = filteredItems.map(item => ({
         ...item,
         formattedSize: formatFileSize(item.size || 0),
       }));
-
-      // Sort the results: directories first (in ascending order), then files (in ascending order)
+      
+      // Sort the results: directories first, then files (both in ascending order)
       const sortedResults = [...formattedResults].sort((a, b) => {
         // If types are different (directory vs file)
         if (a.type !== b.type) {
@@ -608,9 +632,9 @@ const OperationDashboard = () => {
         // If types are the same, sort alphabetically by name
         return a.name.localeCompare(b.name);
       });
-
+      
       setSearchResults(sortedResults);
-      console.log(`🔍 Search found ${sortedResults.length} results`);
+      console.log(`🔍 Client-side search found ${sortedResults.length} results`);
     } catch (error) {
       console.error('Search error:', error);
       message.error('Error performing search');
@@ -632,11 +656,19 @@ const OperationDashboard = () => {
     const value = e.target.value;
     setSearchTerm(value);
     
-    // If we're inside a folder and user types a search term, we need to directly perform a search
-    // This fixes the issue with searching for numeric values in subfolders
-    if (value.trim() && currentPath !== 'Operation') {
-      performSearch(value);
+    // Immediately search as user types regardless of folder
+    // This ensures all searches work and results are immediate
+    if (value.trim()) {
+      // Add a small debounce to prevent too many searches while typing
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+      
+      const timer = setTimeout(() => {
+        performSearch(value);
+      }, 100); // Short delay for better performance while typing
+      
+      setSearchDebounceTimer(timer);
     } else if (!value.trim()) {
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
       setIsSearching(false);
       setSearchResults([]);
     }
