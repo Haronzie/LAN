@@ -129,6 +129,7 @@ const CommonModals = ({
               treeDefaultExpandAll
               allowClear
               onChange={setSelectedDestination}
+              notFoundContent={<span style={{ color: '#888' }}>No data</span>}
             />
           </Form.Item>
         </Form>
