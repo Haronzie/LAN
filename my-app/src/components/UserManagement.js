@@ -17,6 +17,7 @@ import { batchDeleteUsers } from '../utils/batchOperations';
 const { Content } = Layout;
 
 // Using relative URLs - proxy in package.json will handle the backend URL
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 // Password policy text from your RegisterForm
 const passwordPolicyContent = (
@@ -65,8 +66,8 @@ const UserManagement = () => {
     try {
       // Get users list
       const [usersRes, firstAdminRes] = await Promise.all([
-        axios.get('/users', { withCredentials: true }),
-        axios.get('/admin-exists', { withCredentials: true })
+        axios.get(`${BASE_URL}/users`, { withCredentials: true }),
+        axios.get(`${BASE_URL}/admin-exists`, { withCredentials: true }) // <-- fixed here
       ]);
       
       setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
@@ -74,7 +75,7 @@ const UserManagement = () => {
       // Get the first admin information if admin exists
       if (firstAdminRes.data.exists) {
         try {
-          const firstAdminInfo = await axios.get('/get-first-admin', { withCredentials: true });
+          const firstAdminInfo = await axios.get(`${BASE_URL}/get-first-admin`, { withCredentials: true });
           setFirstAdmin(firstAdminInfo.data);
         } catch (adminError) {
           console.error('Error fetching first admin:', adminError);
@@ -133,7 +134,7 @@ const UserManagement = () => {
       cancelText: 'No',
       onOk: async () => {
         try {
-          await axios.post('/revoke-admin', { username }, { withCredentials: true });
+          await axios.post(`${BASE_URL}/revoke-admin`, { username }, { withCredentials: true });
           message.success(`Admin privileges revoked from '${username}'`);
           fetchUsers();
         } catch (error) {
@@ -150,7 +151,7 @@ const UserManagement = () => {
     try {
       const values = await addUserForm.validateFields();
       await axios.post(
-        '/user/add',
+        `${BASE_URL}/user/add`,
         { username: values.username, password: values.password },
         { withCredentials: true }
       );
@@ -175,7 +176,7 @@ const UserManagement = () => {
       cancelText: 'No',
       onOk: async () => {
         try {
-          await axios.delete('/user/delete', {
+        await axios.delete(`${BASE_URL}/user/delete`, {
             data: { username },
             withCredentials: true
           });
@@ -205,7 +206,7 @@ const UserManagement = () => {
     try {
       const values = await updateForm.validateFields();
       await axios.put(
-        '/user/update',
+        `${BASE_URL}/user/update`,
         {
           old_username: values.old_username,
           new_username: values.new_username,
@@ -232,7 +233,7 @@ const UserManagement = () => {
   // Handler for promoting a user to admin
   const handleAssignAdmin = async (username) => {
     try {
-      await axios.post('/assign-admin', { username }, { withCredentials: true });
+      await axios.post(`${BASE_URL}/assign-admin`, { username }, { withCredentials: true });
       message.success(`User '${username}' is now an admin`);
       fetchUsers();
     } catch (error) {

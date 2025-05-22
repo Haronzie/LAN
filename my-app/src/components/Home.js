@@ -7,6 +7,7 @@ import './Home.css';
 const { Header, Content, Footer } = Layout;
 const { Title, Paragraph } = Typography;
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 const Home = () => {
   const [adminExists, setAdminExists] = useState(false);
@@ -16,7 +17,7 @@ const Home = () => {
     const checkAdmin = async () => {
       try {
         // Use relative URL - the proxy in package.json will handle the backend URL
-        const res = await axios.get('/admin-exists', { 
+        const res = await axios.get(`${BASE_URL}/admin-exists`, { 
           withCredentials: true
         });
         setAdminExists(res.data.exists);

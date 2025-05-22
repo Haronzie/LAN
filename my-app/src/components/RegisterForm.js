@@ -6,7 +6,8 @@ import { useNavigate } from 'react-router-dom';
 
 const { Title } = Typography;
 
-// Using relative URLs - proxy in package.json will handle the backend URL
+// Define consistent BASE_URL
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 const passwordPolicyContent = (
   <div style={{ maxWidth: 250 }}>
@@ -49,12 +50,15 @@ const RegisterForm = () => {
 
   const onFinish = async (values) => {
     try {
-      const res = await axios.post('/register', values, { 
-        withCredentials: true 
+      const res = await axios.post(`${BASE_URL}/register`, values, { 
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       message.success(res.data.message);
       // Automatically log in after registration
-      await axios.post('/login', {
+      await axios.post(`${BASE_URL}/login`, {
         username: values.username,
         password: values.password
       }, { 

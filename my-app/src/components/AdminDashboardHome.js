@@ -6,6 +6,7 @@ import { UserOutlined, FileOutlined, TeamOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
 const { Text, Title } = Typography;
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 const AdminDashboardHome = () => {
   const [users, setUsers] = useState([]);
@@ -55,7 +56,7 @@ const AdminDashboardHome = () => {
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
-      const res = await axios.get('/users', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -68,7 +69,7 @@ const AdminDashboardHome = () => {
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get('/files', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/files`, { withCredentials: true });
       setFiles(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching files:', error);
@@ -80,7 +81,7 @@ const AdminDashboardHome = () => {
 
   const fetchAuditLogs = async () => {
     try {
-      const res = await axios.get('/auditlogs', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/auditlogs`, { withCredentials: true });
       setAuditLogs(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching audit logs:', error);
@@ -90,7 +91,7 @@ const AdminDashboardHome = () => {
 
   const fetchActivities = async () => {
     try {
-      const res = await axios.get('/activities', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/activities`, { withCredentials: true });
       setActivities(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching activities:', error);
