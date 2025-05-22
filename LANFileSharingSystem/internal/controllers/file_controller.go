@@ -474,7 +474,7 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	fc.App.LogAudit(user.Username, fr.ID, "DELETE", fmt.Sprintf("File '%s' deleted", fr.FileName))
 
 	fullPath := filepath.Join("Cdrrmo", fr.FilePath)
-	log.Printf("🗑 Deleting file from disk: '%s'", fullPath)
+	log.Printf("[DeleteFile] Deleting file from disk: '%s' (this is a real delete)", fullPath)
 
 	if removeErr := os.Remove(fullPath); removeErr != nil && !os.IsNotExist(removeErr) {
 		log.Printf("❌ Error removing file from disk: %v", removeErr)
@@ -634,6 +634,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	srcPath := filepath.Join("Cdrrmo", oldFR.FilePath)
+	log.Printf("[CopyFile] Source file (should not be deleted): %s", srcPath)
 
 	finalName := req.NewFileName
 	if finalName == "" {
@@ -663,8 +664,16 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if req.Overwrite {
-			// Overwrite: delete file on disk and DB record
+			// Check for self-overwrite (source and destination are the same file)
+			if existingFR.FilePath == oldFR.FilePath {
+				log.Printf("[CopyFile] ERROR: Attempted to overwrite a file with itself: %s", existingFR.FilePath)
+				models.RespondError(w, http.StatusBadRequest, "Cannot overwrite a file with itself. Operation cancelled.")
+				return
+			}
+			// Overwrite: delete destination file and DB record only if different from source
+			log.Printf("[CopyFile] Overwriting: deleting destination file on disk: %s", filepath.Join("Cdrrmo", existingFR.FilePath))
 			_ = os.Remove(filepath.Join("Cdrrmo", existingFR.FilePath))
+			log.Printf("[CopyFile] Deleting DB file versions and record for file ID %d, path %s", existingFR.ID, existingFR.FilePath)
 			_ = fc.App.DeleteFileVersions(existingFR.ID)
 			_, _ = fc.App.DeleteFileRecordByPath(existingFR.FilePath)
 			break
@@ -675,9 +684,11 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 
 	in, err := os.Open(srcPath)
 	if err != nil {
+		log.Printf("[CopyFile] ERROR: Failed to open source file '%s': %v", srcPath, err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to open source file")
 		return
 	}
+	log.Printf("[CopyFile] Opened source file: %s", srcPath)
 	defer in.Close()
 
 	if _, err := os.Stat(dstPath); err == nil && !req.Overwrite {
@@ -687,15 +698,19 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 
 	out, err := os.Create(dstPath)
 	if err != nil {
+		log.Printf("[CopyFile] ERROR: Failed to create target file '%s': %v", dstPath, err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to create target file")
 		return
 	}
+	log.Printf("[CopyFile] Created target file: %s", dstPath)
 	defer out.Close()
 
 	if _, err := io.Copy(out, in); err != nil {
+		log.Printf("[CopyFile] ERROR: Failed to copy file content from '%s' to '%s': %v", srcPath, dstPath, err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to copy file content")
 		return
 	}
+	log.Printf("[CopyFile] Copied content from '%s' to '%s'", srcPath, dstPath)
 
 	newRecord := models.FileRecord{
 		FileName:    finalName,
@@ -708,10 +723,11 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 
 	if err := fc.App.CreateFileRecord(newRecord); err != nil {
 		os.Remove(dstPath)
-		log.Printf("DB insert failed: %+v", err)
+		log.Printf("[CopyFile] ERROR: DB insert failed for new file record %+v: %v", newRecord, err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to save file record")
 		return
 	}
+	log.Printf("[CopyFile] Inserted new file record: %+v", newRecord)
 
 	newFileID, err := fc.App.GetFileIDByPath(newRelativePath)
 	if err == nil && newFileID > 0 {

@@ -120,24 +120,16 @@ const CommonModals = ({
             />
           </Form.Item>
           <Form.Item label="Destination Folder (Optional)">
-            <Select
+            <TreeSelect
               style={{ width: '100%' }}
-              placeholder="Select a folder or leave blank"
               value={selectedDestination}
-              onChange={(val) => setSelectedDestination(val)}
+              dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
+              treeData={folderTreeData}
+              placeholder="Select destination folder (recursively)"
+              treeDefaultExpandAll
               allowClear
-              showSearch
-              optionFilterProp="children"
-            >
-              {/* Always show main folders as possible destinations */}
-              {['Operation', 'Research', 'Training'].sort().map(folder => (
-                <Option key={folder} value={folder}>
-                  {folder}
-                </Option>
-              ))}
-              {/* Show all subfolders recursively as options */}
-              {getAllSubfolderOptions(folderTreeData)}
-            </Select>
+              onChange={setSelectedDestination}
+            />
           </Form.Item>
         </Form>
       </Modal>

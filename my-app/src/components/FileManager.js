@@ -942,18 +942,15 @@ const FileManager = () => {
       message.error('No item selected to copy');
       return;
     }
-    if (!copySelectedMainFolder) {
-      message.error('Please select a main folder');
-      return;
+    // Use selectedDestination if set, otherwise build from main/sub folder
+    let destinationPath = selectedDestination || copySelectedMainFolder;
+    if (!selectedDestination && copySelectedSubFolder) {
+      destinationPath = `${destinationPath}/${copySelectedSubFolder}`;
     }
+    // Normalize path for safety (remove duplicate slashes)
+    destinationPath = destinationPath.replace(/\\+/g, '/');
 
     try {
-      // Determine the destination path based on main folder and subfolder
-      let destinationPath = copySelectedMainFolder;
-      if (copySelectedSubFolder) {
-        destinationPath = `${copySelectedMainFolder}/${copySelectedSubFolder}`;
-      }
-
       // For files, check if a file with the same name already exists at the destination
       if (copyItem.type === 'file') {
         const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(destinationPath)}`, {
@@ -962,6 +959,7 @@ const FileManager = () => {
 
         const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
         const nameExists = existingNames.includes(copyNewName);
+        console.log('[Copy] Checking for conflicts in:', destinationPath, 'Existing:', existingNames, 'Name to copy:', copyNewName);
 
         if (nameExists) {
           // Import dynamically to avoid circular dependencies
@@ -994,13 +992,14 @@ const FileManager = () => {
     }
   };
 
+  // Finalize copy operation
   const finalizeCopy = async (overwrite) => {
     try {
-      // Determine the destination path based on main folder and subfolder
-      let destinationPath = copySelectedMainFolder;
-      if (copySelectedSubFolder) {
-        destinationPath = `${copySelectedMainFolder}/${copySelectedSubFolder}`;
+      let destinationPath = selectedDestination || copySelectedMainFolder;
+      if (!selectedDestination && copySelectedSubFolder) {
+        destinationPath = `${destinationPath}/${copySelectedSubFolder}`;
       }
+      destinationPath = destinationPath.replace(/\\+/g, '/');
 
       if (copyItem.type === 'directory') {
         await axios.post(`${BASE_URL}/directory/copy`, {
@@ -1010,7 +1009,7 @@ const FileManager = () => {
           destination_parent: destinationPath
         }, { withCredentials: true });
 
-        message.success(`Copied ${copyItem.name} to ${copySelectedMainFolder}${copySelectedSubFolder ? '/' + copySelectedSubFolder : ''}`);
+        message.success(`Copied ${copyItem.name} to ${destinationPath}`);
         fetchFolderTree();
       } else {
         await axios.post(`${BASE_URL}/copy-file`, {

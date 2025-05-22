@@ -5,7 +5,8 @@ import { Modal } from 'antd';
  * Usage: FileOperationConflictModal({ fileName, destinationPath, operation, onOverwrite, onKeepBoth, onSkip })
  */
 export default function FileOperationConflictModal({ fileName, destinationPath, operation, onOverwrite, onKeepBoth, onSkip }) {
-  Modal.confirm({
+  let modal = null;
+  modal = Modal.confirm({
     title: `A file named '${fileName}' already exists in '${destinationPath}'.`,
     content: (
       <div>
@@ -19,14 +20,28 @@ export default function FileOperationConflictModal({ fileName, destinationPath, 
     ),
     okText: 'Overwrite',
     cancelText: 'Skip',
-    onOk: onOverwrite,
-    onCancel: onSkip,
+    onOk: () => {
+      modal.destroy();
+      if (onOverwrite) onOverwrite();
+    },
+    onCancel: () => {
+      modal.destroy();
+      if (onSkip) onSkip();
+    },
     okButtonProps: { danger: true },
     afterClose: () => {},
     footer: (_, { OkBtn, CancelBtn }) => (
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <OkBtn />
-        <button type="button" className="ant-btn" onClick={onKeepBoth} style={{ marginLeft: 8 }}>
+        <button
+          type="button"
+          className="ant-btn"
+          onClick={() => {
+            modal.destroy();
+            if (onKeepBoth) onKeepBoth();
+          }}
+          style={{ marginLeft: 8 }}
+        >
           Keep Both
         </button>
         <CancelBtn />
