@@ -280,7 +280,39 @@ const FileManager = () => {
         }
       });
 
-      setFolderTreeData(data);
+      // Build a true folder tree for TreeSelect: main folders as root nodes, subfolders as children
+      function buildTree(nodes, parentPath = '') {
+        return nodes.map(node => {
+          const fullPath = parentPath ? parentPath + '/' + node.title : node.title;
+          return {
+            title: node.title, // show only the folder name
+            value: fullPath,   // full path for uniqueness
+            key: fullPath,
+            children: node.children ? buildTree(node.children, fullPath) : []
+          };
+        });
+      }
+      // Remove any duplicate flat entries: only tree structure, no flat full-paths
+      // Filter out any node whose parent is already present in the tree
+      function dedupeTree(tree) {
+        const seen = new Set();
+        function walk(nodes, parentPath = '') {
+          return nodes.filter(node => {
+            const fullPath = parentPath ? parentPath + '/' + node.title : node.title;
+            if (seen.has(fullPath)) {
+              return false;
+            }
+            seen.add(fullPath);
+            if (node.children && node.children.length > 0) {
+              node.children = walk(node.children, fullPath);
+            }
+            return true;
+          });
+        }
+        return walk(tree);
+      }
+      setFolderTreeData(dedupeTree(buildTree(data)));
+
     } catch (error) {
       console.error('Error fetching folder tree:', error);
       setFolderTreeData([
