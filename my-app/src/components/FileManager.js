@@ -67,9 +67,9 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
         const response = await axios.get(`${BASE_URL}/users?search=${value}`, { withCredentials: true });
         const data = response.data || [];
 
-        // ✅ filter out self here too if not done in map stage
+        // Filter out self and admin users
         const currentUser = (localStorage.getItem('username') || '').toLowerCase();
-        const filtered = data.filter(u => u.username.toLowerCase() !== currentUser);
+        const filtered = data.filter(u => u.username.toLowerCase() !== currentUser && u.role !== 'admin');
 
         setOptions(filtered);
 
@@ -95,7 +95,7 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
     <Select
       showSearch
       placeholder="Type to search for a user"
-      notFoundContent={fetching ? <Spin size="small" /> : null}
+      notFoundContent={fetching ? <Spin size="small" /> : options.length === 0 ? 'No users found' : null}
       onSearch={handleSearch}
       onChange={(value) => onUserSelect(value)}
       filterOption={(input, option) =>

@@ -190,7 +190,7 @@ const AdminDashboard = () => {
               />
             )}
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <NotificationDropdown />
+
               <Button type="primary" size="small" onClick={handleLogout}>
                 Logout
               </Button>
