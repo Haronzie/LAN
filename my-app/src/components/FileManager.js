@@ -323,6 +323,7 @@ const FileManager = () => {
   setIsSearching(true);
 
   try {
+    // Convert the query to string to ensure it works with numbers
     const queryStr = String(query).trim();
     console.log('Searching for:', queryStr, 'in folder:', currentPath || 'root');
 
@@ -445,8 +446,10 @@ const FileManager = () => {
       message.success('Folder created successfully');
       setCreateFolderModal(false);
       setNewFolderName('');
-      fetchItems();
-      fetchFolderTree();
+      await fetchItems();
+      await fetchFolderTree();
+      // Ensure subfolders are refreshed so the new folder is available as a move destination
+      await fetchSubFolders(currentPath, false, false);
     } catch (error) {
       console.error('Create folder error:', error);
       message.error(error.response?.data?.error || 'Error creating folder');
@@ -1997,11 +2000,11 @@ const FileManager = () => {
                   onSuccess();
                   fetchItems();
                   setUploadModalVisible(false); // Close the upload modal after successful upload
-                } catch (err) {
-                  console.error('Upload error:', err);
-                  const errorMessage = err.response?.data?.error || `${file.name} upload failed`;
+                } catch (error) {
+                  console.error('Upload failed:', error);
+                  const errorMessage = error.response?.data?.error || `Upload failed for ${file.name}`;
                   message.error(errorMessage);
-                  onError(err);
+                  onError(error);
                 }
               };
 

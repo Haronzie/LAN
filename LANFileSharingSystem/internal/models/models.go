@@ -1303,16 +1303,29 @@ func (app *App) UpdateSubdirectoryPaths(dirName, oldParent, newParent string) er
 
 // UpdateFileDirectoryPaths updates all file records in a moved directory and its subdirectories.
 func (app *App) UpdateFileDirectoryPaths(dirName, oldParent, newParent string) error {
-	// Build old and new directory prefixes
-	oldPrefix := strings.Trim(filepath.Join(oldParent, dirName), "/")
-	newPrefix := strings.Trim(filepath.Join(newParent, dirName), "/")
+	// Build old and new directory prefixes (always use forward slashes for consistency)
+	oldPrefix := strings.Trim(strings.ReplaceAll(filepath.Join(oldParent, dirName), "\\", "/"), "/")
+	newPrefix := strings.Trim(strings.ReplaceAll(filepath.Join(newParent, dirName), "\\", "/"), "/")
 
-	// Update directory and file_path for all files whose directory starts with oldPrefix
+	// Only match prefix at the start of the string
+	pattern := "^" + oldPrefix
+	likePattern := oldPrefix + "%"
+
+	// Update file_path
 	_, err := app.DB.Exec(`
 		UPDATE files
-		SET directory = regexp_replace(directory, $1, $2, 'i'),
-		    file_path = regexp_replace(file_path, $1, $2, 'i')
-		WHERE directory LIKE $3 OR file_path LIKE $3
-	`, oldPrefix, newPrefix, oldPrefix+"%")
+		SET file_path = regexp_replace(file_path, $1, $2)
+		WHERE file_path LIKE $3
+	`, pattern, newPrefix, likePattern)
+	if err != nil {
+		return err
+	}
+
+	// Update directory (for direct children and subdirectories)
+	_, err = app.DB.Exec(`
+		UPDATE files
+		SET directory = regexp_replace(directory, $1, $2)
+		WHERE directory LIKE $3
+	`, pattern, newPrefix, likePattern)
 	return err
 }

@@ -1891,6 +1891,7 @@ func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Requ
 	result, err := fc.App.DB.Exec("DELETE FROM file_messages WHERE file_id = $1", fileIDInt)
 	if err != nil {
 		log.Printf("Error deleting file messages: %v", err)
+
 		// Continue with file deletion even if message deletion fails
 	}
 	rowsAffected, err = result.RowsAffected()
@@ -1899,7 +1900,7 @@ func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Requ
 		models.RespondError(w, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// Log the number of messages deleted
 	log.Printf("Deleted %d messages for file ID %s", rowsAffected, fileID)
 
@@ -1926,7 +1927,7 @@ func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Requ
 		log.Printf("Error deleting file messages: %v", err)
 		// Continue with file deletion even if message deletion fails
 	}
-	
+
 	// Get number of messages deleted (for logging)
 	msgRowsAffected := int64(0)
 	if msgResult != nil {
@@ -1943,7 +1944,7 @@ func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Requ
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file record")
 		return
 	}
-	
+
 	// Commit the transaction
 	err = tx.Commit()
 	if err != nil {
@@ -1951,12 +1952,10 @@ func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Requ
 		models.RespondError(w, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// Log the successful deletion and message cleanup
 	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file ID %s and cleaned up %d associated messages",
 		user.Username, fileID, msgRowsAffected))
-
-
 
 	// Send success response
 	models.RespondJSON(w, http.StatusOK, map[string]interface{}{
@@ -1978,10 +1977,12 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	// Get search query and preserve numbers (don't convert numbers to lowercase)
 	rawQ := strings.TrimSpace(r.URL.Query().Get("q"))
 	if rawQ == "" {
+		log.Printf("❌ Search query is empty after trimming: '%s'", r.URL.Query().Get("q"))
 		models.RespondError(w, http.StatusBadRequest, "Search query is required")
 		return
 	}
-	
+	log.Printf("🔍 Incoming search query: '%s' (raw), '%s' (trimmed)", r.URL.Query().Get("q"), rawQ)
+
 	// Create a case-insensitive version for text matching but preserve the original value
 	// This ensures numbers are not affected by lowercase conversion
 	q := strings.ToLower(rawQ)
@@ -1993,6 +1994,8 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	// Create pattern for both the lowercase version (for text) and the raw version (for numbers)
 	pattern := "%" + q + "%"
 	rawPattern := "%" + rawQ + "%"
+	log.Printf("🧪 DEBUG - SQL LIKE patterns: lowercase='%s', raw='%s'", pattern, rawPattern)
+
 	var rows *sql.Rows
 	var err error
 
@@ -2000,7 +2003,7 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		// Search in a specific main folder and all its subfolders
 		log.Printf("🔍 Searching for '%s' in main folder '%s' and all its subfolders", q, mainFolder)
 
-		// Use LIKE pattern to match the main folder and any subfolder
+		// Use LIKE pattern to match the main folder and any subdirectory
 		folderPattern := mainFolder + "%"
 
 		rows, err = fc.App.DB.Query(
@@ -2034,7 +2037,7 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
              ORDER BY directory, file_name`,
 			pattern, rawPattern,
 		)
-		
+
 		// Debug log for troubleshooting
 		log.Printf("🧪 DEBUG - Search parameters: lowercase='%s', raw='%s'", pattern, rawPattern)
 	}

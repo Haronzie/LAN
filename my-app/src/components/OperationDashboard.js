@@ -633,6 +633,7 @@ const OperationDashboard = () => {
     setIsSearchingRecursively(currentPath !== 'Operation');
 
     try {
+      // Convert the query to string to ensure it works with numbers
       const queryStr = String(query).trim().toLowerCase();
       console.log('Searching for:', queryStr, 'in path:', currentPath);
       

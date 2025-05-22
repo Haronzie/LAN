@@ -57,7 +57,11 @@ const CommonModals = ({
   container,
 
   // New prop for folder tree data
-  folderTreeData
+  folderTreeData,
+
+  // New props for copy subfolders
+  forCopy,
+  copySubFolders,
 }) => {
   return (
     <>
@@ -122,6 +126,8 @@ const CommonModals = ({
               value={selectedDestination}
               onChange={(val) => setSelectedDestination(val)}
               allowClear
+              showSearch
+              optionFilterProp="children"
             >
               {/* Always show main folders as possible destinations */}
               {['Operation', 'Research', 'Training'].sort().map(folder => (
@@ -129,17 +135,8 @@ const CommonModals = ({
                   {folder}
                 </Option>
               ))}
-              {/* Then show subfolders of the current path, if any */}
-              {directoryItems && directoryItems
-                .filter((item) => item.type === 'directory' && !['Operation', 'Research', 'Training'].includes(item.name))
-                .map((folder) => {
-                  const folderPath = path.join(currentPath, folder.name);
-                  return (
-                    <Option key={folderPath} value={folderPath}>
-                      {folder.name}
-                    </Option>
-                  );
-                })}
+              {/* Show all subfolders recursively as options */}
+              {getAllSubfolderOptions(folderTreeData)}
             </Select>
           </Form.Item>
         </Form>
@@ -212,5 +209,22 @@ const CommonModals = ({
     </>
   );
 };
+
+// Helper function to flatten folder tree for Select options
+function getAllSubfolderOptions(tree, parentPath = '') {
+  if (!tree || !Array.isArray(tree)) return null;
+  return tree.flatMap(node => {
+    const fullPath = parentPath ? `${parentPath}/${node.title || node.value}` : (node.title || node.value);
+    // Exclude main folders (already shown at the top)
+    const isMain = ['Operation', 'Research', 'Training'].includes(node.title || node.value);
+    const option = !isMain ? [
+      <Option key={fullPath} value={fullPath}>{fullPath}</Option>
+    ] : [];
+    if (node.children && node.children.length > 0) {
+      return [...option, ...getAllSubfolderOptions(node.children, fullPath)];
+    }
+    return option;
+  });
+}
 
 export default CommonModals;
