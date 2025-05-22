@@ -281,16 +281,30 @@ const FileManager = () => {
       });
 
       // Build a true folder tree for TreeSelect: main folders as root nodes, subfolders as children
+      // Exclude the folder being moved (and its children) from the destination tree
       function buildTree(nodes, parentPath = '') {
-        return nodes.map(node => {
-          const fullPath = parentPath ? parentPath + '/' + node.title : node.title;
-          return {
-            title: node.title, // show only the folder name
-            value: fullPath,   // full path for uniqueness
-            key: fullPath,
-            children: node.children ? buildTree(node.children, fullPath) : []
-          };
-        });
+        return nodes
+          .filter(node => {
+            // Exclude the folder being moved (and its children)
+            if (moveModalVisible && moveItem && moveItem.type === 'directory') {
+              const movingFolderPath = currentPath ? currentPath + '/' + moveItem.name : moveItem.name;
+              const fullPath = parentPath ? parentPath + '/' + node.title : node.title;
+              // Exclude the folder itself and any of its descendants
+              if (fullPath === movingFolderPath || fullPath.startsWith(movingFolderPath + '/')) {
+                return false;
+              }
+            }
+            return true;
+          })
+          .map(node => {
+            const fullPath = parentPath ? parentPath + '/' + node.title : node.title;
+            return {
+              title: node.title, // show only the folder name
+              value: fullPath,   // full path for uniqueness
+              key: fullPath,
+              children: node.children ? buildTree(node.children, fullPath) : []
+            };
+          });
       }
       // Remove any duplicate flat entries: only tree structure, no flat full-paths
       // Filter out any node whose parent is already present in the tree
