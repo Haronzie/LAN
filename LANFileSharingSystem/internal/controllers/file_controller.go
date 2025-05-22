@@ -823,13 +823,17 @@ func (fc *FileController) ListAllFiles(w http.ResponseWriter, r *http.Request) {
 
 // MoveFile handles moving a file from one folder to another.
 func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[MoveFile] Handler called. Method: %s", r.Method)
 	if r.Method != http.MethodPost {
+		log.Printf("[MoveFile] Invalid method: %s", r.Method)
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
 		return
 	}
 
+	log.Printf("[MoveFile] Attempting to get user from session")
 	user, err := fc.App.GetUserFromSession(r)
 	if err != nil {
+		log.Printf("[MoveFile] Not authenticated: %v", err)
 		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
@@ -837,12 +841,14 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID        string `json:"id"`
 		NewParent string `json:"new_parent"`
-		OldParent string `json:"old_parent"` // add this line
-		Filename  string `json:"filename"`   // and this line
+		OldParent string `json:"old_parent"`
+		Filename  string `json:"filename"`
 		Overwrite bool   `json:"overwrite"`
 	}
 
+	log.Printf("[MoveFile] Decoding request body")
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[MoveFile] Invalid request body: %v", err)
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
@@ -851,22 +857,26 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	req.OldParent = strings.TrimSpace(req.OldParent)
 	req.NewParent = strings.TrimSpace(req.NewParent)
 
+	log.Printf("[MoveFile] Parsed request: id=%s, filename=%s, old_parent=%s, new_parent=%s, overwrite=%v", req.ID, req.Filename, req.OldParent, req.NewParent, req.Overwrite)
+
 	if req.Filename == "" || req.NewParent == "" {
+		log.Printf("[MoveFile] Missing filename or new_parent")
 		models.RespondError(w, http.StatusBadRequest, "Filename and new parent folder are required")
 		return
 	}
 
-	// Build full relative and disk paths
 	id, err := strconv.Atoi(req.ID)
 	if err != nil {
-		// handle the error, e.g., return a 400 Bad Request
+		log.Printf("[MoveFile] Invalid ID format: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid ID format"})
-
+		return
 	}
 
+	log.Printf("[MoveFile] Getting file record by ID: %d", id)
 	fr, err := fc.App.GetFileRecordByID(id)
 	if err != nil {
+		log.Printf("[MoveFile] File not found in database for id %d: %v", id, err)
 		models.RespondError(w, http.StatusNotFound, "File not found in database")
 		return
 	}
@@ -880,18 +890,18 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	newRelativePath := filepath.Join(req.NewParent, finalName)
 	newFullPath := filepath.Join("Cdrrmo", newRelativePath)
 
+	log.Printf("[MoveFile] Checking for existing file at new location: %s", newRelativePath)
 	existingFR, err := fc.App.GetFileRecordByPath(newRelativePath)
 	if err == nil {
 		if req.Overwrite {
+			log.Printf("[MoveFile] Overwriting existing file: %s", existingFR.FilePath)
 			_ = os.Remove(filepath.Join("Cdrrmo", existingFR.FilePath))
 			_ = fc.App.DeleteFileVersions(existingFR.ID)
 
 			_, deleteErr := fc.App.DeleteFileRecordByPath(existingFR.FilePath)
 			if deleteErr != nil {
-				log.Printf("Warning: failed to delete existing file record: %v", deleteErr)
+				log.Printf("[MoveFile] Warning: failed to delete existing file record: %v", deleteErr)
 			}
-
-			log.Printf("Overwriting existing file: %s", existingFR.FilePath)
 		} else {
 			attempt := 1
 			for {
@@ -902,6 +912,7 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 					finalName = tempName
 					newRelativePath = tempRelPath
 					newFullPath = full
+					log.Printf("[MoveFile] Using new filename to avoid conflict: %s", finalName)
 					break
 				}
 				attempt++
@@ -909,25 +920,31 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Safety: check if original file exists
+	log.Printf("[MoveFile] Checking if original file exists: %s", oldFullPath)
 	if _, err := os.Stat(oldFullPath); os.IsNotExist(err) {
+		log.Printf("[MoveFile] Source file does not exist on disk: %s", oldFullPath)
 		models.RespondError(w, http.StatusNotFound, "Source file does not exist on disk")
 		return
 	}
 
+	log.Printf("[MoveFile] Ensuring destination folder exists: %s", filepath.Dir(newFullPath))
 	if err := os.MkdirAll(filepath.Dir(newFullPath), 0755); err != nil {
+		log.Printf("[MoveFile] Failed to create destination folder: %v", err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to create destination folder")
 		return
 	}
 
+	log.Printf("[MoveFile] Moving file from %s to %s", oldFullPath, newFullPath)
 	if err := os.Rename(oldFullPath, newFullPath); err != nil {
+		log.Printf("[MoveFile] Failed to move file on disk: %v", err)
 		models.RespondError(w, http.StatusInternalServerError, "Failed to move file on disk")
 		return
 	}
 
-	// Remove the old file record and create a new one
+	log.Printf("[MoveFile] Removing old file record: %s", oldRelativePath)
 	_, _ = fc.App.DeleteFileRecordByPath(oldRelativePath)
 
+	log.Printf("[MoveFile] Creating new file record for: %s", newRelativePath)
 	newRecord := models.FileRecord{
 		FileName:    finalName,
 		FilePath:    newRelativePath,
@@ -938,6 +955,7 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := fc.App.CreateFileRecord(newRecord); err != nil {
+		log.Printf("[MoveFile] Error saving new file record: %v", err)
 		// Rollback
 		_ = os.Rename(newFullPath, oldFullPath)
 		models.RespondError(w, http.StatusInternalServerError, "Error saving new file record")
@@ -949,6 +967,7 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	fc.App.LogAudit(user.Username, newID, "MOVE", fmt.Sprintf("Moved file from '%s' to '%s'", oldRelativePath, newRelativePath))
 	fc.App.LogActivity(fmt.Sprintf("User '%s' moved file from '%s' to '%s'", user.Username, oldRelativePath, newRelativePath))
 
+	log.Printf("[MoveFile] Successfully moved '%s' to folder '%s' (final name: %s)", fr.FileName, req.NewParent, finalName)
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message":    fmt.Sprintf("Moved '%s' to folder '%s'", finalName, req.NewParent),
 		"final_name": finalName,

@@ -1128,6 +1128,8 @@ const FileManager = () => {
     }
   };
 
+
+
   // Handler functions for copy operation
   const handleCopyMainFolderChange = (value) => {
     setCopySelectedMainFolder(value);
@@ -1194,75 +1196,103 @@ const FileManager = () => {
       }
     }
 
+    console.log('[Move] handleMove called', record);
     setMoveItem(record);
     setMoveDestination('');
     setSelectedMainFolder('');
     setSelectedSubFolder('');
     setSubFolders([]);
     setMoveModalVisible(true);
-    
-    // Initialize with root folders if at top level
-    fetchSubFolders('', false, true);
-  };
+  } // <--- Added the missing closing brace here
 
   const handleMoveConfirm = async () => {
+    console.log('[Move] handleMoveConfirm called', { moveItem, moveDestination });
     if (!moveDestination?.trim()) {
       message.error('Please select a destination folder');
+      return;
     }
     if (!moveItem) {
       message.error('No item selected to move');
       return;
     }
-
+    if (!moveModalVisible) {
+      console.warn('[Move] handleMoveConfirm called but moveModalVisible is false');
+    }
     try {
+      let conflictChecked = false;
       if (moveItem.type === 'file') {
-        const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
-          withCredentials: true
-        });
-
-        const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
-        const nameExists = existingNames.includes(moveItem.name);
-
-        if (nameExists) {
-          // Import dynamically to avoid circular dependencies
-          const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
-
-          FileOperationConflictModal({
-            fileName: moveItem.name,
-            destinationPath: moveDestination,
-            operation: 'move',
-            onOverwrite: async () => {
-              await finalizeMove(true);
-            },
-            onKeepBoth: async () => {
-              await finalizeMove(false);
-            },
-            onSkip: () => {
-              message.info(`Skipped moving ${moveItem.name}`);
-              setMoveModalVisible(false);
-            }
+        // Check for name conflict by listing files in the destination
+        try {
+          const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
+            withCredentials: true
           });
-          return;
+          const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+          const nameExists = existingNames.includes(moveItem.name);
+          if (nameExists) {
+            conflictChecked = true;
+            const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+            FileOperationConflictModal({
+              fileName: moveItem.name,
+              destinationPath: moveDestination,
+              operation: 'move',
+              onOverwrite: async () => {
+                try {
+                  await finalizeMove(true);
+                } catch (err) {
+                  console.error('Move error (overwrite):', err);
+                  message.error('Error overwriting file during move');
+                } finally {
+                  setMoveModalVisible(false);
+                  fetchItems();
+                  fetchFolderTree();
+                }
+              },
+              onKeepBoth: async () => {
+                try {
+                  await finalizeMove(false);
+                } catch (err) {
+                  console.error('Move error (keep both):', err);
+                  message.error('Error keeping both files during move');
+                } finally {
+                  setMoveModalVisible(false);
+                  fetchItems();
+                  fetchFolderTree();
+                }
+              },
+              onSkip: () => {
+                message.info(`Skipped moving ${moveItem.name}`);
+                setMoveModalVisible(false);
+                fetchItems();
+                fetchFolderTree();
+              }
+            });
+            return;
+          }
+        } catch (err) {
+          console.error('Move conflict check error:', err);
         }
       }
-
-      // If no conflict or it's a directory, proceed with move
-      await finalizeMove(false);
+      // Always call finalizeMove for both file and directory if no conflict or if not already handled by conflict modal
+      if (!conflictChecked) {
+        try {
+          await finalizeMove(false);
+          message.success(`Move operation completed for '${moveItem.name}'`);
+        } catch (err) {
+          console.error('Move error:', err);
+          message.error('Error checking for conflict or moving file');
+        } finally {
+          setMoveModalVisible(false);
+          fetchItems();
+          fetchFolderTree();
+        }
+      }
     } catch (err) {
-      console.error('Move error:', err);
-      message.error('Error checking for conflict or moving file');
+      console.error('Move operation failed:', err);
+      message.error('Move operation failed');
+      setMoveModalVisible(false);
+      fetchItems();
+      fetchFolderTree();
     }
-  };
-
-  // Helper function to clean up after move operations
-  const completeMoveCleanup = () => {
-    setMoveModalVisible(false);
-    setMoveDestination('');
-    setMoveItem(null);
-
-    // Refresh both current folder and folder tree
-    fetchItems();
-    fetchFolderTree();
   };
 
   const finalizeMove = async (overwrite) => {
@@ -1301,6 +1331,13 @@ const FileManager = () => {
                     { withCredentials: true }
                   );
                   message.success(`Merged '${moveItem.name}' into ${moveDestination}/${moveItem.name}`); 
+                  const completeMoveCleanup = () => {
+                    setMoveModalVisible(false);
+                    setMoveDestination('');
+                    setMoveItem(null);
+                    fetchItems();  // Stay in current folder
+                    fetchFolderTree();
+                  };
                   completeMoveCleanup();
                 } catch (mergeErr) {
                   console.error('Error merging folders:', mergeErr);
@@ -1317,6 +1354,8 @@ const FileManager = () => {
         
         // Regular folder move (when no conflicts)
         await axios.post(
+
+
           `${BASE_URL}/directory/move`,
           {
             name: moveItem.name,
@@ -1807,10 +1846,6 @@ const FileManager = () => {
           )}
         </Row>
 
-
-
-
-
         {selectionMode && selectedRows.length > 0 && (
           <SelectionHeader
             selectedItems={selectedRows}
@@ -1864,16 +1899,22 @@ const FileManager = () => {
           directoryItems={items}
           currentPath={currentPath}
           copySelectedMainFolder={copySelectedMainFolder}
-          copySelectedSubFolder={copySelectedSubFolder}
-          copySubFolders={copySubFolders}
-          handleCopyMainFolderChange={handleCopyMainFolderChange}
-          handleCopySubFolderChange={handleCopySubFolderChange}
 
           // Move Modal props
           moveModalVisible={moveModalVisible}
           setMoveModalVisible={setMoveModalVisible}
           moveDestination={moveDestination}
           setMoveDestination={setMoveDestination}
+          handleMoveConfirm={handleMoveConfirm}
+          folderTreeData={folderTreeData}
+
+          // Other props as needed
+        
+          copySelectedSubFolder={copySelectedSubFolder}
+          copySubFolders={copySubFolders}
+          handleCopyMainFolderChange={handleCopyMainFolderChange}
+          handleCopySubFolderChange={handleCopySubFolderChange}
+
           selectedMainFolder={selectedMainFolder}
           selectedSubFolder={selectedSubFolder}
           subFolders={subFolders}
@@ -1887,7 +1928,6 @@ const FileManager = () => {
           setUploadingFiles={setUploadingFile}
           handleModalUpload={handleUpload}
           container=""
-          folderTreeData={folderTreeData}
         />
 
         {/* File Information Modal */}
@@ -2146,10 +2186,10 @@ const FileManager = () => {
             required={!!fileUploadMessage.trim()}
           />
         </Form.Item>
-        </Modal>
-      </Content>
-    </Layout>
+      </Modal>
+    </Content>
+  </Layout>
   );
-};
+}
 
 export default FileManager;

@@ -151,8 +151,19 @@ const CommonModals = ({
               treeData={folderTreeData}
               placeholder="Select destination folder"
               treeDefaultExpandAll
-              allowClear
-              onChange={setMoveDestination}
+              treeLine
+              fieldNames={{ title: 'title', value: 'value', key: 'key', children: 'children' }}
+              onChange={(value, label, extra) => {
+                // If value is an array (TreeSelect can be multi), join as path
+                let selectedPath = Array.isArray(value) ? value.join('/') : value;
+                // Always normalize to forward slashes
+                selectedPath = selectedPath.replace(/\\/g, '/');
+                if (selectedPath.includes('\\')) {
+                  console.warn('[MoveModal] WARNING: Detected backslash in path! Normalized to:', selectedPath);
+                }
+                console.log('[MoveModal] Selected moveDestination:', selectedPath);
+                setMoveDestination(selectedPath);
+              }}
             />
           </Form.Item>
         </Form>
