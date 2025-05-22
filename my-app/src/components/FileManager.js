@@ -1206,6 +1206,7 @@ const FileManager = () => {
   } // <--- Added the missing closing brace here
 
   const handleMoveConfirm = async () => {
+  try {
     console.log('[Move] handleMoveConfirm called', { moveItem, moveDestination });
     if (!moveDestination?.trim()) {
       message.error('Please select a destination folder');
@@ -1215,85 +1216,87 @@ const FileManager = () => {
       message.error('No item selected to move');
       return;
     }
-    if (!moveModalVisible) {
-      console.warn('[Move] handleMoveConfirm called but moveModalVisible is false');
-    }
-    try {
-      let conflictChecked = false;
-      if (moveItem.type === 'file') {
-        // Check for name conflict by listing files in the destination
-        try {
-          const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
-            withCredentials: true
-          });
-          const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
-          const nameExists = existingNames.includes(moveItem.name);
-          if (nameExists) {
-            conflictChecked = true;
-            const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
-            FileOperationConflictModal({
-              fileName: moveItem.name,
-              destinationPath: moveDestination,
-              operation: 'move',
-              onOverwrite: async () => {
-                try {
-                  await finalizeMove(true);
-                } catch (err) {
-                  console.error('Move error (overwrite):', err);
-                  message.error('Error overwriting file during move');
-                } finally {
-                  setMoveModalVisible(false);
-                  fetchItems();
-                  fetchFolderTree();
-                }
-              },
-              onKeepBoth: async () => {
-                try {
-                  await finalizeMove(false);
-                } catch (err) {
-                  console.error('Move error (keep both):', err);
-                  message.error('Error keeping both files during move');
-                } finally {
-                  setMoveModalVisible(false);
-                  fetchItems();
-                  fetchFolderTree();
-                }
-              },
-              onSkip: () => {
-                message.info(`Skipped moving ${moveItem.name}`);
-                setMoveModalVisible(false);
-                fetchItems();
-                fetchFolderTree();
-              }
-            });
-            return;
-          }
-        } catch (err) {
-          console.error('Move conflict check error:', err);
-        }
-      }
-      // Always call finalizeMove for both file and directory if no conflict or if not already handled by conflict modal
-      if (!conflictChecked) {
-        try {
-          await finalizeMove(false);
-          message.success(`Move operation completed for '${moveItem.name}'`);
-        } catch (err) {
-          console.error('Move error:', err);
-          message.error('Error checking for conflict or moving file');
-        } finally {
-          setMoveModalVisible(false);
-          fetchItems();
-          fetchFolderTree();
-        }
-      }
-    } catch (err) {
-      console.error('Move operation failed:', err);
-      message.error('Move operation failed');
+    // Prevent moving to the same location
+    if (
+      (moveItem.type === 'file' && currentPath === moveDestination) ||
+      (moveItem.type === 'directory' && currentPath === moveDestination)
+    ) {
+      message.info('The source and destination are the same. No move was performed.');
       setMoveModalVisible(false);
-      fetchItems();
-      fetchFolderTree();
+      return;
     }
-  };
+    let conflictChecked = false;
+    if (moveItem.type === 'file') {
+      // Check for name conflict by listing files in the destination
+      const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
+        withCredentials: true
+      });
+      const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+      const nameExists = existingNames.includes(moveItem.name);
+      if (nameExists) {
+        conflictChecked = true;
+        const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+        FileOperationConflictModal({
+          fileName: moveItem.name,
+          destinationPath: moveDestination,
+          operation: 'move',
+          onOverwrite: async () => {
+            try {
+              await finalizeMove(true);
+            } catch (err) {
+              console.error('Move error (overwrite):', err);
+              message.error('Error overwriting file during move');
+            } finally {
+              setMoveModalVisible(false);
+              fetchItems();
+              fetchFolderTree();
+            }
+          },
+          onKeepBoth: async () => {
+            try {
+              await finalizeMove(false);
+            } catch (err) {
+              console.error('Move error (keep both):', err);
+              message.error('Error keeping both files during move');
+            } finally {
+              setMoveModalVisible(false);
+              fetchItems();
+              fetchFolderTree();
+            }
+          },
+          onSkip: () => {
+            message.info(`Skipped moving ${moveItem.name}`);
+            setMoveModalVisible(false);
+            fetchItems();
+            fetchFolderTree();
+          }
+        });
+        return;
+      }
+    }
+    // Always call finalizeMove for both file and directory if no conflict or if not already handled by conflict modal
+    if (!conflictChecked) {
+      try {
+        await finalizeMove(false);
+        message.success(`Move operation completed for '${moveItem.name}'`);
+      } catch (err) {
+        console.error('Move error:', err);
+        message.error('Error checking for conflict or moving file');
+      } finally {
+        setMoveModalVisible(false);
+        fetchItems();
+        fetchFolderTree();
+      }
+    }
+  } catch (err) {
+    console.error('Move operation failed:', err);
+    message.error('Move operation failed');
+    setMoveModalVisible(false);
+    fetchItems();
+    fetchFolderTree();
+  }
+};
+
 
   const finalizeMove = async (overwrite) => {
     try {
