@@ -1663,40 +1663,51 @@ const OperationDashboard = () => {
   return (
     <Layout style={{ minHeight: '84vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '5px', padding: '10px', background: '#fff' }}>
-        {/* Dashboard UI */}
-        <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+        {/* Dashboard Header */}
+        <Row justify="space-between" align="middle" style={{ marginBottom: 20, padding: '0 4px' }}>
           <Col>
-            <h2 style={{ margin: 0 }}>Operation</h2>
+            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 600 }}>Operation</h2>
           </Col>
-          <Col style={{ display: 'flex', alignItems: 'center' }}>
-            <BatchActionsMenu
-              selectedItems={selectedRows}
-              onDelete={handleBatchDelete}
-              onCopy={handleBatchCopy}
-              onMove={handleBatchMove}
-              onDownload={handleBatchDownload}
-              selectionMode={selectionMode}
-              onToggleSelectionMode={handleToggleSelectionMode}
-              onCancelSelection={handleCancelSelection}
-            />
-            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+          <Col>
+            <Button 
+              type="primary" 
+              icon={<UploadOutlined />} 
+              onClick={handleOpenUploadModal}
+              size="middle"
+              style={{ fontWeight: 500 }}
+            >
               Upload File(s)
             </Button>
           </Col>
         </Row>
 
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col>
-            <Button icon={<ArrowUpOutlined />} onClick={handleGoUp} disabled={!currentPath}>
-              Go Up
-            </Button>
-          </Col>
-          <Col>
-            <Button icon={<FolderAddOutlined />} onClick={() => setCreateFolderModal(true)}>
+        {/* Navigation Bar */}
+        <Row 
+          gutter={[16, 16]} 
+          style={{ 
+            marginBottom: 16, 
+            display: 'flex',
+            alignItems: 'center'
+          }}
+        >
+          <Col style={{ display: 'flex', gap: 8 }}>
+            {/* Only show Go Up button when not at root level */}
+            {currentPath && currentPath !== 'Operation' && (
+              <Button 
+                icon={<ArrowUpOutlined />} 
+                onClick={handleGoUp} 
+                style={{ display: 'flex', alignItems: 'center' }}
+              >
+                Go Up
+              </Button>
+            )}
+            <Button 
+              icon={<FolderAddOutlined />} 
+              onClick={() => setCreateFolderModal(true)}
+              style={{ display: 'flex', alignItems: 'center' }}
+            >
               Create Folder
             </Button>
-          </Col>
-          <Col>
             <Tooltip title="Refresh Files">
               <Button
                 icon={<ReloadOutlined />}
@@ -1706,10 +1717,11 @@ const OperationDashboard = () => {
                   message.success('File list refreshed');
                 }}
                 loading={loading}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               />
             </Tooltip>
           </Col>
-          <Col style={{ width: '40%' }}>
+          <Col flex="auto">
             <Input.Search
               placeholder={
                 isSearchingRecursively 
@@ -1731,14 +1743,26 @@ const OperationDashboard = () => {
               loading={searchLoading}
               allowClear
               enterButton
+              style={{ width: '100%' }}
+            />
+          </Col>
+          <Col>
+            <BatchActionsMenu
+              selectedItems={selectedRows}
+              onDelete={handleBatchDelete}
+              onCopy={handleBatchCopy}
+              onMove={handleBatchMove}
+              onDownload={handleBatchDownload}
+              selectionMode={selectionMode}
+              onToggleSelectionMode={handleToggleSelectionMode}
+              onCancelSelection={handleCancelSelection}
             />
           </Col>
         </Row>
 
-
-
+        {/* Breadcrumb Navigation */}
         {!isSearching && (
-          <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
+          <Breadcrumb style={{ marginBottom: 16, padding: '0 4px' }}>{breadcrumbItems}</Breadcrumb>
         )}
 
 
