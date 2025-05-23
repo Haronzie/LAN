@@ -6,6 +6,7 @@ import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 import AdminDashboard from './components/AdminDashboard';
 import AdminDashboardHome from './components/AdminDashboardHome';
+import UserActivities from './components/UserActivities';
 import UserManagement from './components/UserManagement';
 import FileManager from './components/FileManager';
 import AuditLog from './components/Auditlog';
@@ -85,6 +86,7 @@ function App() {
             <Route path="users" element={<UserManagement />} />
             <Route path="files" element={<FileManager />} />
             <Route path="audit-logs" element={<AuditLog />} />
+            <Route path="user-activities" element={<UserActivities />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 

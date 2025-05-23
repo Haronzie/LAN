@@ -217,6 +217,16 @@ const AdminDashboardHome = () => {
             style={{ borderRadius: 8 }}
             headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
             bodyStyle={{ padding: '16px 24px' }}
+            extra={
+              <Button 
+                type="link" 
+                size="small" 
+                onClick={() => navigate('user-activities')}
+                style={{ padding: '0 4px' }}
+              >
+                View All
+              </Button>
+            }
           >
             {activities.length > 0 ? (
               <List

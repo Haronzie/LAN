@@ -17,6 +17,7 @@ import {
 import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import NotificationDropdown from './common/NotificationDropdown';
+import UserActivities from './UserActivities';
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
@@ -144,43 +145,29 @@ const AdminDashboard = () => {
           }}
           trigger={null}
         >
-          <div
-            style={{
-              padding: '16px',
-              color: '#fff',
-              fontSize: collapsed ? '16px' : '20px',
-              textAlign: 'center',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {collapsed ? 'CA' : 'Resilio Admin'}
+          <div style={{ height: 64, background: 'rgba(255,255,255,0.04)', margin: 12, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 20, color: '#fff' }}>
+            Resilio Admin
           </div>
           <Menu
             theme="dark"
             mode="inline"
             selectedKeys={[currentSection]}
             items={menuItems}
-            style={{ width: '100%', borderRight: 0 }}
+            style={{ borderRight: 0 }}
           />
         </Sider>
-
         <Layout>
           <Header
             style={{
               background: '#fff',
-              padding: '0 16px',
+              padding: isMobile ? '0 16px' : '0 32px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
               boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
               height: '64px',
             }}
           >
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <Title level={3} style={{ margin: 0 }}>{pageTitle}</Title>
-            </div>
+
             {isMobile && (
               <Button
                 type="text"
@@ -189,16 +176,18 @@ const AdminDashboard = () => {
                 style={{ position: 'absolute', left: 16 }}
               />
             )}
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-
-              <Button type="primary" size="small" onClick={handleLogout}>
-                Logout
-              </Button>
-            </div>
+            <div style={{ flex: 1 }} />
+            <Button type="primary" size="large" onClick={handleLogout} style={{ marginLeft: 'auto', marginRight: 32, fontWeight: 600, letterSpacing: 1 }}>
+              Logout
+            </Button>
           </Header>
-
-          <Content style={{ margin: 0, padding: 0, overflowY: 'auto' }}>
-            <Outlet />
+          <Content style={{ margin: 0, minHeight: 280, background: '#f5f6fa' }}>
+            {/* Routing for /admin/user-activities */}
+            {location.pathname.endsWith('/user-activities') ? (
+              <UserActivities />
+            ) : (
+              <Outlet />
+            )}
           </Content>
         </Layout>
       </Layout>
