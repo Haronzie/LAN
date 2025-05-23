@@ -1,9 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Row, Col, Card, Statistic, List, Button, Typography, message } from 'antd';
-import { Column } from '@ant-design/charts';
 import { UserOutlined, FileOutlined, TeamOutlined } from '@ant-design/icons';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title as ChartTitle, Tooltip, Legend } from 'chart.js';
+import { Bar } from 'react-chartjs-2';
 import axios from 'axios';
+
+// Register Chart.js components
+ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTitle, Tooltip, Legend);
 
 const { Text, Title } = Typography;
 
@@ -46,72 +50,56 @@ files.forEach(file => {
   uploadsPerFolderMonth[monthYear][folder] += 1;
 });
 
-// Flatten to array for chart, capitalize folder for display
-const chartData = [];
-Object.entries(uploadsPerFolderMonth).forEach(([monthYear, folderCounts]) => {
-  Object.entries(folderCounts).forEach(([folder, count]) => {
-    chartData.push({ monthYear, folder: folder.charAt(0).toUpperCase() + folder.slice(1), uploads: count });
-  });
-});
+// Transform data for Recharts format - we need each month to have all folder values
+const transformedChartData = [];
+
+// Get unique month/years
+const uniqueMonthYears = [...new Set(Object.keys(uploadsPerFolderMonth))];
 
 // Sort by month/year
 const monthOrder = [
   'January','February','March','April','May','June','July','August','September','October','November','December'
 ];
-chartData.sort((a, b) => {
-  const [aMonth, aYear] = a.monthYear.split(' ');
-  const [bMonth, bYear] = b.monthYear.split(' ');
+
+uniqueMonthYears.sort((a, b) => {
+  const [aMonth, aYear] = a.split(' ');
+  const [bMonth, bYear] = b.split(' ');
   if (aYear !== bYear) return parseInt(aYear) - parseInt(bYear);
   return monthOrder.indexOf(aMonth) - monthOrder.indexOf(bMonth);
 });
 
+// Create data points with all folders for each month
+uniqueMonthYears.forEach(monthYear => {
+  const dataPoint = { monthYear };
+  
+  // Initialize all folders with 0
+  validFolders.forEach(folder => {
+    const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
+    dataPoint[capitalizedFolder] = 0;
+  });
+  
+  // Fill in actual values where available
+  if (uploadsPerFolderMonth[monthYear]) {
+    Object.entries(uploadsPerFolderMonth[monthYear]).forEach(([folder, count]) => {
+      const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
+      dataPoint[capitalizedFolder] = count;
+    });
+  }
+  
+  transformedChartData.push(dataPoint);
+});
 
-  console.log('Chart data:', chartData);
-const chartConfig = {
-  data: chartData,
-  isGroup: true,
-  xField: 'monthYear',
-  yField: 'uploads',
-  seriesField: 'folder',
-  height: 320,
-  color: ['#13c2c2', '#faad14', '#52c41a'], // Operation, Training, Research
-  label: {
-    position: 'top',
-    style: {
-      fill: '#fff',
-      fontWeight: 600,
-      opacity: 0.9,
-    },
-  },
-  xAxis: {
-    title: { text: 'MONTH' },
-    label: { autoHide: false, autoRotate: true },
-  },
-  yAxis: {
-    title: { text: 'NUMBER OF UPLOAD FILE' },
-    min: 0,
-    tickInterval: 1,
-  },
-  legend: { position: 'top' },
-  tooltip: {
-    showMarkers: true,
-    shared: true,
-    customContent: (title, items) => {
-      return `
-        <div>
-          <strong>${title}</strong><br/>
-          ${
-            items && items.length
-              ? items.map(item => `
-                  <span style="color:${item.color}">●</span> ${item.name}: <strong>${item.data.uploads ?? item.value ?? 0}</strong>
-                `).join('<br/>')
-              : '<span>No data</span>'
-          }
-        </div>
-      `;
-    },
-  },
+console.log('Transformed Chart data:', transformedChartData);
+
+// Colors matching the original chart
+const folderColors = {
+  'Operation': '#13c2c2',
+  'Training': '#faad14',
+  'Research': '#52c41a'
 };
+
+// Convert array of colors to array format
+const folderColorsArray = Object.values(folderColors);
 
 
 
@@ -232,8 +220,68 @@ const chartConfig = {
             headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
             bodyStyle={{ padding: '16px 24px' }}
           >
-            {chartData.length > 0 ? (
-              <Column {...chartConfig} />
+            {transformedChartData.length > 0 ? (
+              <div style={{ width: '100%', height: 320 }}>
+                <Bar
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: 'top',
+                      },
+                      title: {
+                        display: false,
+                      },
+                      tooltip: {
+                        callbacks: {
+                          title: (tooltipItems) => {
+                            return tooltipItems[0].label;
+                          },
+                          label: (context) => {
+                            const folderName = context.dataset.label;
+                            const value = context.raw || 0;
+                            return `${folderName}: ${value}`;
+                          }
+                        }
+                      }
+                    },
+                    scales: {
+                      x: {
+                        title: {
+                          display: true,
+                          text: 'MONTH'
+                        },
+                        ticks: {
+                          maxRotation: 45,
+                          minRotation: 45
+                        }
+                      },
+                      y: {
+                        title: {
+                          display: true,
+                          text: 'NUMBER OF UPLOAD FILES'
+                        },
+                        beginAtZero: true,
+                        ticks: {
+                          precision: 0
+                        }
+                      }
+                    }
+                  }}
+                  data={{
+                    labels: transformedChartData.map(item => item.monthYear),
+                    datasets: validFolders.map((folder, index) => {
+                      const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
+                      return {
+                        label: capitalizedFolder,
+                        data: transformedChartData.map(item => item[capitalizedFolder] || 0),
+                        backgroundColor: folderColorsArray[index],
+                      };
+                    })
+                  }}
+                />
+              </div>
             ) : (
               <Text type="secondary">No uploads available</Text>
             )}
