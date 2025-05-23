@@ -260,7 +260,12 @@ const folderColorsArray = Object.values(folderColors);
   }, []);
 
   return (
-    <div style={{ padding: '16px 24px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="dashboard-container" style={{ 
+      maxWidth: 1200, 
+      margin: '0 auto',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
       <Title level={3} style={{ marginBottom: 24, textAlign: 'center' }}>
         Welcome to the Admin Dashboard
       </Title>

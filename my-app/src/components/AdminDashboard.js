@@ -18,6 +18,7 @@ import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import NotificationDropdown from './common/NotificationDropdown';
 import UserActivities from './UserActivities';
+import './dashboard-fix.css'; // Import dashboard CSS fixes
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
@@ -118,7 +119,7 @@ const AdminDashboard = () => {
 
   return (
     <ConfigProvider warning={{ strict: false }}>
-      <Layout style={{ minHeight: '100vh', fontFamily: 'Roboto, sans-serif', overflow: 'hidden' }}>
+      <Layout className="admin-layout" style={{ fontFamily: 'Roboto, sans-serif' }}>
         {isMobile && !collapsed && (
           <div
             style={{
@@ -186,7 +187,7 @@ const AdminDashboard = () => {
               Logout
             </Button>
           </Header>
-          <Content style={{ margin: 0, minHeight: 280, background: '#f5f6fa' }}>
+          <Content className="ant-layout-content" style={{ background: '#f5f6fa' }}>
             {/* Routing for /admin/user-activities */}
             {location.pathname.endsWith('/user-activities') ? (
               <UserActivities />
