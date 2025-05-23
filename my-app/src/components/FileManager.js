@@ -1784,17 +1784,6 @@ const FileManager = () => {
                         handleDelete(record);
                       }} />
                     </Tooltip>
-
-                    <Tooltip title="More Info">
-                      <Button
-                        icon={<MoreOutlined />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedFileInfo(record);
-                          setInfoModalVisible(true);
-                        }}
-                      />
-                    </Tooltip>
                   </>
                 )}
               </>
