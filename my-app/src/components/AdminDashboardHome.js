@@ -23,34 +23,80 @@ const AdminDashboardHome = () => {
   const adminCount = users.filter((u) => getRole(u) === 'admin').length;
   const regularCount = users.filter((u) => getRole(u) === 'user').length;
 
-  const userStats = [
-    { type: 'Admin Users', count: adminCount },
-    { type: 'Regular Users', count: regularCount },
-  ];
+  // Prepare chart data: uploads per user per month
+  const getMonthYear = (dateString) => {
+    const date = new Date(dateString);
+    return `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
+  };
+
+  // Group files by uploader and month
+  const uploadsPerUserMonth = {};
+  files.forEach(file => {
+    if (!file.uploader) return;
+    // Use uploaded_at if available, otherwise fallback to created_at
+    const dateField = file.uploaded_at || file.created_at;
+    if (!dateField) return;
+    const monthYear = getMonthYear(dateField);
+    if (!uploadsPerUserMonth[monthYear]) uploadsPerUserMonth[monthYear] = {};
+    if (!uploadsPerUserMonth[monthYear][file.uploader]) uploadsPerUserMonth[monthYear][file.uploader] = 0;
+    uploadsPerUserMonth[monthYear][file.uploader] += 1;
+  });
+
+  // Flatten to array for chart
+  const chartData = [];
+  Object.entries(uploadsPerUserMonth).forEach(([monthYear, userCounts]) => {
+    Object.entries(userCounts).forEach(([uploader, count]) => {
+      chartData.push({ month: monthYear, user: uploader, uploads: count });
+    });
+  });
+
+  // Sort months for better chart display
+  chartData.sort((a, b) => {
+    const [aMonth, aYear] = a.month.split(' ');
+    const [bMonth, bYear] = b.month.split(' ');
+    const monthOrder = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    if (aYear !== bYear) return parseInt(aYear) - parseInt(bYear);
+    return monthOrder.indexOf(aMonth) - monthOrder.indexOf(bMonth);
+  });
 
   const chartConfig = {
-    data: userStats,
-    xField: 'type',
-    yField: 'count',
-    height: 220,
+    data: chartData,
+    isGroup: true,
+    xField: 'month',
+    yField: 'uploads',
+    seriesField: 'user',
+    height: 260,
     columnStyle: { radius: [4, 4, 0, 0] },
-    color: ['#1890ff', '#13c2c2'],
+    color: ['#1890ff', '#13c2c2', '#faad14', '#52c41a', '#eb2f96', '#722ed1'],
     label: {
       position: 'top',
       style: {
-        fill: '#FFFFFF',
-        opacity: 0.7,
+        fill: '#333',
+        fontWeight: 600,
+        opacity: 0.9,
       },
     },
+    xAxis: {
+      title: { text: 'Month' },
+      label: { autoHide: true, autoRotate: false },
+    },
     yAxis: {
+      title: { text: 'Uploads' },
       min: 0,
       tickInterval: 1,
     },
     meta: {
-      type: { alias: 'User Role' },
-      count: { alias: 'Number of Users' },
+      month: { alias: 'Month' },
+      user: { alias: 'User' },
+      uploads: { alias: 'Number of Uploads' },
     },
+    tooltip: {
+      showMarkers: true,
+      shared: true,
+    },
+    legend: { position: 'top' },
   };
+
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -68,7 +114,7 @@ const AdminDashboardHome = () => {
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get('/files', { withCredentials: true });
+      const res = await axios.get('/files/all', { withCredentials: true });
       setFiles(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching files:', error);
@@ -164,12 +210,16 @@ const AdminDashboardHome = () => {
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={12}>
           <Card 
-            title="User Role Distribution"
+            title="Uploads Per User Per Month"
             style={{ borderRadius: 8 }}
             headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
             bodyStyle={{ padding: '16px 24px' }}
           >
-            <Column {...chartConfig} />
+            {chartData.length > 0 ? (
+              <Column {...chartConfig} />
+            ) : (
+              <Text type="secondary">No uploads available</Text>
+            )}
           </Card>
         </Col>
         
@@ -231,7 +281,7 @@ const AdminDashboardHome = () => {
             {activities.length > 0 ? (
               <List
                 size="small"
-                dataSource={activities.slice(0, 5)}
+                dataSource={activities.slice(0, 3)}
                 renderItem={(item) => (
                   <List.Item style={{ padding: '8px 0' }}>
                     <div style={{ width: '100%' }}>

@@ -815,6 +815,7 @@ func (fc *FileController) ListAllFiles(w http.ResponseWriter, r *http.Request) {
 			"contentType": f.ContentType,
 			"uploader":    f.Uploader,
 			"id":          f.ID,
+			"created_at":  f.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 
