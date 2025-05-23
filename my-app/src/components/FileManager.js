@@ -1580,6 +1580,16 @@ const FileManager = () => {
     }
   } : null;
 
+  // Helper to handle navigation when clicking file name in search results
+  const handleGoToFileFromSearch = (record) => {
+    if (!record.directory) return;
+    setCurrentPath(record.directory);
+    setTimeout(() => {
+      // Optionally: highlight/select the file after navigation
+      setSelectedRowKeys([`${record.type}-${record.id || record.name}`]);
+      setSelectedRows([record]);
+    }, 100);
+  };
 
   const columns = useMemo(() => {
     // Base columns that are always shown
@@ -1591,6 +1601,17 @@ const FileManager = () => {
         width: 300, // Fixed width for Name column
         ellipsis: true, // Add ellipsis for long names
         render: (name, record) => {
+          // If searching and it's a file, make the name clickable to go to its folder
+          if (isSearching && record.type === 'file') {
+            return (
+              <a
+                style={{ color: '#1890ff', cursor: 'pointer' }}
+                onClick={() => handleGoToFileFromSearch(record)}
+              >
+                {name}
+              </a>
+            );
+          }
           if (record.type === 'directory') {
             return (
               <Space>
@@ -1618,28 +1639,27 @@ const FileManager = () => {
           if (record.type === 'directory') return '--';
           return size || formatFileSize(record.size) || 'Unknown';
         }
+      },
+      {
+        title: 'Uploader',
+        dataIndex: 'uploader',
+        key: 'uploader',
+        width: 150,
+        render: (uploader) => uploader || 'N/A',
       }
     ];
 
     // If we're showing search results, add a Location column
+    // Remove the 'Go to folder' button from Location column
     if (isSearching) {
       baseColumns.splice(1, 0, {
         title: 'Location',
         key: 'location',
+        width: 250,
         render: (_, record) => {
           const directory = record.directory || '';
           return (
-            <Space>
-              <span>{directory}</span>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => navigateToFolder(directory)}
-                icon={<ArrowLeftOutlined />}
-              >
-                Go to folder
-              </Button>
-            </Space>
+            <span>{directory}</span>
           );
         }
       });
@@ -1650,9 +1670,7 @@ const FileManager = () => {
       title: 'Actions',
       key: 'actions',
       render: (record) => {
-        // For search results, we need to adjust some actions
         const isSearchResult = isSearching;
-
         return (
           <Space>
             {record.type === 'file' && (
@@ -1660,9 +1678,8 @@ const FileManager = () => {
                 <Button
                   icon={<FileOutlined />}
                   onClick={(e) => {
-                    e.stopPropagation(); // Prevent row click event
+                    e.stopPropagation();
                     if (isSearchResult) {
-                      // For search results, we need to use the directory from the result
                       const encodedDir = encodeURIComponent(record.directory || '');
                       const encodedFile = encodeURIComponent(record.name.trim());
                       const previewUrl = `${BASE_URL}/preview?directory=${encodedDir}&filename=${encodedFile}`;
@@ -1680,9 +1697,8 @@ const FileManager = () => {
                 <Button
                   icon={<DownloadOutlined />}
                   onClick={(e) => {
-                    e.stopPropagation(); // Prevent row click event
+                    e.stopPropagation();
                     if (isSearchResult) {
-                      // For search results, we need to use the directory from the result
                       const encodedDir = encodeURIComponent(record.directory || '');
                       const encodedFile = encodeURIComponent(record.name.trim());
                       const downloadUrl = `${BASE_URL}/download?directory=${encodedDir}&filename=${encodedFile}`;
@@ -1698,7 +1714,7 @@ const FileManager = () => {
             {record.type === 'directory' && (
               <Tooltip title="Download Folder">
                 <Button icon={<DownloadOutlined />} onClick={(e) => {
-                  e.stopPropagation(); // Prevent row click event
+                  e.stopPropagation();
                   handleDownloadFolder(record.name);
                 }} />
               </Tooltip>
@@ -1706,15 +1722,13 @@ const FileManager = () => {
 
             {!isSearchResult && !isRoot && !(record.type === 'directory' && isRoot) && (
               <>
-                {/* Show action buttons for all folders and files except main folders */}
-                {/* Check if it's not one of the main folders */}
                 {!(record.type === 'directory' && (record.name === 'Research' || record.name === 'Training' || record.name === 'Operation')) && (
                   <>
                     <Tooltip title="Rename">
                       <Button
                         icon={<EditOutlined />}
                         onClick={(e) => {
-                          e.stopPropagation(); // Prevent row click event
+                          e.stopPropagation();
                           setSelectedItem(record);
                           setRenameNewName(record.name);
                           setRenameModalVisible(true);
@@ -1724,31 +1738,30 @@ const FileManager = () => {
 
                     <Tooltip title="Copy">
                       <Button icon={<CopyOutlined />} onClick={(e) => {
-                        e.stopPropagation(); // Prevent row click event
+                        e.stopPropagation();
                         handleCopy(record);
                       }} />
                     </Tooltip>
 
                     <Tooltip title="Move">
                       <Button icon={<SwapOutlined />} onClick={(e) => {
-                        e.stopPropagation(); // Prevent row click event
+                        e.stopPropagation();
                         handleMove(record);
                       }} />
                     </Tooltip>
 
                     <Tooltip title="Delete">
                       <Button danger icon={<DeleteOutlined />} onClick={(e) => {
-                        e.stopPropagation(); // Prevent row click event
+                        e.stopPropagation();
                         handleDelete(record);
                       }} />
                     </Tooltip>
 
-                    {/* Show the more info button for all items */}
                     <Tooltip title="More Info">
                       <Button
                         icon={<MoreOutlined />}
                         onClick={(e) => {
-                          e.stopPropagation(); // Prevent row click event
+                          e.stopPropagation();
                           setSelectedFileInfo(record);
                           setInfoModalVisible(true);
                         }}
@@ -1818,9 +1831,8 @@ const FileManager = () => {
                   setSearchTerm('');
                   setIsSearching(false);
                 }}
-              >
-                Back to Browsing
-              </Button>
+                style={{ padding: '0 8px' }}
+              />
             </Col>
           )}
           {/* Only show the Create Folder button when inside a main folder (not at root level) */}
