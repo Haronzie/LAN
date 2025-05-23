@@ -1903,7 +1903,7 @@ const FileManager = () => {
                 }
               }}
               loading={searchLoading}
-              allowClear
+              allowClear={isSearching}
               enterButton
             />
           </Col>
