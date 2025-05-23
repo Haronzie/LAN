@@ -1562,13 +1562,20 @@ const FileManager = () => {
     // Future implementation for batch move
   };
 
-  // Toggle selection mode
+  // Toggle selection mode on/off
   const handleToggleSelectionMode = () => {
-    // Only allow selection mode when not at root level
-    if (!isRoot) {
-      setSelectionMode(true);
+    // If already in selection mode, turn it off (toggle behavior)
+    if (selectionMode) {
+      setSelectionMode(false);
+      setSelectedRowKeys([]);
+      setSelectedRows([]);
     } else {
-      message.info('Please navigate to a folder before selecting items.');
+      // Only allow selection mode when not at root level
+      if (!isRoot) {
+        setSelectionMode(true);
+      } else {
+        message.info('Please navigate to a folder before selecting items.');
+      }
     }
   };
 
@@ -2008,20 +2015,57 @@ const FileManager = () => {
               pageSize: 10,
               showSizeChanger: true,
               pageSizeOptions: ['10', '20', '50', '100'],
-              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
-              // Make pagination controls more user-friendly
-              size: 'large',
+              showTotal: (total, range) => 
+                <span style={{ fontWeight: 500 }}>
+                  {range[0]}-{range[1]} of {total} items
+                </span>,
+              size: 'default',
               showQuickJumper: true,
               className: 'enhanced-pagination',
               itemRender: (page, type, originalElement) => {
                 if (type === 'page') {
-                  return <Button type={page === originalElement.props.pagenum ? 'primary' : 'default'} size="middle">{page}</Button>;
+                  return (
+                    <Button 
+                      type={page === originalElement.props.pagenum ? 'primary' : 'default'} 
+                      size="middle"
+                      style={{ 
+                        minWidth: '32px',
+                        borderRadius: '4px',
+                        margin: '0 3px',
+                        fontWeight: page === originalElement.props.pagenum ? 'bold' : 'normal'
+                      }}
+                    >
+                      {page}
+                    </Button>
+                  );
                 }
                 if (type === 'prev') {
-                  return <Button size="middle"><LeftOutlined /> Previous</Button>;
+                  return (
+                    <Button 
+                      size="middle"
+                      style={{ 
+                        borderRadius: '4px',
+                        margin: '0 5px 0 0',
+                        fontWeight: 500
+                      }}
+                    >
+                      <LeftOutlined /> Previous
+                    </Button>
+                  );
                 }
                 if (type === 'next') {
-                  return <Button size="middle">Next <RightOutlined /></Button>;
+                  return (
+                    <Button 
+                      size="middle"
+                      style={{ 
+                        borderRadius: '4px',
+                        margin: '0 0 0 5px',
+                        fontWeight: 500
+                      }}
+                    >
+                      Next <RightOutlined />
+                    </Button>
+                  );
                 }
                 return originalElement;
               }

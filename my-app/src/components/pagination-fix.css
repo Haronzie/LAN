@@ -1,27 +1,59 @@
-/* Enhanced pagination styling */
+/* Professional pagination styling */
 .enhanced-pagination {
   margin: 24px 0;
+  padding: 8px 0;
   text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
+/* Container around the page number list */
+.enhanced-pagination .ant-pagination-item-container {
+  display: flex;
+  align-items: center;
+}
+
+/* Individual page number buttons */
 .enhanced-pagination .ant-pagination-item {
   min-width: 36px;
   height: 36px;
   line-height: 34px;
-  margin: 0 8px;
+  margin: 0 4px;
   border-radius: 4px;
+  border: 1px solid #d9d9d9;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+/* Hover effect for page numbers */
+.enhanced-pagination .ant-pagination-item:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+/* Active page number */
 .enhanced-pagination .ant-pagination-item-active {
   font-weight: 600;
   border-color: #1890ff;
+  background-color: #1890ff;
+  color: white;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.3);
 }
 
+.enhanced-pagination .ant-pagination-item-active a {
+  color: white;
+}
+
+/* Previous and Next buttons */
 .enhanced-pagination .ant-pagination-prev,
 .enhanced-pagination .ant-pagination-next {
-  min-width: 36px;
+  min-width: 40px;
   height: 36px;
   line-height: 34px;
+  margin: 0 8px;
 }
 
 .enhanced-pagination .ant-pagination-prev button,
@@ -29,29 +61,111 @@
   padding: 0 16px;
   height: 36px;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+.enhanced-pagination .ant-pagination-prev button:hover,
+.enhanced-pagination .ant-pagination-next button:hover {
+  color: #1890ff;
+  border-color: #1890ff;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+/* Options section (page size selector and quick jumper) */
 .enhanced-pagination .ant-pagination-options {
-  margin-left: 16px;
+  margin-left: 24px;
+  display: flex;
+  align-items: center;
 }
 
+/* Page size selector */
 .enhanced-pagination .ant-pagination-options-size-changer {
   margin-right: 16px;
 }
 
-.enhanced-pagination .ant-select-dropdown {
-  min-width: 120px !important;
+.enhanced-pagination .ant-pagination-options-size-changer .ant-select-selector {
+  border-radius: 4px;
+  height: 36px !important;
+  padding: 0 12px !important;
+  display: flex;
+  align-items: center;
 }
 
+.enhanced-pagination .ant-select-dropdown {
+  min-width: 120px !important;
+  border-radius: 4px;
+  box-shadow: 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 6px 16px 0 rgba(0, 0, 0, 0.08);
+}
+
+/* Quick jumper */
 .enhanced-pagination .ant-pagination-options-quick-jumper {
   height: 36px;
   line-height: 36px;
+  color: #666;
 }
 
 .enhanced-pagination .ant-pagination-options-quick-jumper input {
   height: 36px;
+  border-radius: 4px;
+  padding: 4px 12px;
+  transition: all 0.3s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   margin: 0 8px;
   min-width: 60px;
+}
+
+.enhanced-pagination .ant-pagination-options-quick-jumper input:hover {
+  border-color: #40a9ff;
+}
+
+.enhanced-pagination .ant-pagination-options-quick-jumper input:focus {
+  border-color: #40a9ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* Total items count styling */
+.enhanced-pagination .ant-pagination-total-text {
+  margin-right: 16px;
+  font-size: 14px;
+  color: #555;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .enhanced-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .enhanced-pagination .ant-pagination-options {
+    margin-left: 0;
+    margin-top: 12px;
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .enhanced-pagination .ant-pagination-total-text {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 12px;
+    margin-right: 0;
+  }
+  
+  .enhanced-pagination .ant-pagination-item {
+    min-width: 32px;
+    height: 32px;
+    line-height: 30px;
+    margin: 0 2px;
+  }
+  
+  .enhanced-pagination .ant-pagination-prev button,
+  .enhanced-pagination .ant-pagination-next button {
+    padding: 0 10px;
+  }
 }
 
 /* Pagination info text */

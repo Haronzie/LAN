@@ -31,67 +31,72 @@ const BatchActionsMenu = ({
   onToggleSelectionMode,
   onCancelSelection
 }) => {
-  // Menu items for when no items are selected or selection mode is off
-  const defaultMenuItems = [
-    {
-      key: 'select',
-      icon: <CheckOutlined />,
-      label: `Select multiple ${itemType}s`,
-      onClick: onToggleSelectionMode
-    }
-  ];
+  // Create a selection menu item that indicates current selection state
+  const selectionMenuItem = {
+    key: 'select',
+    icon: selectionMode ? <CheckOutlined style={{ color: '#1890ff' }} /> : <CheckOutlined />,
+    label: (
+      <span>
+        {`Select multiple ${itemType}s`}
+        {selectionMode && <span style={{ marginLeft: 8, color: '#1890ff' }}>(active)</span>}
+      </span>
+    ),
+    onClick: onToggleSelectionMode
+  };
 
-  // Menu items for when items are selected in selection mode
-  const selectionMenuItems = [
-    {
-      key: 'cancel',
-      icon: <CloseOutlined />,
-      label: 'Cancel selection',
-      onClick: onCancelSelection
-    },
+  // Base menu items always include the selection toggle
+  const baseMenuItems = [
+    selectionMenuItem
+  ];
+  
+  // Additional menu items when in selection mode with items selected
+  const selectionActionItems = [
     {
       type: 'divider'
     }
   ];
 
-  if (showDelete) {
-    selectionMenuItems.push({
-      key: 'delete',
-      icon: <DeleteOutlined />,
-      label: `Delete ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
-      onClick: onDelete
-    });
+  // Only add action items when in selection mode with items selected
+  if (selectionMode && selectedItems.length > 0) {
+    if (showDelete) {
+      selectionActionItems.push({
+        key: 'delete',
+        icon: <DeleteOutlined />,
+        label: `Delete ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
+        onClick: onDelete
+      });
+    }
+
+    if (showCopy) {
+      selectionActionItems.push({
+        key: 'copy',
+        icon: <CopyOutlined />,
+        label: `Copy ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
+        onClick: onCopy
+      });
+    }
+
+    if (showMove) {
+      selectionActionItems.push({
+        key: 'move',
+        icon: <SwapOutlined />,
+        label: `Move ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
+        onClick: onMove
+      });
+    }
+
+    if (showDownload) {
+      selectionActionItems.push({
+        key: 'download',
+        icon: <DownloadOutlined />,
+        label: `Download ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
+        onClick: onDownload
+      });
+    }
   }
 
-  if (showCopy) {
-    selectionMenuItems.push({
-      key: 'copy',
-      icon: <CopyOutlined />,
-      label: `Copy ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
-      onClick: onCopy
-    });
-  }
-
-  if (showMove) {
-    selectionMenuItems.push({
-      key: 'move',
-      icon: <SwapOutlined />,
-      label: `Move ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
-      onClick: onMove
-    });
-  }
-
-  if (showDownload) {
-    selectionMenuItems.push({
-      key: 'download',
-      icon: <DownloadOutlined />,
-      label: `Download ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
-      onClick: onDownload
-    });
-  }
-
-  // Determine which menu items to show
-  const menuItems = selectionMode && selectedItems.length > 0 ? selectionMenuItems : defaultMenuItems;
+  // Combine base menu items with selection action items if applicable
+  const menuItems = [...baseMenuItems, ...(selectionMode && selectedItems.length > 0 ? selectionActionItems : [])];
 
   return (
     <div style={{ display: 'flex', alignItems: 'center' }}>
