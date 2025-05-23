@@ -98,15 +98,37 @@ const BatchActionsMenu = ({
   // Combine base menu items with selection action items if applicable
   const menuItems = [...baseMenuItems, ...(selectionMode && selectedItems.length > 0 ? selectionActionItems : [])];
 
+  if (!selectionMode) {
+    return (
+      <Button 
+        icon={<CheckOutlined />}
+        onClick={onToggleSelectionMode}
+        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+      >
+        Select Files
+      </Button>
+    );
+  }
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center' }}>
-      {selectionMode && selectedItems.length > 0 && (
-        <Text strong style={{ marginRight: '10px' }}>
-          {selectedItems.length} {selectedItems.length === 1 ? itemType : `${itemType}s`} selected
-        </Text>
-      )}
-      <Dropdown menu={{ items: menuItems }} placement="bottomRight" trigger={['click']}>
-        <Button type="text" icon={<MoreOutlined style={{ fontSize: '20px' }} />} />
+    <div style={{ display: 'flex', gap: 8 }}>
+      <Button 
+        type="primary" 
+        icon={<CheckOutlined />}
+        onClick={onCancelSelection}
+        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+      >
+        {selectedItems.length > 0 ? `${selectedItems.length} Selected` : 'Cancel'}
+      </Button>
+      
+      <Dropdown
+        overlay={
+          <Menu items={menuItems.slice(1)} /> // Skip the first item (selection toggle) since we're handling it with the button
+        }
+        trigger={['click']}
+        placement="bottomRight"
+      >
+        <Button icon={<MoreOutlined />} />
       </Dropdown>
     </div>
   );

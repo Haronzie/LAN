@@ -1049,7 +1049,12 @@ const OperationDashboard = () => {
 
   // Toggle selection mode
   const handleToggleSelectionMode = () => {
-    setSelectionMode(true);
+    setSelectionMode(prevMode => !prevMode);
+    // Clear any existing selections when toggling off
+    if (selectionMode) {
+      setSelectedRowKeys([]);
+      setSelectedRows([]);
+    }
   };
 
   // Cancel selection mode
@@ -1605,20 +1610,22 @@ const OperationDashboard = () => {
     ...(isSearching ? [{
       title: 'Location',
       key: 'location',
+      width: '20%',
+      ellipsis: true,
       render: (_, record) => {
         const directory = record.directory || '';
         return (
-          <Space>
-            <span>{directory}</span>
-            <Button
-              type="link"
-              size="small"
-              onClick={() => navigateToFolder(directory)}
-              icon={<ArrowLeftOutlined />}
-            >
-              Go to folder
-            </Button>
-          </Space>
+          <Tooltip title={directory}>
+            <span style={{ 
+              maxWidth: '100%',
+              display: 'inline-block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {directory}
+            </span>
+          </Tooltip>
         );
       }
     }] : []),
@@ -1676,7 +1683,7 @@ const OperationDashboard = () => {
               size="middle"
               style={{ fontWeight: 500 }}
             >
-              Upload File(s)
+              Upload File
             </Button>
           </Col>
         </Row>
@@ -1721,7 +1728,7 @@ const OperationDashboard = () => {
               />
             </Tooltip>
           </Col>
-          <Col flex="auto">
+          <Col style={{ minWidth: 300, maxWidth: 500, flex: '1 1 auto' }}>
             <Input.Search
               placeholder={
                 isSearchingRecursively 
@@ -1741,7 +1748,7 @@ const OperationDashboard = () => {
                 }
               }}
               loading={searchLoading}
-              allowClear
+              allowClear={!!searchTerm}
               enterButton
               style={{ width: '100%' }}
             />
@@ -1770,20 +1777,19 @@ const OperationDashboard = () => {
 
 
         <Table
-  columns={columns}
-  dataSource={sortedItems}
-  rowKey={(record) => (record.id ? record.id : record.name + record.type)}
-  loading={loading}
-  pagination={false}
-  scroll={{ y: '49vh', x: '100%' }}  // for content scrolling on table
-  rowSelection={rowSelection}
-  className="action-buttons-table"
-  tableLayout="fixed"
-  onRow={(record) => ({
-    onClick: () => handleRowClick(record),
-    style: { cursor: record.type === 'directory' ? 'pointer' : 'default' }
-  })}
-/>
+          columns={columns}
+          dataSource={sortedItems}
+          rowKey={(record) => (record.id ? record.id : record.name + record.type)}
+          loading={loading}
+          pagination={false}
+          rowSelection={rowSelection}
+          className="action-buttons-table"
+          tableLayout="fixed"
+          onRow={(record) => ({
+            onClick: () => handleRowClick(record),
+            style: { cursor: record.type === 'directory' ? 'pointer' : 'default' }
+          })}
+        />
         <Modal
           title="File Information"
           visible={infoModalVisible}
