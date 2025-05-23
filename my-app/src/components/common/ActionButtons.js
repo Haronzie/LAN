@@ -22,7 +22,8 @@ const ActionButtons = ({
   onCopy,
   onMove,
   onDelete,
-  onMoreInfo
+  onMoreInfo,
+  showMoreInfo = true // Default to showing the more info button
 }) => {
   const isOwner = record.type === 'directory'
     ? record.created_by === currentUser
@@ -111,16 +112,18 @@ const ActionButtons = ({
           />
         </Tooltip>
       )}
-      <Tooltip title="More Info">
-        <Button
-          icon={<MoreOutlined />}
-          onClick={(e) => {
-            e.stopPropagation(); // Prevent row click event
-            onMoreInfo(record);
-          }}
-          style={buttonStyle}
-        />
-      </Tooltip>
+      {showMoreInfo && (
+        <Tooltip title="More Info">
+          <Button
+            icon={<MoreOutlined />}
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click event
+              onMoreInfo(record);
+            }}
+            style={buttonStyle}
+          />
+        </Tooltip>
+      )}
     </Space>
   );
 };
