@@ -15,7 +15,8 @@ import {
   Upload,
   TreeSelect,
   Select,
-  Spin
+  Spin,
+  Card
 } from 'antd';
 import Dragger from 'antd/lib/upload/Dragger';
 import {
@@ -73,7 +74,7 @@ const UserSearchSelect = ({ value, onUserSelect, required }) => {
 
         setOptions(filtered);
 
-        // ✅ Auto-select the top user if one exists
+        // Auto-select the top user if one exists
         if (filtered.length > 0) {
           onUserSelect(filtered[0].username);
         }
@@ -1926,20 +1927,75 @@ const FileManager = () => {
           />
         )}
 
-        <Table
-          className="action-buttons-table"
-          columns={columns}
-          dataSource={sortedItems}
-          rowKey={(record) => `${record.type}-${record.id || record.name}`}
-          loading={loading}
-          pagination={false}
-          scroll={{ y: '49vh' }}  // for content scrolling on table
-          rowSelection={rowSelection}
-          onRow={(record) => ({
-            onClick: () => handleRowClick(record),
-            style: { cursor: record.type === 'directory' ? 'pointer' : 'default' } // Only show pointer cursor for directories
-          })}
-        />
+        {/* Render cards at root level, table otherwise */}
+        {isRoot && !isSearching ? (
+          <Row gutter={[32, 32]} justify="center" style={{ marginTop: 48, marginBottom: 48 }}>
+            {/* Dashboard Cards for each root folder, with CDRRMO-relevant icons */}
+            <Col xs={24} sm={12} md={8} key="Operation">
+              <Card
+                hoverable
+                style={{ borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', textAlign: 'center', minHeight: 220, cursor: 'pointer' }}
+                bodyStyle={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200 }}
+                onClick={() => handleFolderClick('Operation')}
+              >
+                <div style={{ fontSize: 72, color: '#fa8c16', marginBottom: 24 }}>
+                  <span role="img" aria-label="siren">
+                    {/* Siren/Emergency icon for Operation */}
+                    <svg width="72" height="72" viewBox="0 0 1024 1024" fill="currentColor"><ellipse cx="512" cy="520" rx="220" ry="230" fill="#fff2e8" stroke="#fa8c16" strokeWidth="24"/><rect x="392" y="700" width="240" height="70" rx="16" fill="#fa8c16"/><rect x="482" y="170" width="60" height="150" rx="16" fill="#fa8c16"/><ellipse cx="512" cy="520" rx="180" ry="190" fill="#fa8c16" opacity="0.7"/><ellipse cx="512" cy="520" rx="120" ry="130" fill="#fff2e8" opacity="0.8"/></svg>
+                  </span>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 26, marginBottom: 0, letterSpacing: 0.5 }}>Operation<br />Dashboard</div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={8} key="Research">
+              <Card
+                hoverable
+                style={{ borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', textAlign: 'center', minHeight: 220, cursor: 'pointer' }}
+                bodyStyle={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200 }}
+                onClick={() => handleFolderClick('Research')}
+              >
+                <div style={{ fontSize: 72, color: '#13c2c2', marginBottom: 24 }}>
+                  <span role="img" aria-label="search-doc">
+                    {/* Magnifier over document icon for Research */}
+                    <svg width="72" height="72" viewBox="0 0 1024 1024" fill="currentColor"><rect x="200" y="180" width="400" height="560" rx="32" fill="#e6fffb" stroke="#13c2c2" strokeWidth="24"/><rect x="260" y="240" width="280" height="80" rx="8" fill="#13c2c2" opacity="0.7"/><rect x="260" y="350" width="220" height="40" rx="8" fill="#13c2c2" opacity="0.4"/><circle cx="660" cy="660" r="80" fill="#13c2c2" opacity="0.7"/><rect x="710" y="710" width="90" height="24" rx="12" fill="#13c2c2"/><circle cx="660" cy="660" r="50" fill="#e6fffb"/></svg>
+                  </span>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 26, marginBottom: 0, letterSpacing: 0.5 }}>Research<br />Dashboard</div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={8} key="Training">
+              <Card
+                hoverable
+                style={{ borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', textAlign: 'center', minHeight: 220, cursor: 'pointer' }}
+                bodyStyle={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200 }}
+                onClick={() => handleFolderClick('Training')}
+              >
+                <div style={{ fontSize: 72, color: '#fadb14', marginBottom: 24 }}>
+                  <span role="img" aria-label="helmet">
+                    {/* Safety helmet icon for Training */}
+                    <svg width="72" height="72" viewBox="0 0 1024 1024" fill="currentColor"><ellipse cx="512" cy="600" rx="200" ry="120" fill="#fffbe6" stroke="#fadb14" strokeWidth="24"/><rect x="312" y="600" width="400" height="60" rx="16" fill="#fadb14"/><ellipse cx="512" cy="520" rx="160" ry="90" fill="#fadb14" opacity="0.7"/><rect x="432" y="410" width="160" height="60" rx="16" fill="#fadb14"/></svg>
+                  </span>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 26, marginBottom: 0, letterSpacing: 0.5 }}>Training<br />Dashboard</div>
+              </Card>
+            </Col>
+          </Row>
+        ) : (
+          <Table
+            className="action-buttons-table"
+            columns={columns}
+            dataSource={sortedItems}
+            rowKey={(record) => `${record.type}-${record.id || record.name}`}
+            loading={loading}
+            pagination={false}
+            scroll={{ y: '49vh' }}
+            rowSelection={rowSelection}
+            onRow={(record) => ({
+              onClick: () => handleRowClick(record),
+              style: { cursor: record.type === 'directory' ? 'pointer' : 'default' }
+            })}
+          />
+        )}
 
         {/* Use the CommonModals component for standard modals */}
         <CommonModals
