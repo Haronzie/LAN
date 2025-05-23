@@ -66,7 +66,7 @@ const statusFilters = [
 const InventoryDashboard = () => {
   const [items, setItems] = useState([]);
   const [filteredItems, setFilteredItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
   const [editingItem, setEditingItem] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -184,6 +184,87 @@ const InventoryDashboard = () => {
     if (quantity === 0) return 'Out of Stock';
     if (quantity <= lowStockThreshold) return 'Low Stock';
     return 'In Stock';
+  };
+
+  // Render content area based on view mode
+  const renderContentArea = () => {
+    if (loading) {
+      return (
+        <Card style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center' }}>
+            <SyncOutlined spin style={{ fontSize: 32, marginBottom: 16, color: '#1890ff' }} />
+            <div>Loading inventory data...</div>
+          </div>
+        </Card>
+      );
+    }
+
+    if (filteredItems.length === 0) {
+      return (
+        <Card style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Empty description="No inventory items found" />
+        </Card>
+      );
+    }
+
+    if (viewMode === 'table') {
+      return (
+        <Table 
+          columns={columns} 
+          dataSource={filteredItems} 
+          rowKey="id"
+          pagination={{ 
+            pageSize: 10,
+            showSizeChanger: true,
+            pageSizeOptions: ['10', '20', '50', '100']
+          }}
+        />
+      );
+    }
+
+    // Card view
+    return (
+      <Row gutter={[16, 16]}>
+        {filteredItems.map(item => (
+          <Col key={item.id} xs={24} sm={12} lg={8} xl={6}>
+            <Card 
+              hoverable
+              cover={
+                <div style={{ 
+                  height: 140, 
+                  backgroundColor: '#f0f2f5', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center'
+                }}>
+                  {getStatusIcon(getItemStatus(item))}
+                </div>
+              }
+              actions={[
+                <EditOutlined key="edit" onClick={() => handleEdit(item)} />,
+                <DeleteOutlined key="delete" onClick={() => handleDelete(item.id)} />
+              ]}
+            >
+              <Card.Meta
+                title={item.name}
+                description={
+                  <>
+                    <div>SKU: {item.sku || 'N/A'}</div>
+                    <div>Category: {item.category || 'Uncategorized'}</div>
+                    <div>Quantity: {item.quantity} {item.unit || 'units'}</div>
+                    <div>
+                      Status: <Tag color={getStatusColor(getItemStatus(item))}>
+                        {getItemStatus(item)}
+                      </Tag>
+                    </div>
+                  </>
+                }
+              />
+            </Card>
+          </Col>
+        ))}
+      </Row>
+    );
   };
 
   // Calculate statistics for CDRRMO dashboard
@@ -738,51 +819,53 @@ const InventoryDashboard = () => {
     }
   };
 
-  // Fetch inventory data
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // In a real app, this would be an API call
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        // For demo purposes, we'll use the default items
-        // In a real app, this would come from your backend
-        const now = new Date().toISOString();
-        const inventoryData = defaultItems.map((item, index) => ({
-          id: index + 1,
-          ...item,
-          sku: `CDRRMO-${String(index + 1).padStart(4, '0')}`,
-          updatedAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-          location: 'Main Storage',
-          lastRestocked: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString(),
-          minRequired: Math.ceil(item.lowStockThreshold * 0.5),
-          supplier: 'CDRRMO Central Supply',
-          expiryDate: new Date(Date.now() + Math.random() * 365 * 24 * 60 * 60 * 1000 * 2).toISOString()
-        }));
-        
-        setItems(inventoryData);
-        setFilteredItems(inventoryData);
-      } catch (error) {
-        console.error('Error fetching inventory data:', error);
-        message.error('Failed to load inventory data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchData();
+  // Fetch inventory data from backend API
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // TODO: Replace with your actual API endpoint
+      const response = await axios.get('/api/inventory', { withCredentials: true });
+      setItems(response.data);
+      setFilteredItems(response.data);
+    } catch (error) {
+      console.error('Error fetching inventory data:', error);
+      message.error('Failed to load inventory data');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  // Fetch data on component mount
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   return (
-    <div style={{ padding: '24px', background: '#f0f2f5', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
+    <div style={{ 
+      padding: '24px', 
+      background: '#f0f2f5', 
+      minHeight: '100vh',
+      width: '100%',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'flex-start'
+    }}>
+      <div style={{ 
+        width: '100%',
+        maxWidth: '1600px',
+        margin: 0,
+        padding: 0
+      }}>
         {/* Header */}
         <div style={{ 
+          backgroundColor: '#fff',
+          padding: '16px 24px',
+          borderRadius: '8px',
+          marginBottom: '24px',
+          boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
           display: 'flex', 
           justifyContent: 'space-between', 
-          alignItems: 'center', 
-          marginBottom: 24,
+          alignItems: 'center',
           flexWrap: 'wrap',
           gap: '16px'
         }}>
@@ -826,300 +909,126 @@ const InventoryDashboard = () => {
         </div>
 
         {/* Tabs for different views */}
-        <Tabs 
-          activeKey={activeTab} 
-          onChange={setActiveTab}
-          style={{ marginBottom: 24 }}
-          tabBarExtraContent={{
-            left: (
-              <div style={{ display: 'flex', gap: 8, marginRight: 16 }}>
-                <Button 
-                  type={viewMode === 'table' ? 'primary' : 'default'} 
-                  icon={<TableOutlined />} 
-                  onClick={() => setViewMode('table')}
-                />
-                <Button 
-                  type={viewMode === 'card' ? 'primary' : 'default'} 
-                  icon={<AppstoreOutlined />}
-                  onClick={() => setViewMode('card')}
-                />
-              </div>
-            )
-          }}
-        >
-          <TabPane tab={
-            <span><BarChartOutlined /> Overview</span>
-          } key="overview">
-            {/* Stats Cards */}
-            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-              <Col xs={24} sm={12} lg={6}>
-                <Card>
-                  <Statistic 
-                    title="Total Items" 
-                    value={stats.totalItems}
-                    prefix={<ShoppingCartOutlined style={{ color: '#1890ff' }} />}
-                    valueStyle={{ color: '#1890ff' }}
-                  />
-                </Card>
-              </Col>
-              <Col xs={24} sm={12} lg={6}>
-                <Card>
-                  <Statistic 
-                    title="Total Quantity" 
-                    value={stats.totalQuantity}
-                    prefix={<StockOutlined style={{ color: '#52c41a' }} />}
-                    valueStyle={{ color: '#52c41a' }}
-                  />
-                </Card>
-              </Col>
-              <Col xs={24} sm={12} lg={6}>
-                <Card>
-                  <Statistic 
-                    title="Low Stock" 
-                    value={stats.lowStockItems}
-                    prefix={<ExclamationCircleOutlined style={{ color: '#faad14' }} />}
-                    valueStyle={{ color: '#faad14' }}
-                  />
-                </Card>
-              </Col>
-              <Col xs={24} sm={12} lg={6}>
-                <Card>
-                  <Statistic 
-                    title="Out of Stock" 
-                    value={stats.outOfStockItems}
-                    prefix={stats.outOfStockItems > 0 ? 
-                      <CloseCircleOutlined style={{ color: '#ff4d4f' }} /> : 
-                      <CheckCircleOutlined style={{ color: '#52c41a' }} />}
-                    valueStyle={{ 
-                      color: stats.outOfStockItems > 0 ? '#ff4d4f' : '#52c41a' 
-                    }}
-                  />
-                </Card>
-              </Col>
-            </Row>
-
-            {/* Charts Row */}
-            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-              <Col xs={24} lg={16}>
-                <Card title="Inventory Status" style={{ height: '100%' }}>
-                  <Bar data={statusChartData} options={chartOptions} />
-                </Card>
-              </Col>
-              <Col xs={24} lg={8}>
-                <Card title="Categories" style={{ height: '100%' }}>
-                  {categoryStats.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {categoryStats.map(cat => (
-                        <div key={cat.name}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                            <Text>{cat.name}</Text>
-                            <Text strong>{cat.count} ({cat.percent}%)</Text>
-                          </div>
-                          <Progress 
-                            percent={cat.percent} 
-                            showInfo={false}
-                            strokeColor="var(--ant-primary-color)"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <Empty description="No category data available" />
-                  )}
-                </Card>
-              </Col>
-            </Row>
-          </TabPane>
-          
-          <TabPane tab={
-            <span><TableOutlined /> All Items</span>
-          } key="items">
-            {/* Content will be shown below */}
-          </TabPane>
-        </Tabs>
-
-        {/* Filters and Content Area */}
-        {(activeTab === 'items' || viewMode === 'table') && (
-          <Card style={{ marginBottom: 24, borderRadius: 8 }}>
-            <Row gutter={[16, 16]} align="middle">
-              <Col xs={24} md={8}>
-                <Input
-                  placeholder="Search items..."
-                  prefix={<SearchOutlined />}
-                  value={filters.searchText}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  allowClear
-                  style={{ borderRadius: 6 }}
-                />
-              </Col>
-              <Col xs={24} md={6}>
-                <Select
-                  mode="multiple"
-                  style={{ width: '100%' }}
-                  placeholder="Filter by status"
-                  value={filters.status}
-                  onChange={handleStatusFilter}
-                  options={statusOptions}
-                  allowClear
-                  suffixIcon={<FilterOutlined />}
-                />
-              </Col>
-              <Col xs={24} md={6}>
-                <Select
-                  mode="multiple"
-                  style={{ width: '100%' }}
-                  placeholder="Filter by category"
-                  value={filters.category}
-                  onChange={(values) => setFilters({...filters, category: values})}
-                  options={categories.map(cat => ({ value: cat, label: cat }))}
-                  allowClear
-                />
-              </Col>
-              <Col xs={24} md={4} style={{ textAlign: 'right' }}>
-                <Space>
-                  <Button 
-                    icon={<SyncOutlined />} 
-                    onClick={() => {
-                      resetFilters();
-                      fetchInventory();
-                    }}
-                    title="Refresh Data"
-                  />
-                  <Button 
-                    onClick={resetFilters}
-                    disabled={!filters.status?.length && !filters.searchText && !filters.dateRange && !filters.category?.length}
-                  >
-                    Clear Filters
-                  </Button>
-                </Space>
-              </Col>
-            </Row>
-          </Card>
-        )}
-
-        {/* Content Area */}
-        {loading ? (
-          <Card style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ textAlign: 'center' }}>
-              <SyncOutlined spin style={{ fontSize: 32, marginBottom: 16, color: '#1890ff' }} />
-              <div>Loading inventory data...</div>
-            </div>
-          </Card>
-        ) : filteredItems.length === 0 ? (
-          <Card style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Empty 
-              description={
-                <span>
-                  No inventory items found
-                  {filters.status?.length || filters.searchText || filters.dateRange || filters.category?.length 
-                    ? ' matching the current filters' 
-                    : ''}. 
-                  {filters.status?.length || filters.searchText || filters.dateRange || filters.category?.length ? (
-                    <Button type="link" onClick={resetFilters} style={{ padding: 0, height: 'auto' }}>
-                      Clear filters
-                    </Button>
-                  ) : (
-                    <Button 
-                      type="primary" 
-                      onClick={() => setModalVisible(true)}
-                      style={{ marginTop: 16 }}
-                    >
-                      Add Your First Item
-                    </Button>
-                  )}
-                </span>
-              }
-            />
-          </Card>
-        ) : viewMode === 'table' ? (
-          <Card 
-            style={{ 
-              borderRadius: 8,
-              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)'
-            }}
-            bodyStyle={{ padding: 0 }}
+        <div style={{ 
+          marginBottom: 24,
+          backgroundColor: '#fff',
+          padding: '16px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)'
+        }}>
+          <Tabs 
+            activeKey={activeTab} 
+            onChange={setActiveTab}
           >
-            <Table
-              columns={columns}
-              dataSource={filteredItems}
-              rowKey="id"
-              loading={loading}
-              onChange={handleTableChange}
-              pagination={{
-                ...tableParams.pagination,
-                showSizeChanger: true,
-                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
-                pageSizeOptions: ['10', '20', '50', '100'],
-                style: { marginRight: 16 }
-              }}
-              scroll={{ x: 'max-content' }}
-              size="middle"
-              rowSelection={{
-                selectedRowKeys,
-                onChange: setSelectedRowKeys,
-                selections: [
-                  Table.SELECTION_ALL,
-                  Table.SELECTION_INVERT,
-                  Table.SELECTION_NONE,
-                ],
-              }}
-            />
+            <TabPane tab={<span><BarChartOutlined /> Overview</span>} key="overview">
+              <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                <Col xs={24} sm={12} lg={6}>
+                  <Card>
+                    <Statistic 
+                      title="Total Items" 
+                      value={stats.totalItems}
+                      prefix={<ShoppingCartOutlined style={{ color: '#1890ff' }} />}
+                      valueStyle={{ color: '#1890ff' }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={6}>
+                  <Card>
+                    <Statistic 
+                      title="Total Quantity" 
+                      value={stats.totalQuantity}
+                      prefix={<StockOutlined style={{ color: '#52c41a' }} />}
+                      valueStyle={{ color: '#52c41a' }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={6}>
+                  <Card>
+                    <Statistic 
+                      title="Low Stock" 
+                      value={stats.lowStockItems}
+                      prefix={<ExclamationCircleOutlined style={{ color: '#faad14' }} />}
+                      valueStyle={{ color: '#faad14' }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={6}>
+                  <Card>
+                    <Statistic 
+                      title="Out of Stock" 
+                      value={stats.outOfStockItems}
+                      prefix={stats.outOfStockItems > 0 ? 
+                        <CloseCircleOutlined style={{ color: '#ff4d4f' }} /> : 
+                        <CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                      valueStyle={{ 
+                        color: stats.outOfStockItems > 0 ? '#ff4d4f' : '#52c41a' 
+                      }}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+
+              {/* Charts Row */}
+              <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                <Col xs={24} lg={16}>
+                  <Card title="Inventory Status" style={{ height: '100%' }}>
+                    <Bar data={statusChartData} options={chartOptions} />
+                  </Card>
+                </Col>
+                <Col xs={24} lg={8}>
+                  <Card title="Categories" style={{ height: '100%' }}>
+                    {categoryStats.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {categoryStats.map(cat => (
+                          <div key={cat.name}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text>{cat.name}</Text>
+                              <Text strong>{cat.count} ({cat.percent}%)</Text>
+                            </div>
+                            <Progress 
+                              percent={cat.percent} 
+                              showInfo={false}
+                              strokeColor="var(--ant-primary-color)"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <Empty description="No category data available" />
+                    )}
+                  </Card>
+                </Col>
+              </Row>
+            </TabPane>
             
-            {selectedRowKeys.length > 0 && (
-              <div style={{ 
-                padding: '12px 24px', 
-                borderTop: '1px solid #f0f0f0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                backgroundColor: '#fafafa'
-              }}>
-                <Text type="secondary">
-                  {selectedRowKeys.length} item{selectedRowKeys.length > 1 ? 's' : ''} selected
-                </Text>
-                <Space>
-                  <Button 
-                    size="small" 
-                    danger 
-                    onClick={() => {
-                      Modal.confirm({
-                        title: 'Delete Selected Items',
-                        content: `Are you sure you want to delete ${selectedRowKeys.length} selected item${selectedRowKeys.length > 1 ? 's' : ''}?`,
-                        okText: 'Delete',
-                        okType: 'danger',
-                        cancelText: 'Cancel',
-                        onOk: () => {
-                          // Handle bulk delete
-                          message.success(`${selectedRowKeys.length} items deleted`);
-                          setSelectedRowKeys([]);
-                        },
-                      });
-                    }}
-                  >
-                    Delete
-                  </Button>
-                  <Button 
-                    size="small"
-                    onClick={() => {
-                      // Handle bulk update
-                      message.info('Bulk update functionality coming soon');
-                    }}
-                  >
-                    Update Status
-                  </Button>
-                </Space>
+            <TabPane 
+              tab={<span><TableOutlined /> All Items</span>} 
+              key="items"
+              tabBarExtraContent={{
+                right: (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <Button 
+                      type={viewMode === 'table' ? 'primary' : 'default'} 
+                      icon={<TableOutlined />} 
+                      onClick={() => setViewMode('table')}
+                      title="Table View"
+                    />
+                    <Button 
+                      type={viewMode === 'card' ? 'primary' : 'default'} 
+                      icon={<AppstoreOutlined />} 
+                      onClick={() => setViewMode('card')}
+                      title="Card View"
+                    />
+                  </div>
+                )
+              }}
+            >
+              <div style={{ marginTop: 16 }}>
+                {renderContentArea()}
               </div>
-            )}
-          </Card>
-        ) : (
-          <Row gutter={[16, 16]}>
-            {filteredItems.map(item => (
-              <Col key={item.id} xs={24} sm={12} lg={8} xl={6}>
-                {renderItemCard(item)}
-              </Col>
-            ))}
-          </Row>
-        )}
+            </TabPane>
+          </Tabs>
+        </div>
 
         {/* Add/Edit Item Modal */}
         <Modal
