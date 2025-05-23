@@ -1649,9 +1649,12 @@ const FileManager = () => {
         title: 'Uploader',
         dataIndex: 'uploader',
         key: 'uploader',
-        width: 150,
-        render: (uploader) => uploader || 'N/A',
-      }
+        align: 'center',
+        width: 120,
+        render: (text, record) => (
+          <span>{record.type === 'directory' ? (record.created_by || '-') : (record.uploader || '-')}</span>
+        ),
+      },
     ];
 
     // If we're showing search results, add a Location column

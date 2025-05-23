@@ -88,6 +88,25 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If this is the first user (admin), create the root folders with this user as the creator
+	if role == "admin" {
+		db := ac.App.DB
+		var folderCount int
+		db.QueryRow(`SELECT COUNT(*) FROM public.directories WHERE parent_directory = ''`).Scan(&folderCount)
+		if folderCount == 0 {
+			requiredFolders := []string{"Operation", "Research", "Training"}
+			for _, folder := range requiredFolders {
+				_, err := db.Exec(
+					`INSERT INTO public.directories (directory_name, parent_directory, created_by, created_at, updated_at)
+					 VALUES ($1, '', $2, NOW(), NOW())`, folder, newUser.Username)
+				if err != nil {
+					// Log the error, but don't block registration
+					fmt.Printf("Failed to insert root folder '%s': %v\n", folder, err)
+				}
+			}
+		}
+	}
+
 	ac.App.LogActivity(fmt.Sprintf("User '%s' registered with role '%s'", newUser.Username, newUser.Role))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{

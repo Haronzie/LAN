@@ -257,28 +257,6 @@ func main() {
 	// AUTOMATICALLY RUN MIGRATIONS HERE
 	runMigrations(cfg.DatabaseURL)
 
-	// Ensure main folders exist in the database
-	requiredFolders := []string{"Operation", "Research", "Training"}
-	for _, folder := range requiredFolders {
-		var count int
-		err := db.QueryRow(`SELECT COUNT(*) FROM public.directories WHERE directory_name = $1 AND parent_directory = ''`, folder).Scan(&count)
-		if err != nil {
-			logger.WithError(err).Errorf("Failed to check existence of folder '%s' in database", folder)
-			logrus.Exit(1)
-		}
-		if count == 0 {
-			_, err := db.Exec(
-				`INSERT INTO public.directories (directory_name, parent_directory, created_by, created_at, updated_at)
-				 VALUES ($1, '', 'admin', NOW(), NOW())`, folder)
-			if err != nil {
-				logger.WithError(err).Errorf("Failed to insert root folder '%s' into database", folder)
-				logrus.Exit(1)
-			} else {
-				logger.Infof("Inserted missing root folder '%s' into database", folder)
-			}
-		}
-	}
-
 	logger.WithField("function", "main").Debug("Initializing session store...")
 	store := sessions.NewCookieStore([]byte(cfg.SessionKey))
 
