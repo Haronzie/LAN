@@ -366,9 +366,11 @@ func (app *App) ListActivities() ([]map[string]interface{}, error) {
 
 func (app *App) CreateFileRecord(record FileRecord) error {
 	metadataJSON, _ := json.Marshal(record.Metadata)
+	// Debug log to check CreatedAt value
+	log.Println("DEBUG: CreatedAt value being inserted:", record.CreatedAt)
 	_, err := app.DB.Exec(`
-		INSERT INTO files (file_name, file_path, directory, size, content_type, uploader, metadata)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO files (file_name, file_path, directory, size, content_type, uploader, metadata, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`,
 		record.FileName,
 		record.FilePath,
@@ -377,6 +379,7 @@ func (app *App) CreateFileRecord(record FileRecord) error {
 		record.ContentType,
 		record.Uploader,
 		metadataJSON,
+		record.CreatedAt,
 	)
 	return err
 }
@@ -1195,7 +1198,9 @@ func (app *App) LogAudit(username string, fileID int, action, details string) {
 }
 
 func (app *App) ListAllFiles() ([]FileRecord, error) {
-	rows, err := app.DB.Query("SELECT file_name, size, content_type, uploader FROM files")
+	rows, err := app.DB.Query(`
+		SELECT id, file_name, file_path, directory, size, content_type, uploader, metadata, created_at FROM files
+	`)
 	if err != nil {
 		log.Println("Error fetching all files:", err)
 		return nil, err
@@ -1205,9 +1210,24 @@ func (app *App) ListAllFiles() ([]FileRecord, error) {
 	var files []FileRecord
 	for rows.Next() {
 		var file FileRecord
-		if err := rows.Scan(&file.FileName, &file.Size, &file.ContentType, &file.Uploader); err != nil {
+		var metadataJSON []byte
+		if err := rows.Scan(
+			&file.ID,
+			&file.FileName,
+			&file.FilePath,
+			&file.Directory,
+			&file.Size,
+			&file.ContentType,
+			&file.Uploader,
+			&metadataJSON,
+			&file.CreatedAt,
+		); err != nil {
 			log.Println("Error scanning file row:", err)
 			return nil, err
+		}
+		if err := json.Unmarshal(metadataJSON, &file.Metadata); err != nil {
+			log.Println("Error unmarshalling metadata:", err)
+			file.Metadata = make(map[string]interface{}) // fallback to empty map
 		}
 		files = append(files, file)
 	}

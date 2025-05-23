@@ -262,6 +262,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 		ContentType: handler.Header.Get("Content-Type"),
 		Uploader:    user.Username,
 		Metadata:    metaMap,
+		CreatedAt:   time.Now(),
 	}
 	log.Println("📁 File saved to directory:", fr.Directory)
 
@@ -816,6 +817,7 @@ func (fc *FileController) ListAllFiles(w http.ResponseWriter, r *http.Request) {
 			"uploader":    f.Uploader,
 			"id":          f.ID,
 			"created_at":  f.CreatedAt.Format(time.RFC3339),
+			"directory":   f.Directory,
 		})
 	}
 

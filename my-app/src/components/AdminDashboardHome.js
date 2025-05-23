@@ -23,79 +23,96 @@ const AdminDashboardHome = () => {
   const adminCount = users.filter((u) => getRole(u) === 'admin').length;
   const regularCount = users.filter((u) => getRole(u) === 'user').length;
 
-  // Prepare chart data: uploads per user per month
-  const getMonthYear = (dateString) => {
-    const date = new Date(dateString);
-    return `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
-  };
+  // Prepare chart data: uploads per folder per month (robust)
+const getMonthYear = (dateString) => {
+  const date = new Date(dateString);
+  const month = date.toLocaleString('default', { month: 'long' });
+  const year = date.getFullYear();
+  return `${month} ${year}`;
+};
 
-  // Group files by uploader and month
-  const uploadsPerUserMonth = {};
-  files.forEach(file => {
-    if (!file.uploader) return;
-    // Use uploaded_at if available, otherwise fallback to created_at
-    const dateField = file.uploaded_at || file.created_at;
-    if (!dateField) return;
-    const monthYear = getMonthYear(dateField);
-    if (!uploadsPerUserMonth[monthYear]) uploadsPerUserMonth[monthYear] = {};
-    if (!uploadsPerUserMonth[monthYear][file.uploader]) uploadsPerUserMonth[monthYear][file.uploader] = 0;
-    uploadsPerUserMonth[monthYear][file.uploader] += 1;
+// Only consider these folders, normalize to lowercase
+const validFolders = ['operation', 'training', 'research'];
+const uploadsPerFolderMonth = {};
+files.forEach(file => {
+  let folder = (file.directory || '').toLowerCase();
+  if (!validFolders.includes(folder)) return;
+  const dateField = file.created_at; // or file.uploaded_at if available
+  if (!dateField) return;
+  const monthYear = getMonthYear(dateField);
+
+  if (!uploadsPerFolderMonth[monthYear]) uploadsPerFolderMonth[monthYear] = {};
+  if (!uploadsPerFolderMonth[monthYear][folder]) uploadsPerFolderMonth[monthYear][folder] = 0;
+  uploadsPerFolderMonth[monthYear][folder] += 1;
+});
+
+// Flatten to array for chart, capitalize folder for display
+const chartData = [];
+Object.entries(uploadsPerFolderMonth).forEach(([monthYear, folderCounts]) => {
+  Object.entries(folderCounts).forEach(([folder, count]) => {
+    chartData.push({ monthYear, folder: folder.charAt(0).toUpperCase() + folder.slice(1), uploads: count });
   });
+});
 
-  // Flatten to array for chart
-  const chartData = [];
-  Object.entries(uploadsPerUserMonth).forEach(([monthYear, userCounts]) => {
-    Object.entries(userCounts).forEach(([uploader, count]) => {
-      chartData.push({ month: monthYear, user: uploader, uploads: count });
-    });
-  });
+// Sort by month/year
+const monthOrder = [
+  'January','February','March','April','May','June','July','August','September','October','November','December'
+];
+chartData.sort((a, b) => {
+  const [aMonth, aYear] = a.monthYear.split(' ');
+  const [bMonth, bYear] = b.monthYear.split(' ');
+  if (aYear !== bYear) return parseInt(aYear) - parseInt(bYear);
+  return monthOrder.indexOf(aMonth) - monthOrder.indexOf(bMonth);
+});
 
-  // Sort months for better chart display
-  chartData.sort((a, b) => {
-    const [aMonth, aYear] = a.month.split(' ');
-    const [bMonth, bYear] = b.month.split(' ');
-    const monthOrder = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    if (aYear !== bYear) return parseInt(aYear) - parseInt(bYear);
-    return monthOrder.indexOf(aMonth) - monthOrder.indexOf(bMonth);
-  });
 
-  const chartConfig = {
-    data: chartData,
-    isGroup: true,
-    xField: 'month',
-    yField: 'uploads',
-    seriesField: 'user',
-    height: 260,
-    columnStyle: { radius: [4, 4, 0, 0] },
-    color: ['#1890ff', '#13c2c2', '#faad14', '#52c41a', '#eb2f96', '#722ed1'],
-    label: {
-      position: 'top',
-      style: {
-        fill: '#333',
-        fontWeight: 600,
-        opacity: 0.9,
-      },
+  console.log('Chart data:', chartData);
+const chartConfig = {
+  data: chartData,
+  isGroup: true,
+  xField: 'monthYear',
+  yField: 'uploads',
+  seriesField: 'folder',
+  height: 320,
+  color: ['#13c2c2', '#faad14', '#52c41a'], // Operation, Training, Research
+  label: {
+    position: 'top',
+    style: {
+      fill: '#fff',
+      fontWeight: 600,
+      opacity: 0.9,
     },
-    xAxis: {
-      title: { text: 'Month' },
-      label: { autoHide: true, autoRotate: false },
+  },
+  xAxis: {
+    title: { text: 'MONTH' },
+    label: { autoHide: false, autoRotate: true },
+  },
+  yAxis: {
+    title: { text: 'NUMBER OF UPLOAD FILE' },
+    min: 0,
+    tickInterval: 1,
+  },
+  legend: { position: 'top' },
+  tooltip: {
+    showMarkers: true,
+    shared: true,
+    customContent: (title, items) => {
+      return `
+        <div>
+          <strong>${title}</strong><br/>
+          ${
+            items && items.length
+              ? items.map(item => `
+                  <span style="color:${item.color}">●</span> ${item.name}: <strong>${item.data.uploads ?? item.value ?? 0}</strong>
+                `).join('<br/>')
+              : '<span>No data</span>'
+          }
+        </div>
+      `;
     },
-    yAxis: {
-      title: { text: 'Uploads' },
-      min: 0,
-      tickInterval: 1,
-    },
-    meta: {
-      month: { alias: 'Month' },
-      user: { alias: 'User' },
-      uploads: { alias: 'Number of Uploads' },
-    },
-    tooltip: {
-      showMarkers: true,
-      shared: true,
-    },
-    legend: { position: 'top' },
-  };
+  },
+};
+
 
 
   const fetchUsers = async () => {
