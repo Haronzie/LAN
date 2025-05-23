@@ -200,6 +200,8 @@ const FileManager = () => {
   };
 
   const fetchItems = async () => {
+    // Always use lowercase for backend queries
+    const normalizedCurrentPath = (currentPath || '').toLowerCase();
     setLoading(true);
     try {
       console.log("📂 Fetching files in:", currentPath);
@@ -1636,7 +1638,10 @@ const FileManager = () => {
         key: 'size',
         width: 100, // Reduced width for Size column
         render: (size, record) => {
-          if (record.type === 'directory') return '--';
+          if (record.type === 'directory') {
+            // Show formatted folder size
+            return formatFileSize(record.size) || '0 B';
+          }
           return size || formatFileSize(record.size) || 'Unknown';
         }
       },

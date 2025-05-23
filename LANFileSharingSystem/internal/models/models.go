@@ -457,7 +457,36 @@ func (app *App) UpdateDirectoryRecord(oldName, newName string) error {
 	return err
 }
 
-// ListDirectory is a placeholder that can be implemented as needed.
+// GetDirectorySize returns the total size of all files in the directory and its subdirectories (recursive, path-aware)
+func (app *App) GetDirectorySize(directory string) (int64, error) {
+	directory = strings.ToLower(directory) // Ensure case-insensitive matching
+
+	var totalSize int64
+	var rows *sql.Rows
+	var err error
+
+	if directory == "" {
+		// Root: match all files
+		rows, err = app.DB.Query(`SELECT size FROM files`)
+	} else {
+		// Match all files whose directory is this folder or any subfolder (by path prefix)
+		likePattern := directory + "/%"
+		rows, err = app.DB.Query(`SELECT size FROM files WHERE directory = $1 OR directory LIKE $2`, directory, likePattern)
+	}
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var size int64
+		if err := rows.Scan(&size); err == nil {
+			totalSize += size
+		}
+	}
+	return totalSize, nil
+}
+
+// ListDirectory returns directories with their size (sum of files directly inside)
 func (app *App) ListDirectory(parent string) ([]map[string]interface{}, error) {
 	query := `
         SELECT directory_name, parent_directory, created_by, created_at
@@ -477,12 +506,14 @@ func (app *App) ListDirectory(parent string) ([]map[string]interface{}, error) {
 		if err := rows.Scan(&name, &parentDir, &createdBy, &createdAt); err != nil {
 			continue
 		}
+		size, _ := app.GetDirectorySize(name) // pass the directory name; adjust if you use full path
 		directories = append(directories, map[string]interface{}{
 			"name":       name,
-			"type":       "directory", // this helps the UI distinguish folders from files
+			"type":       "directory",
 			"parent":     parentDir,
 			"created_by": createdBy,
 			"created_at": createdAt,
+			"size":       size,
 		})
 	}
 	return directories, nil
