@@ -780,7 +780,7 @@ func (fc *FileController) ListFiles(w http.ResponseWriter, r *http.Request) {
 			"size":        f.Size,
 			"contentType": f.ContentType,
 			"uploader":    f.Uploader,
-			"created_at":  f.CreatedAt.Format("2006-01-02 15:04:05"),
+			"created_at":  f.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
@@ -815,7 +815,7 @@ func (fc *FileController) ListAllFiles(w http.ResponseWriter, r *http.Request) {
 			"contentType": f.ContentType,
 			"uploader":    f.Uploader,
 			"id":          f.ID,
-			"created_at":  f.CreatedAt.Format("2006-01-02 15:04:05"),
+			"created_at":  f.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
