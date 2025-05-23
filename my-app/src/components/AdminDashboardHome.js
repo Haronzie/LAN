@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Row, Col, Card, Statistic, List, Button, Typography, message } from 'antd';
-import { UserOutlined, FileOutlined, TeamOutlined } from '@ant-design/icons';
+import { Row, Col, Card, Statistic, List, Button, Typography, message, DatePicker, Space } from 'antd';
+import { UserOutlined, FileOutlined, TeamOutlined, CalendarOutlined, FilterOutlined } from '@ant-design/icons';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title as ChartTitle, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import axios from 'axios';
+import moment from 'moment';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTitle, Tooltip, Legend);
@@ -18,6 +19,8 @@ const AdminDashboardHome = () => {
   const [activities, setActivities] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [dateRange, setDateRange] = useState(null);
+  const [filteredChartData, setFilteredChartData] = useState([]);
   const navigate = useNavigate();
 
   const getRole = (user) => user.role || user.userRole || user.type || '';
@@ -50,16 +53,28 @@ files.forEach(file => {
   uploadsPerFolderMonth[monthYear][folder] += 1;
 });
 
-// Transform data for Recharts format - we need each month to have all folder values
+// Transform data for Chart.js format - we need each month to have all folder values
 const transformedChartData = [];
+
+// For sorting months
+const monthOrder = [
+  'January','February','March','April','May','June','July','August','September','October','November','December'
+];
 
 // Get unique month/years
 const uniqueMonthYears = [...new Set(Object.keys(uploadsPerFolderMonth))];
 
-// Sort by month/year
-const monthOrder = [
-  'January','February','March','April','May','June','July','August','September','October','November','December'
-];
+// Function to get the actual date from a file for filtering
+const getFileDate = (file) => {
+  return new Date(file.created_at || file.uploaded_at || file.modified_at || new Date());
+};
+
+// Parse month and year to Date object for filtering
+const parseMonthYear = (monthYear) => {
+  const [month, year] = monthYear.split(' ');
+  const monthIndex = monthOrder.indexOf(month);
+  return new Date(parseInt(year), monthIndex, 1);
+};
 
 uniqueMonthYears.sort((a, b) => {
   const [aMonth, aYear] = a.split(' ');
@@ -70,7 +85,10 @@ uniqueMonthYears.sort((a, b) => {
 
 // Create data points with all folders for each month
 uniqueMonthYears.forEach(monthYear => {
-  const dataPoint = { monthYear };
+  const dataPoint = { 
+    monthYear,
+    date: parseMonthYear(monthYear) // Add actual date object for filtering
+  };
   
   // Initialize all folders with 0
   validFolders.forEach(folder => {
@@ -89,7 +107,90 @@ uniqueMonthYears.forEach(monthYear => {
   transformedChartData.push(dataPoint);
 });
 
-console.log('Transformed Chart data:', transformedChartData);
+// Apply precise date filtering
+const applyDateFilter = (data, range) => {
+  if (!range || !range[0] || !range[1]) return data;
+  
+  // Get exact start and end dates
+  const startDate = range[0].startOf('day').toDate();
+  const endDate = range[1].endOf('day').toDate();
+  
+  // First, filter out all files based on exact dates
+  const filteredFiles = files.filter(file => {
+    const fileDate = new Date(file.created_at || file.uploaded_at || file.modified_at || new Date());
+    return fileDate >= startDate && fileDate <= endDate;
+  });
+  
+  // Now rebuild the chart data from these filtered files
+  const filteredUploadsPerMonth = {};
+  
+  // Count uploads by folder and month for filtered files
+  filteredFiles.forEach(file => {
+    let folder = (file.directory || '').toLowerCase();
+    if (!validFolders.includes(folder)) return;
+    
+    const dateField = file.created_at; // or file.uploaded_at if available
+    if (!dateField) return;
+    
+    const monthYear = getMonthYear(dateField);
+    
+    if (!filteredUploadsPerMonth[monthYear]) filteredUploadsPerMonth[monthYear] = {};
+    if (!filteredUploadsPerMonth[monthYear][folder]) filteredUploadsPerMonth[monthYear][folder] = 0;
+    filteredUploadsPerMonth[monthYear][folder] += 1;
+  });
+  
+  // Build chart data from filtered files
+  const filteredChartData = [];
+  
+  // Get unique month/years from filtered data
+  const filteredMonthYears = [...new Set(Object.keys(filteredUploadsPerMonth))];
+  
+  // Sort by month/year
+  filteredMonthYears.sort((a, b) => {
+    const [aMonth, aYear] = a.split(' ');
+    const [bMonth, bYear] = b.split(' ');
+    if (aYear !== bYear) return parseInt(aYear) - parseInt(bYear);
+    return monthOrder.indexOf(aMonth) - monthOrder.indexOf(bMonth);
+  });
+  
+  // Create data points with all folders for each month
+  filteredMonthYears.forEach(monthYear => {
+    const dataPoint = { 
+      monthYear,
+      date: parseMonthYear(monthYear)
+    };
+    
+    // Initialize all folders with 0
+    validFolders.forEach(folder => {
+      const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
+      dataPoint[capitalizedFolder] = 0;
+    });
+    
+    // Fill in actual values where available
+    if (filteredUploadsPerMonth[monthYear]) {
+      Object.entries(filteredUploadsPerMonth[monthYear]).forEach(([folder, count]) => {
+        const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
+        dataPoint[capitalizedFolder] = count;
+      });
+    }
+    
+    filteredChartData.push(dataPoint);
+  });
+  
+  return filteredChartData;
+};
+
+// Set initial filtered data
+useEffect(() => {
+  setFilteredChartData(transformedChartData);
+}, [files]);
+
+// Update filtered data when date range changes
+useEffect(() => {
+  setFilteredChartData(applyDateFilter(transformedChartData, dateRange));
+}, [dateRange, transformedChartData]);
+
+console.log('Filtered Chart data:', filteredChartData);
 
 // Colors matching the original chart
 const folderColors = {
@@ -215,25 +316,78 @@ const folderColorsArray = Object.values(folderColors);
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={12}>
           <Card 
-            title="Uploads Per User Per Month"
+            title={<span style={{ fontSize: '16px', fontWeight: 'bold' }}>Uploads Per User Per Month</span>}
             style={{ borderRadius: 8 }}
-            headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
+            headStyle={{ 
+              borderBottom: 0, 
+              padding: '16px 12px 8px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}
             bodyStyle={{ padding: '16px 24px' }}
+            extra={
+              <div style={{ minWidth: '300px' }}>
+                <DatePicker.RangePicker 
+                  onChange={(dates) => setDateRange(dates)}
+                  format="YYYY-MM-DD"
+                  placeholder={['Start Date', 'End Date']}
+                  allowClear={true}
+                  style={{ width: '100%' }}
+                />
+                {dateRange && (
+                  <Button 
+                    type="text" 
+                    icon={<FilterOutlined />} 
+                    onClick={() => setDateRange(null)}
+                    title="Clear filters"
+                    style={{ marginLeft: '8px' }}
+                  />
+                )}
+              </div>
+            }
           >
-            {transformedChartData.length > 0 ? (
+            {filteredChartData.length > 0 ? (
               <div style={{ width: '100%', height: 320 }}>
                 <Bar
                   options={{
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: {
+                      padding: {
+                        left: 15,
+                        right: 15,
+                        top: 20,
+                        bottom: 20
+                      }
+                    },
                     plugins: {
                       legend: {
                         position: 'top',
+                        labels: {
+                          boxWidth: 20,
+                          padding: 15,
+                          font: {
+                            size: 13
+                          }
+                        }
                       },
                       title: {
                         display: false,
                       },
                       tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleFont: {
+                          size: 14,
+                          weight: 'bold'
+                        },
+                        bodyFont: {
+                          size: 13
+                        },
+                        padding: 10,
+                        cornerRadius: 4,
                         callbacks: {
                           title: (tooltipItems) => {
                             return tooltipItems[0].label;
@@ -250,32 +404,61 @@ const folderColorsArray = Object.values(folderColors);
                       x: {
                         title: {
                           display: true,
-                          text: 'MONTH'
+                          text: 'MONTH',
+                          font: {
+                            weight: 'bold',
+                            size: 14
+                          },
+                          padding: { top: 15 }
+                        },
+                        grid: {
+                          display: true,
+                          drawBorder: true,
+                          drawOnChartArea: false
                         },
                         ticks: {
-                          maxRotation: 45,
-                          minRotation: 45
+                          maxRotation: 0,
+                          minRotation: 0,
+                          padding: 8,
+                          font: {
+                            size: 12,
+                            weight: 'bold'
+                          },
+                          autoSkip: false
                         }
                       },
                       y: {
                         title: {
                           display: true,
-                          text: 'NUMBER OF UPLOAD FILES'
+                          text: 'NUMBER OF UPLOAD FILES',
+                          font: {
+                            weight: 'bold',
+                            size: 13
+                          },
+                          padding: { bottom: 10 }
                         },
                         beginAtZero: true,
+                        grid: {
+                          borderDash: [2, 2]
+                        },
                         ticks: {
-                          precision: 0
+                          precision: 0,
+                          stepSize: 1,
+                          padding: 10,
+                          font: {
+                            size: 11
+                          }
                         }
                       }
                     }
                   }}
                   data={{
-                    labels: transformedChartData.map(item => item.monthYear),
+                    labels: filteredChartData.map(item => item.monthYear),
                     datasets: validFolders.map((folder, index) => {
                       const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
                       return {
                         label: capitalizedFolder,
-                        data: transformedChartData.map(item => item[capitalizedFolder] || 0),
+                        data: filteredChartData.map(item => item[capitalizedFolder] || 0),
                         backgroundColor: folderColorsArray[index],
                       };
                     })
