@@ -1,0 +1,62 @@
+/* Enhanced pagination styling */
+.enhanced-pagination {
+  margin: 24px 0;
+  text-align: center;
+}
+
+.enhanced-pagination .ant-pagination-item {
+  min-width: 36px;
+  height: 36px;
+  line-height: 34px;
+  margin: 0 8px;
+  border-radius: 4px;
+}
+
+.enhanced-pagination .ant-pagination-item-active {
+  font-weight: 600;
+  border-color: #1890ff;
+}
+
+.enhanced-pagination .ant-pagination-prev,
+.enhanced-pagination .ant-pagination-next {
+  min-width: 36px;
+  height: 36px;
+  line-height: 34px;
+}
+
+.enhanced-pagination .ant-pagination-prev button,
+.enhanced-pagination .ant-pagination-next button {
+  padding: 0 16px;
+  height: 36px;
+  border-radius: 4px;
+}
+
+.enhanced-pagination .ant-pagination-options {
+  margin-left: 16px;
+}
+
+.enhanced-pagination .ant-pagination-options-size-changer {
+  margin-right: 16px;
+}
+
+.enhanced-pagination .ant-select-dropdown {
+  min-width: 120px !important;
+}
+
+.enhanced-pagination .ant-pagination-options-quick-jumper {
+  height: 36px;
+  line-height: 36px;
+}
+
+.enhanced-pagination .ant-pagination-options-quick-jumper input {
+  height: 36px;
+  margin: 0 8px;
+  min-width: 60px;
+}
+
+/* Pagination info text */
+.pagination-info {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.65);
+  margin-right: 16px;
+}

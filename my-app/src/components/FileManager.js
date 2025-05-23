@@ -33,7 +33,9 @@ import {
   FileOutlined,
   ExclamationCircleOutlined,
   ReloadOutlined,
-  MoreOutlined
+  MoreOutlined,
+  LeftOutlined,
+  RightOutlined
 } from '@ant-design/icons';
 // import { useNavigate } from 'react-router-dom'; // Uncomment if navigation is needed
 import axios from 'axios';
@@ -45,6 +47,7 @@ import { batchDelete, batchDownload } from '../utils/batchOperations';
 import CommonModals from './common/CommonModals';
 import './action-buttons-fix.css'; // Import CSS to fix action buttons
 import './searchbar-fix.css'; // Import CSS to fix search bar overlap and ensure responsive layout
+import './pagination-fix.css'; // Import CSS to enhance pagination styling
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -1603,7 +1606,9 @@ const FileManager = () => {
         title: 'Name',
         dataIndex: 'name',
         key: 'name',
-        width: 300, // Fixed width for Name column
+        // Use percentage width for better responsiveness
+        width: '30%',
+        minWidth: 200,
         ellipsis: true, // Add ellipsis for long names
         render: (name, record) => {
           // If searching and it's a file, make the name clickable to go to its folder
@@ -1632,14 +1637,16 @@ const FileManager = () => {
         title: 'Type',
         dataIndex: 'type',
         key: 'type',
-        width: 80, // Reduced width for Type column
+        width: '10%',
+        minWidth: 80,
         render: (type) => (type === 'directory' ? 'Folder' : 'File')
       },
       {
         title: 'Size',
         dataIndex: 'formattedSize',
         key: 'size',
-        width: 100, // Reduced width for Size column
+        width: '10%',
+        minWidth: 80,
         render: (size, record) => {
           if (record.type === 'directory') {
             // Show formatted folder size
@@ -1653,7 +1660,8 @@ const FileManager = () => {
         dataIndex: 'uploader',
         key: 'uploader',
         align: 'center',
-        width: 120,
+        width: '15%',
+        minWidth: 100,
         render: (text, record) => (
           <span>{record.type === 'directory' ? (record.created_by || '-') : (record.uploader || '-')}</span>
         ),
@@ -1666,7 +1674,8 @@ const FileManager = () => {
       baseColumns.splice(1, 0, {
         title: 'Location',
         key: 'location',
-        width: 250,
+        width: '20%',
+        minWidth: 150,
         render: (_, record) => {
           const directory = record.directory || '';
           return (
@@ -1731,7 +1740,8 @@ const FileManager = () => {
               </Tooltip>
             )}
 
-            {!isSearchResult && !isRoot && !(record.type === 'directory' && isRoot) && (
+            {/* Show action buttons regardless of search state, except for root directories */}
+            {!isRoot && !(record.type === 'directory' && isRoot) && (
               <>
                 {!(record.type === 'directory' && (record.name === 'Research' || record.name === 'Training' || record.name === 'Operation')) && (
                   <>
@@ -1993,13 +2003,37 @@ const FileManager = () => {
             dataSource={sortedItems}
             rowKey={(record) => `${record.type}-${record.id || record.name}`}
             loading={loading}
-            pagination={false}
-            scroll={{ y: '49vh' }}
+            pagination={{
+              position: ['bottom'],
+              pageSize: 10,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
+              // Make pagination controls more user-friendly
+              size: 'large',
+              showQuickJumper: true,
+              className: 'enhanced-pagination',
+              itemRender: (page, type, originalElement) => {
+                if (type === 'page') {
+                  return <Button type={page === originalElement.props.pagenum ? 'primary' : 'default'} size="middle">{page}</Button>;
+                }
+                if (type === 'prev') {
+                  return <Button size="middle"><LeftOutlined /> Previous</Button>;
+                }
+                if (type === 'next') {
+                  return <Button size="middle">Next <RightOutlined /></Button>;
+                }
+                return originalElement;
+              }
+            }}
             rowSelection={rowSelection}
             onRow={(record) => ({
               onClick: () => handleRowClick(record),
               style: { cursor: record.type === 'directory' ? 'pointer' : 'default' }
             })}
+            // Set table to auto layout with no horizontal scroll
+            tableLayout="fixed"
+            scroll={{ x: false }}
           />
         )}
 

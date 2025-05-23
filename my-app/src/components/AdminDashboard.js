@@ -88,26 +88,31 @@ const AdminDashboard = () => {
     };
   }, [isMobile, collapsed]);
 
+  // Use programmatic navigation with the navigate function instead of Link components
+  const handleMenuClick = (path) => {
+    navigate(path);
+  };
+
   const menuItems = [
     {
       key: 'dashboard',
       icon: <DashboardOutlined />,
-      label: <Link to="">Dashboard</Link>,
+      label: <span style={{ cursor: 'pointer' }} onClick={() => handleMenuClick('/admin')}>Dashboard</span>,
     },
     {
       key: 'users',
       icon: <UserOutlined />,
-      label: <Link to="users">User Management</Link>,
+      label: <span style={{ cursor: 'pointer' }} onClick={() => handleMenuClick('/admin/users')}>User Management</span>,
     },
     {
       key: 'files',
       icon: <FileOutlined />,
-      label: <Link to="files">File Manager</Link>,
+      label: <span style={{ cursor: 'pointer' }} onClick={() => handleMenuClick('/admin/files')}>File Manager</span>,
     },
     {
       key: 'settings',
       icon: <SettingOutlined />,
-      label: <Link to="settings">Settings</Link>,
+      label: <span style={{ cursor: 'pointer' }} onClick={() => handleMenuClick('/admin/settings')}>Settings</span>,
     }
   ];
 

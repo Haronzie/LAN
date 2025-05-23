@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Row, Col, Card, Statistic, List, Button, Typography, message, DatePicker, Space } from 'antd';
 import { UserOutlined, FileOutlined, TeamOutlined, CalendarOutlined, FilterOutlined } from '@ant-design/icons';
@@ -180,17 +180,19 @@ const applyDateFilter = (data, range) => {
   return filteredChartData;
 };
 
-// Set initial filtered data
-useEffect(() => {
-  setFilteredChartData(transformedChartData);
-}, [files]);
+// Memoize the transformedChartData to prevent recalculation on every render
+const transformedChartDataMemo = useMemo(() => {
+  return transformedChartData;
+}, [files]); // Only recalculate when files change
 
-// Update filtered data when date range changes
+// Set filtered data when files or date range changes
 useEffect(() => {
-  setFilteredChartData(applyDateFilter(transformedChartData, dateRange));
-}, [dateRange, transformedChartData]);
-
-console.log('Filtered Chart data:', filteredChartData);
+  if (dateRange) {
+    setFilteredChartData(applyDateFilter(transformedChartDataMemo, dateRange));
+  } else {
+    setFilteredChartData(transformedChartDataMemo);
+  }
+}, [dateRange, transformedChartDataMemo]);
 
 // Colors matching the original chart
 const folderColors = {
@@ -430,12 +432,18 @@ const folderColorsArray = Object.values(folderColors);
                       y: {
                         title: {
                           display: true,
-                          text: 'NUMBER OF UPLOAD FILES',
+                          text: 'Files',
                           font: {
                             weight: 'bold',
-                            size: 13
+                            size: 14
                           },
-                          padding: { bottom: 10 }
+                          padding: { bottom: 5, top: 5, left: 10, right: 10 },
+                          rotation: 0,
+                          position: 'left'
+                        },
+                        afterFit: function(scaleInstance) {
+                          // Add some extra padding for the horizontal label
+                          scaleInstance.paddingLeft += 10;
                         },
                         beginAtZero: true,
                         grid: {
