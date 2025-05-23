@@ -323,61 +323,85 @@ const folderColorsArray = Object.values(folderColors);
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={12}>
           <Card 
-            title={<span style={{ fontSize: '16px', fontWeight: 'bold' }}>Uploads Per User Per Month</span>}
-            style={{ borderRadius: 8 }}
-            headStyle={{ 
-              borderBottom: 0, 
-              padding: '16px 12px 8px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '8px'
+            style={{ 
+              borderRadius: 8,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
             }}
-            bodyStyle={{ padding: '16px 24px' }}
-            extra={
-              <div style={{ minWidth: '300px' }}>
-                <DatePicker.RangePicker 
-                  onChange={(dates) => setDateRange(dates)}
-                  format="YYYY-MM-DD"
-                  placeholder={['Start Date', 'End Date']}
-                  allowClear={true}
-                  style={{ width: '100%' }}
-                />
+            bodyStyle={{ padding: '0' }}
+          >
+            {/* Chart Header with Improved Layout */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '20px 24px 0',
+              borderBottom: '1px solid #f0f0f0'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '16px'
+              }}>
+                <Title level={4} style={{ margin: 0, fontSize: '18px' }}>
+                  <CalendarOutlined style={{ marginRight: 8 }} /> 
+                  File Upload Analytics
+                </Title>
+                
                 {dateRange && (
                   <Button 
-                    type="text" 
+                    size="small"
+                    type="primary" 
                     icon={<FilterOutlined />} 
                     onClick={() => setDateRange(null)}
-                    title="Clear filters"
-                    style={{ marginLeft: '8px' }}
-                  />
+                    style={{ marginLeft: 'auto', marginRight: '8px' }}
+                  >
+                    Clear Filter
+                  </Button>
                 )}
               </div>
-            }
-          >
+              
+              <div style={{ marginBottom: '16px' }}>
+                <Text type="secondary" style={{ display: 'block', marginBottom: '8px' }}>
+                  Select date range to filter data:
+                </Text>
+                <DatePicker.RangePicker 
+                  onChange={(dates) => setDateRange(dates)}
+                  format="MMM DD, YYYY"
+                  placeholder={['Start Date', 'End Date']}
+                  allowClear={true}
+                  style={{ 
+                    width: '100%',
+                    height: '38px'
+                  }}
+                />
+              </div>
+            </div>
             {filteredChartData.length > 0 ? (
-              <div style={{ width: '100%', height: 320 }}>
+              <div style={{ width: '100%', height: 380, padding: '24px 24px 40px 24px' }}>
                 <Bar
                   options={{
                     responsive: true,
                     maintainAspectRatio: false,
                     layout: {
                       padding: {
-                        left: 15,
-                        right: 15,
-                        top: 20,
-                        bottom: 20
+                        left: 24,
+                        right: 24,
+                        top: 24,
+                        bottom: 40
                       }
                     },
                     plugins: {
                       legend: {
                         position: 'top',
+                        align: 'center',
                         labels: {
-                          boxWidth: 20,
-                          padding: 15,
+                          boxWidth: 16,
+                          usePointStyle: true,
+                          pointStyle: 'circle',
+                          padding: 20,
                           font: {
-                            size: 13
+                            size: 13,
+                            weight: 500
                           }
                         }
                       },
@@ -386,6 +410,8 @@ const folderColorsArray = Object.values(folderColors);
                       },
                       tooltip: {
                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
                         titleFont: {
                           size: 14,
                           weight: 'bold'
@@ -393,8 +419,9 @@ const folderColorsArray = Object.values(folderColors);
                         bodyFont: {
                           size: 13
                         },
-                        padding: 10,
-                        cornerRadius: 4,
+                        padding: 12,
+                        cornerRadius: 6,
+                        boxPadding: 6,
                         callbacks: {
                           title: (tooltipItems) => {
                             return tooltipItems[0].label;
@@ -411,55 +438,73 @@ const folderColorsArray = Object.values(folderColors);
                       x: {
                         title: {
                           display: true,
-                          text: 'MONTH',
+                          text: 'Month',
+                          color: '#333',
                           font: {
-                            weight: 'bold',
-                            size: 14
+                            weight: '600',
+                            size: 16,
+                            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
                           },
-                          padding: { top: 15 }
+                          padding: { top: 5, bottom: 25 }
                         },
                         grid: {
                           display: true,
                           drawBorder: true,
-                          drawOnChartArea: false
+                          borderDash: [],
+                          color: 'rgba(0, 0, 0, 0.05)',
+                          drawOnChartArea: false,
+                          drawTicks: false
                         },
                         ticks: {
                           maxRotation: 0,
                           minRotation: 0,
-                          padding: 8,
+                          padding: 15,
                           font: {
-                            size: 12,
-                            weight: 'bold'
+                            size: 14,
+                            weight: '600',
+                            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
                           },
+                          color: '#333',
                           autoSkip: false
                         }
                       },
                       y: {
                         title: {
                           display: true,
-                          text: 'Files',
+                          text: 'Number of Files',
+                          color: '#555',
                           font: {
-                            weight: 'bold',
-                            size: 14
+                            weight: '600',
+                            size: 14,
+                            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
                           },
-                          padding: { bottom: 5, top: 5, left: 10, right: 10 },
+                          padding: { bottom: 10, top: 10, left: 10, right: 10 },
                           rotation: 0,
                           position: 'left'
                         },
                         afterFit: function(scaleInstance) {
                           // Add some extra padding for the horizontal label
-                          scaleInstance.paddingLeft += 10;
+                          scaleInstance.paddingLeft += 15;
                         },
                         beginAtZero: true,
+                        border: {
+                          display: true,
+                          dash: [4, 4],
+                          color: 'rgba(0, 0, 0, 0.1)'
+                        },
                         grid: {
-                          borderDash: [2, 2]
+                          display: true,
+                          color: 'rgba(0, 0, 0, 0.05)',
+                          borderDash: [2, 4]
                         },
                         ticks: {
                           precision: 0,
                           stepSize: 1,
                           padding: 10,
+                          color: '#666',
                           font: {
-                            size: 11
+                            size: 12,
+                            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
                           }
                         }
                       }
