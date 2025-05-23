@@ -506,6 +506,8 @@ const FileManager = () => {
   };
 
   const handleFolderClick = (folderName) => {
+    // Set loading immediately to prevent table flash
+    setLoading(true);
     const newPath = isRoot ? folderName : path.join(currentPath, folderName);
     setCurrentPath(newPath);
   };
@@ -1928,7 +1930,11 @@ const FileManager = () => {
         )}
 
         {/* Render cards at root level, table otherwise */}
-        {isRoot && !isSearching ? (
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+            <Spin size="large" />
+          </div>
+        ) : isRoot && !isSearching ? (
           <Row gutter={[32, 32]} justify="center" style={{ marginTop: 48, marginBottom: 48 }}>
             {/* Dashboard Cards for each root folder, with CDRRMO-relevant icons */}
             <Col xs={24} sm={12} md={8} key="Operation">
