@@ -26,116 +26,96 @@ const Settings = () => {
             padding: '14px 16px'
           }}
         >
-          <Title level={4} style={{ 
-            marginBottom: '6px', 
-            textAlign: 'center', 
-            fontSize: '16px',
-            fontWeight: 500
-          }}>
-            Admin Settings
-          </Title>
-          <Text type="secondary" style={{ 
-            fontSize: '12px', 
-            display: 'block', 
+          <Title level={4} style={{
+            marginBottom: '6px',
             textAlign: 'center',
-            marginBottom: '10px'
+            fontSize: '18px',
+            fontWeight: 600
           }}>
-            Configure system parameters
+            Reset Admin Password
+          </Title>
+          <Text type="secondary" style={{
+            fontSize: '13px',
+            display: 'block',
+            textAlign: 'center',
+            marginBottom: '14px'
+          }}>
+            For security, please use a strong password. You will need to re-login after resetting.
           </Text>
-          
-          <Divider style={{ margin: '10px 0' }} />
-          
-          <Form 
-            layout="vertical" 
+          <Divider style={{ margin: '14px 0' }} />
+          <Form
+            layout="vertical"
             onFinish={onFinish}
-            initialValues={{
-              maintenanceMode: false,
-              detailedLogging: false,
-            }}
+            style={{ maxWidth: 380, margin: '0 auto' }}
           >
             <Form.Item
-              label={<span style={{ fontSize: '12px' }}>Admin Password</span>}
+              label={<span style={{ fontSize: '13px', fontWeight: 500 }}>New Password</span>}
               name="newPassword"
-              rules={[{ required: true, message: 'Required' }]}
-              style={{ marginBottom: '14px' }}
+              rules={[
+                { required: true, message: 'Please enter a new password' },
+                { min: 8, message: 'Password must be at least 8 characters' },
+                { pattern: /^(?=.*[A-Z])(?=.*\d).+$/, message: 'Must include an uppercase letter and a number' }
+              ]}
+              hasFeedback
+              style={{ marginBottom: '18px' }}
             >
-              <Input.Password 
-                placeholder="Enter new password" 
-                size="middle" 
-                style={{ fontSize: '13px' }}
+              <Input.Password
+                placeholder="Enter new password"
+                size="large"
+                style={{ fontSize: '14px' }}
+                autoComplete="new-password"
               />
             </Form.Item>
-
             <Form.Item
-              label={<span style={{ fontSize: '12px' }}>Maintenance Mode</span>}
-              name="maintenanceMode"
-              valuePropName="checked"
-              style={{ marginBottom: '14px' }}
+              label={<span style={{ fontSize: '13px', fontWeight: 500 }}>Confirm Password</span>}
+              name="confirmPassword"
+              dependencies={["newPassword"]}
+              hasFeedback
+              rules={[
+                { required: true, message: 'Please confirm your password' },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value || getFieldValue('newPassword') === value) {
+                      return Promise.resolve();
+                    }
+                    return Promise.reject(new Error('Passwords do not match!'));
+                  },
+                }),
+              ]}
+              style={{ marginBottom: '20px' }}
             >
-              <Switch size="small" />
-            </Form.Item>
-
-            <Form.Item
-              label={<span style={{ fontSize: '12px' }}>Max Upload Size (MB)</span>}
-              name="maxUploadSize"
-              rules={[{ required: true, message: 'Required' }]}
-              style={{ marginBottom: '14px' }}
-            >
-              <InputNumber 
-                min={1} 
-                max={1000} 
-                style={{ width: '100%', fontSize: '13px' }} 
-                placeholder="Enter size" 
-                size="middle"
+              <Input.Password
+                placeholder="Confirm new password"
+                size="large"
+                style={{ fontSize: '14px' }}
+                autoComplete="new-password"
               />
             </Form.Item>
-
-            <Form.Item
-              label={<span style={{ fontSize: '12px' }}>Shared Folder Path</span>}
-              name="sharedFolderPath"
-              rules={[{ required: true, message: 'Required' }]}
-              style={{ marginBottom: '14px' }}
-            >
-              <Input 
-                placeholder="Enter path" 
-                size="middle" 
-                style={{ fontSize: '13px' }}
-              />
-            </Form.Item>
-
-            <Form.Item
-              label={<span style={{ fontSize: '12px' }}>Detailed Logging</span>}
-              name="detailedLogging"
-              valuePropName="checked"
-              style={{ marginBottom: '16px' }}
-            >
-              <Switch size="small" />
-            </Form.Item>
-
-            <Form.Item style={{ marginTop: '10px', marginBottom: '8px' }}>
-              <Button 
-                type="primary" 
-                htmlType="submit" 
-                loading={loading} 
-                size="middle" 
+            <Form.Item style={{ marginTop: '10px', marginBottom: '0' }}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={loading}
+                size="large"
                 block
-                style={{ fontSize: '13px' }}
+                style={{ fontSize: '15px', fontWeight: 500 }}
               >
-                Save Settings
+                Reset Password
               </Button>
             </Form.Item>
           </Form>
-          
-          <Paragraph 
-            type="secondary" 
-            style={{ 
-              marginTop: '10px', 
-              fontSize: '11px',
-              lineHeight: '1.4',
-              marginBottom: '4px'
+          <Paragraph
+            type="secondary"
+            style={{
+              marginTop: '18px',
+              fontSize: '11.5px',
+              lineHeight: '1.6',
+              marginBottom: '4px',
+              textAlign: 'center',
+              color: '#888'
             }}
           >
-            Configure your LAN file sharing system. Adjust upload limits, storage paths, and logging preferences.
+            Make sure your password is memorable and secure. Contact the system administrator if you encounter issues.
           </Paragraph>
         </Card>
       </Content>
