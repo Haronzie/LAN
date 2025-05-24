@@ -427,7 +427,7 @@ const UserManagement = () => {
           rowKey="username"
           loading={loading}
           pagination={false}
-          scroll={{ y: '60vh' }} // this keeps header fixed, body scrolls
+          // Removed fixed height scroll to allow natural table expansion
           rowSelection={rowSelection}
         />
 

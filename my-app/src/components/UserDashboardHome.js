@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
   FireOutlined,
-  RadarChartOutlined,
-  TeamOutlined,
-  DatabaseOutlined,
+  SearchOutlined,
+  BookOutlined,
+  ContainerOutlined,
   FileOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined
@@ -88,19 +88,19 @@ const UserDashboardHome = () => {
     {
       key: 'research',
       title: 'Research Dashboard',
-      icon: <RadarChartOutlined style={{ fontSize: '70px', color: '#1890ff' }} />,
+      icon: <SearchOutlined style={{ fontSize: '70px', color: '#1890ff' }} />,
       route: '/user/research',
     },
     {
       key: 'training',
       title: 'Training Dashboard',
-      icon: <TeamOutlined style={{ fontSize: '70px', color: '#52c41a' }} />,
+      icon: <BookOutlined style={{ fontSize: '70px', color: '#52c41a' }} />,
       route: '/user/training',
     },
     {
       key: 'inventory',
       title: 'Inventory Dashboard',
-      icon: <DatabaseOutlined style={{ fontSize: '70px', color: '#faad14' }} />,
+      icon: <ContainerOutlined style={{ fontSize: '70px', color: '#faad14' }} />,
       route: '/user/inventory',
     },
   ];

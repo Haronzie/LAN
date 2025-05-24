@@ -203,7 +203,22 @@ const UserDashboard = () => {
 
           <div style={{ flex: 1 }} />
           <NotificationDropdown />
-          <Button type="primary" onClick={handleLogout} style={{ zIndex: 1 }}>
+          <Button 
+            type="primary" 
+            danger
+            onClick={handleLogout} 
+            style={{ 
+              marginLeft: '16px', 
+              fontWeight: 600, 
+              letterSpacing: '0.5px',
+              boxShadow: '0 2px 0 rgba(255, 38, 5, 0.06)',
+              height: '40px',
+              padding: '0 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
             Logout
           </Button>
         </Header>
