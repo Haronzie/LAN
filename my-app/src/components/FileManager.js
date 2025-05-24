@@ -1942,53 +1942,157 @@ const FileManager = () => {
           </div>
         ) : isRoot && !isSearching ? (
           <Row gutter={[32, 32]} justify="center" style={{ marginTop: 48, marginBottom: 48 }}>
-            {/* Dashboard Cards for each root folder, with CDRRMO-relevant icons */}
+            {/* Professional CDRRMO Dashboard Cards */}
             <Col xs={24} sm={12} md={8} key="Operation">
               <Card
                 hoverable
-                style={{ borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', textAlign: 'center', minHeight: 220, cursor: 'pointer' }}
-                bodyStyle={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200 }}
+                style={{
+                  borderRadius: 12,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                  textAlign: 'center',
+                  minHeight: 260,
+                  cursor: 'pointer',
+                  transition: 'transform 0.3s, box-shadow 0.3s',
+                  border: '1px solid #f0f0f0',
+                  overflow: 'hidden'
+                }}
+                bodyStyle={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  padding: '24px 16px'
+                }}
                 onClick={() => handleFolderClick('Operation')}
               >
-                <div style={{ fontSize: 72, color: '#fa8c16', marginBottom: 24 }}>
-                  <span role="img" aria-label="siren">
-                    {/* Siren/Emergency icon for Operation */}
-                    <svg width="72" height="72" viewBox="0 0 1024 1024" fill="currentColor"><ellipse cx="512" cy="520" rx="220" ry="230" fill="#fff2e8" stroke="#fa8c16" strokeWidth="24"/><rect x="392" y="700" width="240" height="70" rx="16" fill="#fa8c16"/><rect x="482" y="170" width="60" height="150" rx="16" fill="#fa8c16"/><ellipse cx="512" cy="520" rx="180" ry="190" fill="#fa8c16" opacity="0.7"/><ellipse cx="512" cy="520" rx="120" ry="130" fill="#fff2e8" opacity="0.8"/></svg>
-                  </span>
+                <div style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: '50%',
+                  backgroundColor: '#fff8f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 20,
+                  boxShadow: '0 4px 12px rgba(250, 84, 28, 0.15)'
+                }}>
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L4 5V11.09C4 16.14 7.41 20.85 12 22C16.59 20.85 20 16.14 20 11.09V5L12 2ZM18 11.09C18 15.09 15.45 19.09 12 20.32C8.55 19.09 6 15.1 6 11.09V6.39L12 4.14L18 6.39V11.09Z" fill="#fa541c"/>
+                    <path d="M11 16H13V18H11V16Z" fill="#fa541c"/>
+                    <path d="M7 18H9V20H7V18Z" fill="#fa541c"/>
+                    <path d="M15 18H17V20H15V18Z" fill="#fa541c"/>
+                  </svg>
                 </div>
-                <div style={{ fontWeight: 700, fontSize: 26, marginBottom: 0, letterSpacing: 0.5 }}>Operation<br />Dashboard</div>
+                <h3 style={{
+                  fontSize: 24,
+                  fontWeight: 600,
+                  margin: '16px 0 8px',
+                  color: '#262626',
+                  lineHeight: 1.3
+                }}>Operation</h3>
               </Card>
             </Col>
+
             <Col xs={24} sm={12} md={8} key="Research">
               <Card
                 hoverable
-                style={{ borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', textAlign: 'center', minHeight: 220, cursor: 'pointer' }}
-                bodyStyle={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200 }}
+                style={{
+                  borderRadius: 12,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                  textAlign: 'center',
+                  minHeight: 260,
+                  cursor: 'pointer',
+                  transition: 'transform 0.3s, box-shadow 0.3s',
+                  border: '1px solid #f0f0f0',
+                  overflow: 'hidden'
+                }}
+                bodyStyle={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  padding: '24px 16px'
+                }}
                 onClick={() => handleFolderClick('Research')}
               >
-                <div style={{ fontSize: 72, color: '#13c2c2', marginBottom: 24 }}>
-                  <span role="img" aria-label="search-doc">
-                    {/* Magnifier over document icon for Research */}
-                    <svg width="72" height="72" viewBox="0 0 1024 1024" fill="currentColor"><rect x="200" y="180" width="400" height="560" rx="32" fill="#e6fffb" stroke="#13c2c2" strokeWidth="24"/><rect x="260" y="240" width="280" height="80" rx="8" fill="#13c2c2" opacity="0.7"/><rect x="260" y="350" width="220" height="40" rx="8" fill="#13c2c2" opacity="0.4"/><circle cx="660" cy="660" r="80" fill="#13c2c2" opacity="0.7"/><rect x="710" y="710" width="90" height="24" rx="12" fill="#13c2c2"/><circle cx="660" cy="660" r="50" fill="#e6fffb"/></svg>
-                  </span>
+                <div style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: '50%',
+                  backgroundColor: '#f0f9ff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 20,
+                  boxShadow: '0 4px 12px rgba(24, 144, 255, 0.15)'
+                }}>
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21.41 6.29L12 15.17L5.12 8.29C4.73 7.9 4.1 7.9 3.71 8.29C3.32 8.68 3.32 9.31 3.71 9.7L11.3 17.29C11.69 17.68 12.32 17.68 12.71 17.29L21.3 8.7C21.69 8.31 21.69 7.68 21.3 7.29C20.91 6.9 20.8 6.68 21.41 6.29Z" fill="#1890ff"/>
+                    <path d="M14.12 8.29L15.53 9.7L21.29 3.94C21.68 3.55 21.68 2.92 21.29 2.53C20.9 2.14 20.27 2.14 19.88 2.53L14.12 8.29Z" fill="#1890ff"/>
+                    <path d="M3.7 14.12L9.47 8.35L10.88 9.76L5.11 15.53C4.72 15.92 4.09 15.92 3.7 15.53C3.31 15.14 3.31 14.51 3.7 14.12Z" fill="#1890ff"/>
+                    <path d="M14.12 14.12L15.53 15.53L21.3 9.76L19.89 8.35L14.12 14.12Z" fill="#1890ff"/>
+                  </svg>
                 </div>
-                <div style={{ fontWeight: 700, fontSize: 26, marginBottom: 0, letterSpacing: 0.5 }}>Research<br />Dashboard</div>
+                <h3 style={{
+                  fontSize: 24,
+                  fontWeight: 600,
+                  margin: '16px 0 8px',
+                  color: '#262626',
+                  lineHeight: 1.3
+                }}>Research</h3>
               </Card>
             </Col>
+
             <Col xs={24} sm={12} md={8} key="Training">
               <Card
                 hoverable
-                style={{ borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', textAlign: 'center', minHeight: 220, cursor: 'pointer' }}
-                bodyStyle={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200 }}
+                style={{
+                  borderRadius: 12,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                  textAlign: 'center',
+                  minHeight: 260,
+                  cursor: 'pointer',
+                  transition: 'transform 0.3s, box-shadow 0.3s',
+                  border: '1px solid #f0f0f0',
+                  overflow: 'hidden'
+                }}
+                bodyStyle={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  padding: '24px 16px'
+                }}
                 onClick={() => handleFolderClick('Training')}
               >
-                <div style={{ fontSize: 72, color: '#fadb14', marginBottom: 24 }}>
-                  <span role="img" aria-label="helmet">
-                    {/* Safety helmet icon for Training */}
-                    <svg width="72" height="72" viewBox="0 0 1024 1024" fill="currentColor"><ellipse cx="512" cy="600" rx="200" ry="120" fill="#fffbe6" stroke="#fadb14" strokeWidth="24"/><rect x="312" y="600" width="400" height="60" rx="16" fill="#fadb14"/><ellipse cx="512" cy="520" rx="160" ry="90" fill="#fadb14" opacity="0.7"/><rect x="432" y="410" width="160" height="60" rx="16" fill="#fadb14"/></svg>
-                  </span>
+                <div style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: '50%',
+                  backgroundColor: '#f6ffed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 20,
+                  boxShadow: '0 4px 12px rgba(82, 196, 26, 0.15)'
+                }}>
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 3L1 9L12 15L21 10.09V17H23V9L12 3ZM5.13 10.99L12 15.32L18.87 10.99L20 10.31L12 5.68L4 10.31L5.13 10.99ZM21 15V17H3V15H21Z" fill="#52c41a"/>
+                    <path d="M11 18H13V20H11V18Z" fill="#52c41a"/>
+                    <path d="M7 18H9V20H7V18Z" fill="#52c41a"/>
+                    <path d="M15 18H17V20H15V18Z" fill="#52c41a"/>
+                  </svg>
                 </div>
-                <div style={{ fontWeight: 700, fontSize: 26, marginBottom: 0, letterSpacing: 0.5 }}>Training<br />Dashboard</div>
+                <h3 style={{
+                  fontSize: 24,
+                  fontWeight: 600,
+                  margin: '16px 0 8px',
+                  color: '#262626',
+                  lineHeight: 1.3
+                }}>Training</h3>
               </Card>
             </Col>
           </Row>
