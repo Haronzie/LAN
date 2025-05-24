@@ -199,7 +199,8 @@ const InventoryDashboard = () => {
       );
     }
 
-    if (filteredItems.length === 0) {
+    // Check if filteredItems is null or empty
+    if (!filteredItems || filteredItems.length === 0) {
       return (
         <Card style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Empty description="No inventory items found" />
@@ -269,6 +270,27 @@ const InventoryDashboard = () => {
 
   // Calculate statistics for CDRRMO dashboard
   const { stats, categoryStats, statusStats } = useMemo(() => {
+    // Initialize with default values if items is null
+    if (!items || !Array.isArray(items)) {
+      return {
+        stats: {
+          totalItems: 0,
+          totalQuantity: 0,
+          lowStockItems: 0,
+          outOfStockItems: 0,
+          inStockItems: 0,
+          itemsNeedingRestock: 0,
+          restockUrgency: 'Low'
+        },
+        categoryStats: [],
+        statusStats: {
+          inStock: 0,
+          lowStock: 0,
+          outOfStock: 0
+        }
+      };
+    }
+    
     const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
     const totalItems = items.length;
     const itemsNeedingRestock = items.filter(item => (item.quantity || 0) <= (item.lowStockThreshold || 5)).length;
