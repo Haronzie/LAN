@@ -1293,7 +1293,13 @@ const ResearchDashboard = () => {
               onToggleSelectionMode={handleToggleSelectionMode}
               onCancelSelection={handleCancelSelection}
             />
-            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+            <Button 
+              type="primary" 
+              icon={<UploadOutlined />} 
+              onClick={handleOpenUploadModal}
+              size="middle"
+              style={{ fontWeight: 500 }}
+            >
               Upload File
             </Button>
           </Col>
