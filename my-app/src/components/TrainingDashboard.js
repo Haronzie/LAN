@@ -110,8 +110,42 @@ const TrainingDashboard = () => {
   const [selectedSubFolder, setSelectedSubFolder] = useState('');
   const [subFolders, setSubFolders] = useState([]);
 
-  // Directory tree for moving files/folders
+  // Directory tree for moving/copying files/folders
   const [directories, setDirectories] = useState([]);
+
+  // Format directories for TreeSelect component with all root folders
+  const folderTreeData = React.useMemo(() => {
+    const formatFolders = (folders, parentPath = '') => {
+      if (!Array.isArray(folders)) return [];
+      
+      return folders
+        .filter(folder => folder && typeof folder === 'object' && folder.type === 'directory')
+        .map(folder => {
+          const fullPath = parentPath ? `${parentPath}/${folder.name}` : folder.name;
+          return {
+            title: folder.name,
+            value: fullPath,
+            key: fullPath,
+            isLeaf: !(folder.children && folder.children.length > 0),
+            children: folder.children ? formatFolders(folder.children, fullPath) : []
+          };
+        });
+    };
+
+    // Create root folders structure
+    const rootFolders = ['Operation', 'Training', 'Research'].map(folder => {
+      const folderData = directories.find(d => d.name === folder) || { name: folder, children: [] };
+      return {
+        title: folder,
+        value: folder,
+        key: folder,
+        isLeaf: !(folderData.children && folderData.children.length > 0),
+        children: formatFolders(folderData.children || [], folder)
+      };
+    });
+
+    return rootFolders;
+  }, [directories]);
 
   // Upload
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
@@ -293,14 +327,148 @@ const TrainingDashboard = () => {
     // eslint-disable-next-line
   }, []);
 
-  const fetchDirectories = async () => {
-    try {
-      const res = await axios.get(`${BASE_URL}/directory/tree?container=training`, { withCredentials: true });
-      setDirectories(res.data || []);
-    } catch (error) {
-      console.error('Error fetching directories:', error);
+  // Format directories for TreeSelect component
+  const formatDirectories = (dirs, parentPath = '') => {
+    if (!Array.isArray(dirs)) {
+      console.warn('formatDirectories received non-array input:', dirs);
+      return [];
     }
+    
+    return dirs.flatMap(dir => {
+      if (!dir || typeof dir !== 'object' || !dir.name) {
+        console.warn('Skipping invalid directory item:', dir);
+        return [];
+      }
+      
+      // Handle both directory objects and string paths
+      const dirName = typeof dir === 'string' ? dir : dir.name;
+      const dirChildren = dir.children || [];
+      const hasChildren = Array.isArray(dirChildren) && dirChildren.length > 0;
+      const fullPath = parentPath ? `${parentPath}/${dirName}` : dirName;
+      
+      console.log('Processing directory:', {
+        name: dirName,
+        fullPath,
+        hasChildren,
+        childrenCount: hasChildren ? dirChildren.length : 0
+      });
+      
+      // Create the directory node
+      const node = {
+        title: dirName,
+        value: fullPath,
+        key: fullPath,
+        isLeaf: !hasChildren,
+        children: hasChildren ? formatDirectories(dirChildren, fullPath) : undefined
+      };
+      
+      return node;
+    }).filter(Boolean); // Remove any null/undefined entries
   };
+
+  // Fetch all root level directories
+  const fetchDirectories = useCallback(async (retryCount = 0) => {
+    console.log('Fetching root directories... (attempt ' + (retryCount + 1) + ')');
+    
+    try {
+      // Define all root containers we want to show
+      const rootContainers = ['Operation', 'Training', 'Research'];
+      const allDirectories = [];
+      
+      // Fetch each container's directory tree
+      for (const container of rootContainers) {
+        try {
+          const containerLower = container.toLowerCase();
+          const apiUrl = `${BASE_URL}/directory/tree?container=${containerLower}&_t=${Date.now()}`;
+          console.log(`Fetching directory tree from: ${apiUrl}`);
+          
+          const response = await axios.get(apiUrl, {
+            withCredentials: true,
+            timeout: 10000 // 10 second timeout
+          });
+          
+          console.log(`${container} directory response:`, {
+            status: response.status,
+            statusText: response.statusText,
+            data: response.data,
+            headers: response.headers
+          });
+          
+          if (Array.isArray(response.data)) {
+            console.log(`Found ${response.data.length} items in ${container}`);
+            if (response.data.length > 0) {
+              console.log(`First item in ${container}:`, response.data[0]);
+            }
+            
+            // Add the container as a parent node
+            allDirectories.push({
+              name: container,
+              children: response.data,
+              isRoot: true
+            });
+          } else if (typeof response.data === 'object' && response.data !== null) {
+            // Handle case where response is an object with a 'children' array
+            const children = response.data.children || [];
+            console.log(`Found ${children.length} items in ${container}'s children`);
+            
+            allDirectories.push({
+              name: container,
+              children: children,
+              isRoot: true
+            });
+          } else {
+            console.warn(`Unexpected response format for ${container}:`, typeof response.data);
+          }
+        } catch (error) {
+          console.error(`Error fetching ${container} directory:`, {
+            message: error.message,
+            response: error.response ? {
+              status: error.response.status,
+              statusText: error.response.statusText,
+              data: error.response.data
+            } : 'No response',
+            config: {
+              url: error.config?.url,
+              method: error.config?.method,
+              params: error.config?.params
+            }
+          });
+          // Continue with other containers even if one fails
+        }
+      }
+      
+      // If we got any directories, format and set them
+      if (allDirectories.length > 0) {
+        console.log('All directories before formatting:', allDirectories);
+        const formattedDirs = formatDirectories(allDirectories);
+        console.log('Formatted directories:', formattedDirs);
+        setDirectories(formattedDirs);
+        return formattedDirs;
+      }
+      
+      throw new Error('No valid directory data received');
+      
+    } catch (error) {
+      console.error('Error in fetchDirectories:', error);
+      
+      // If we have retries left and it's a network error, retry
+      if (retryCount < 2 && (!error.response || error.code === 'ECONNABORTED')) {
+        console.log(`Retrying... (${retryCount + 1}/2)`);
+        return fetchDirectories(retryCount + 1);
+      }
+      
+      // Fallback to default root folders
+      console.warn('Using fallback root folders');
+      const defaultRoots = ['Operation', 'Training', 'Research'].map(name => ({
+        title: name,
+        value: name,
+        key: name,
+        children: []
+      }));
+      setDirectories(defaultRoots);
+      return defaultRoots;
+    }
+  }, []);
 
   const fetchAllFilesWithMessages = async () => {
     try {
@@ -349,27 +517,54 @@ const TrainingDashboard = () => {
     setLoading(true);
     try {
       const dirParam = encodeURIComponent(currentPath);
+      
       // 1) Fetch directories
-      const dirRes = await axios.get(`${BASE_URL}/directory/list?directory=${dirParam}`, { withCredentials: true });
-      const fetchedDirs = Array.isArray(dirRes.data) ? dirRes.data : [];
-      // 2) Fetch files (including confidential flag and authorized users if available)
-      const fileRes = await axios.get(`${BASE_URL}/files?directory=${dirParam}`, { withCredentials: true });
-      const fetchedFiles = (fileRes.data || []).map((f) => {
-        // Ensure size is a valid number
-        const fileSize = typeof f.size === 'number' ? f.size :
-                        (f.size ? parseInt(f.size, 10) : null);
-
-        return {
-          id: f.id,
-          name: f.name,
-          type: 'file',
-          size: fileSize,
-          formattedSize: formatFileSize(fileSize),
-          uploader: f.uploader
-        };
+      const dirRes = await axios.get(`${BASE_URL}/directory/list?directory=${dirParam}`, { 
+        withCredentials: true 
       });
-
-      setItems([...fetchedDirs, ...fetchedFiles]);
+      
+      const fetchedDirs = (dirRes.data || [])
+        .filter(item => item.type === 'directory')
+        .map(dir => ({
+          ...dir,
+          type: 'directory',
+          key: `dir-${dir.name}`
+        }));
+      
+      // 2) Fetch files
+      const fileRes = await axios.get(`${BASE_URL}/files?directory=${dirParam}`, { 
+        withCredentials: true 
+      });
+      
+      const fetchedFiles = (fileRes.data || []).map((f) => ({
+        id: f.id,
+        name: f.name,
+        type: 'file',
+        size: typeof f.size === 'number' ? f.size : (f.size ? parseInt(f.size, 10) : null),
+        formattedSize: formatFileSize(f.size),
+        uploader: f.uploader || 'System',
+        directory: currentPath,
+        key: `file-${f.id || f.name}`
+      }));
+      
+      // Add parent directory navigation if we're in a subdirectory
+      const parentPath = currentPath.includes('/') 
+        ? currentPath.split('/').slice(0, -1).join('/') 
+        : null;
+        
+      const itemsToSet = [
+        ...(parentPath ? [{
+          name: '..',
+          type: 'directory',
+          isParent: true,
+          parentPath: parentPath,
+          key: 'parent-dir'
+        }] : []),
+        ...fetchedDirs,
+        ...fetchedFiles
+      ];
+      
+      setItems(itemsToSet);
     } catch (error) {
       console.error('Error fetching directory contents:', error);
       message.error(error.response?.data?.error || 'Error fetching directory contents');
@@ -537,29 +732,34 @@ const TrainingDashboard = () => {
   // ----------------------------------
   const handleFolderClick = (folderName) => {
     const newPath = path.join(currentPath, folderName);
-    if (!newPath.startsWith('Training')) return;
+    // Allow navigation to any root folder (Training, Operation, Research) and their subdirectories
+    const allowedRoots = ['Training', 'Operation', 'Research'];
+    const isPathAllowed = allowedRoots.some(root => newPath.startsWith(root));
+    if (!isPathAllowed) return;
     setCurrentPath(newPath);
   };
 
   const handleGoUp = () => {
-    if (currentPath === 'Training') return;
+    const rootFolders = ['Training', 'Operation', 'Research'];
+    if (rootFolders.includes(currentPath)) return; // Already at root
     const parentPath = path.dirname(currentPath);
     setCurrentPath(parentPath === '.' ? 'Training' : parentPath);
   };
 
   const getPathSegments = (p) => {
     const parts = p.split('/').filter(Boolean);
-    return parts.slice(1); // remove the first 'Training' part
+    return parts; // Return all parts as we need to know which root folder we're in
   };
 
   const segments = getPathSegments(currentPath);
+  const rootFolder = segments[0] || 'Training'; // Default to Training if no segments
   const breadcrumbItems = [
-    <Breadcrumb.Item key="training">
-      <a onClick={() => setCurrentPath('Training')}>Training</a>
+    <Breadcrumb.Item key={rootFolder.toLowerCase()}>
+      <a onClick={() => setCurrentPath(rootFolder)}>{rootFolder}</a>
     </Breadcrumb.Item>
   ];
   segments.forEach((seg, index) => {
-    const partialPath = ['Training', ...segments.slice(0, index + 1)].join('/');
+    const partialPath = [rootFolder, ...segments.slice(1, index + 1)].join('/');
     const isLast = index === segments.length - 1;
     breadcrumbItems.push(
       <Breadcrumb.Item key={index}>
@@ -887,32 +1087,45 @@ const TrainingDashboard = () => {
   // Copy
   // ----------------------------------
   const handleCopy = (record) => {
-      // condition in naming the copied file
-      let baseName = record.name;
-      let extension = '';
-      const dotIndex = record.name.lastIndexOf('.');
-      if (dotIndex !== -1) {
-        baseName = record.name.substring(0, dotIndex);
-        extension = record.name.substring(dotIndex);
-      }
+    // Check if user has permission to copy
+    const isOwner = record.type === 'directory' 
+      ? record.created_by === currentUser 
+      : record.uploader === currentUser;
+      
+    if (!isOwner && record.type === 'directory') {
+      message.error('Only the owner can copy this folder.');
+      return;
+    }
 
-      let suggestedName = record.name;
-      const destination = selectedDestination || currentPath;
-      const existingNames = items
-        .filter(item => item.parent === destination)
-        .map(item => item.name);
+    // Generate a suggested name for the copy
+    let baseName = record.name;
+    let extension = '';
+    const dotIndex = record.name.lastIndexOf('.');
+    if (dotIndex !== -1 && record.type !== 'directory') {
+      baseName = record.name.substring(0, dotIndex);
+      extension = record.name.substring(dotIndex);
+    }
 
-      if (existingNames.includes(record.name)) {
-        let counter = 1;
-        let newName;
-        do {
-          newName = `${baseName}(${counter})${extension}`;
-          counter++;
-        } while (existingNames.includes(newName));
-        suggestedName = newName;
-      }
+    let suggestedName = record.name;
+    const existingNames = items
+      .filter(item => item.parent === currentPath)
+      .map(item => item.name);
+
+    if (existingNames.includes(record.name)) {
+      let counter = 1;
+      let newName;
+      do {
+        newName = record.type === 'directory'
+          ? `${baseName} (${counter})`
+          : `${baseName} (${counter})${extension}`;
+        counter++;
+      } while (existingNames.includes(newName));
+      suggestedName = newName;
+    }
+
     setCopyItem(record);
     setCopyNewName(suggestedName);
+    setSelectedDestination(''); // Reset destination
     setCopyModalVisible(true);
   };
 
@@ -925,7 +1138,20 @@ const TrainingDashboard = () => {
       message.error('No item selected to copy');
       return;
     }
+    
+    // Determine the destination path based on main folder and subfolder
+    let destinationPath = selectedMainFolder || currentPath;
+    if (selectedSubFolder) {
+      destinationPath = `${selectedMainFolder}/${selectedSubFolder}`;
+    }
+
     try {
+      // Check if destination is the same as source for directories
+      if (copyItem.type === 'directory' && destinationPath === currentPath) {
+        message.warning('Cannot copy a folder to itself');
+        return;
+      }
+
       if (copyItem.type === 'directory') {
         await axios.post(
           `${BASE_URL}/directory/copy`,
@@ -933,32 +1159,71 @@ const TrainingDashboard = () => {
             source_name: copyItem.name,
             source_parent: currentPath,
             new_name: copyNewName,
-            destination_parent: selectedDestination || currentPath,
+            destination_parent: destinationPath,
             container: 'training'
           },
           { withCredentials: true }
         );
       } else {
+        // For files, check if file already exists at destination
+        try {
+          const res = await axios.get(
+            `${BASE_URL}/files?directory=${encodeURIComponent(destinationPath)}`,
+            { withCredentials: true }
+          );
+          
+          const fileExists = (res.data || []).some(f => 
+            f.name === copyNewName && 
+            (f.directory === destinationPath || f.directory === undefined)
+          );
+          
+          if (fileExists) {
+            throw new Error('File already exists at destination');
+          }
+        } catch (err) {
+          if (err.message === 'File already exists at destination') {
+            message.error('A file with this name already exists at the destination');
+            return;
+          }
+          console.warn('Error checking for existing file at destination:', err);
+        }
+
         await axios.post(
           `${BASE_URL}/copy-file`,
           {
             source_file: copyItem.name,
             new_file_name: copyNewName,
-            destination_folder: selectedDestination || currentPath,
-            container: 'training'
+            destination_folder: destinationPath,
+            container: 'training',
+            source_parent: currentPath
           },
-          { withCredentials: true }
+          { 
+            withCredentials: true,
+            timeout: 30000 // 30 seconds timeout
+          }
         );
       }
+      
       message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
       setCopyModalVisible(false);
       setCopyItem(null);
       setCopyNewName('');
-      setSelectedDestination('');
+      setSelectedMainFolder('');
+      setSelectedSubFolder('');
+      setSubFolders([]);
       fetchItems();
+      fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Copy error:', error);
-      message.error(error.response?.data?.error || 'Error copying item');
+      
+      // Handle specific error cases with user-friendly messages
+      if (error.response?.status === 404) {
+        message.error('The source file or destination folder was not found. Please refresh and try again.');
+      } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        message.error('The operation timed out. Please try again.');
+      } else {
+        message.error(error.response?.data?.error || 'Error copying item. Please try again.');
+      }
     }
   };
 
@@ -1467,11 +1732,35 @@ const TrainingDashboard = () => {
           setCopyModalVisible={setCopyModalVisible}
           copyNewName={copyNewName}
           setCopyNewName={setCopyNewName}
-          selectedDestination={selectedDestination}
-          setSelectedDestination={setSelectedDestination}
           handleCopyConfirm={handleCopyConfirm}
           directoryItems={items}
           currentPath={currentPath}
+          folderTreeData={folderTreeData}
+          onLoadData={async (folderPath) => {
+            try {
+              const res = await axios.get(
+                `${BASE_URL}/directory/list?directory=${encodeURIComponent(folderPath)}`,
+                { withCredentials: true }
+              );
+              
+              const newFolders = res.data || [];
+              setDirectories(prev => {
+                const existingPaths = new Set(prev.map(f => f.path || `${f.parent}/${f.name}`.replace(/^\/+/, '')));
+                const uniqueNewFolders = newFolders
+                  .filter(f => f.type === 'directory')
+                  .map(f => ({
+                    ...f,
+                    path: `${folderPath}/${f.name}`.replace(/\/+/g, '/').replace(/^\/+/, '')
+                  }))
+                  .filter(f => !existingPaths.has(f.path));
+                
+                return [...prev, ...uniqueNewFolders];
+              });
+            } catch (error) {
+              console.error('Error loading subfolders:', error);
+              message.error('Failed to load subfolders');
+            }
+          }}
 
           // Move Modal props
           moveModalVisible={moveModalVisible}
@@ -1479,11 +1768,6 @@ const TrainingDashboard = () => {
           moveDestination={moveDestination}
           setMoveDestination={setMoveDestination}
           handleMoveConfirm={handleMoveConfirm}
-          selectedMainFolder={selectedMainFolder}
-          selectedSubFolder={selectedSubFolder}
-          subFolders={subFolders}
-          handleMainFolderChange={handleMainFolderChange}
-          handleSubFolderChange={handleSubFolderChange}
 
           // Upload Modal props
           uploadModalVisible={uploadModalVisible}
