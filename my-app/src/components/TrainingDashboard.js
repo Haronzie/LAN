@@ -1411,7 +1411,7 @@ const TrainingDashboard = () => {
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
           pagination={false}
-          scroll={{ y: '49vh' }}  // for content scrolling on table
+
           rowSelection={rowSelection}
           onRow={(record) => ({
             onClick: () => handleRowClick(record),
