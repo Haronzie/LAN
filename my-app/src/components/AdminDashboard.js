@@ -183,7 +183,19 @@ const AdminDashboard = () => {
               />
             )}
             <div style={{ flex: 1 }} />
-            <Button type="primary" size="large" onClick={handleLogout} style={{ marginLeft: 'auto', marginRight: 32, fontWeight: 600, letterSpacing: 1 }}>
+            <Button 
+              type="primary" 
+              size="large" 
+              onClick={handleLogout} 
+              style={{ 
+                marginLeft: 'auto', 
+                marginRight: 32, 
+                fontWeight: 600, 
+                letterSpacing: 1,
+                backgroundColor: '#ff4d4f',
+                borderColor: '#ff4d4f'
+              }}
+            >
               Logout
             </Button>
           </Header>
