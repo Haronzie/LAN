@@ -35,6 +35,7 @@ const CommonModals = ({
   handleCopyConfirm,
   directoryItems,
   currentPath,
+  onLoadData, // Add onLoadData prop for loading subfolders
 
   // Move Modal props
   moveModalVisible,
@@ -130,7 +131,6 @@ const CommonModals = ({
               }}
               treeData={folderTreeData}
               placeholder="Select destination folder"
-              treeDefaultExpandAll
               treeLine
               allowClear
               showSearch
@@ -142,6 +142,25 @@ const CommonModals = ({
                 children: 'children'
               }}
               treeIcon={false}
+              loadData={({ key, children }) => {
+                // This function is called when a folder is expanded
+                return new Promise(resolve => {
+                  // If children already exist, don't load again
+                  if (children && children.length > 0) {
+                    resolve();
+                    return;
+                  }
+                  
+                  // Call the onLoadData prop to load subfolders
+                  if (onLoadData) {
+                    onLoadData(key).then(() => {
+                      resolve();
+                    });
+                  } else {
+                    resolve();
+                  }
+                });
+              }}
               switcherIcon={<span style={{ display: 'inline-block', width: 16 }}>▸</span>}
               onChange={(value) => {
                 console.log('TreeSelect onChange - value:', value);

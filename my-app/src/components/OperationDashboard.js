@@ -130,6 +130,65 @@ const OperationDashboard = () => {
     }).filter(Boolean); // Remove any null/undefined entries
   };
 
+  // Function to load subfolders for a specific path
+  const loadSubfolders = useCallback(async (folderPath) => {
+    console.log('Loading subfolders for path:', folderPath);
+    
+    try {
+      // Extract the container and path parts
+      const pathParts = folderPath.split('/');
+      const container = pathParts[0].toLowerCase();
+      const relativePath = pathParts.slice(1).join('/');
+      
+      // Fetch subdirectories for the specific path
+      const response = await axios.get(
+        `${BASE_URL}/directory/list?directory=${encodeURIComponent(folderPath)}&container=${container}`,
+        { withCredentials: true }
+      );
+      
+      const subfolders = response.data || [];
+      console.log(`Found ${subfolders.length} subfolders for ${folderPath}`, subfolders);
+      
+      // Update the directories state with the new subfolders
+      const updateDirectories = (dirs) => {
+        return dirs.map(dir => {
+          if (dir.value === folderPath) {
+            // Add the subfolders as children
+            return {
+              ...dir,
+              isLeaf: subfolders.length === 0,
+              children: subfolders.map(sub => ({
+                title: sub.name,
+                value: `${folderPath}/${sub.name}`,
+                key: `${folderPath}/${sub.name}`,
+                isLeaf: !sub.hasChildren,
+                children: []
+              }))
+            };
+          }
+          
+          // Recursively check children
+          if (dir.children && dir.children.length > 0) {
+            return {
+              ...dir,
+              children: updateDirectories(dir.children)
+            };
+          }
+          
+          return dir;
+        });
+      };
+      
+      setDirectories(prevDirs => updateDirectories(prevDirs));
+      
+      return subfolders;
+    } catch (error) {
+      console.error('Error loading subfolders:', error);
+      message.error('Failed to load subfolders');
+      return [];
+    }
+  }, []);
+
   // Fetch all root level directories
   const fetchDirectories = useCallback(async (retryCount = 0) => {
     console.log('Fetching root directories... (attempt ' + (retryCount + 1) + ')');
@@ -932,16 +991,29 @@ const OperationDashboard = () => {
       return;
     }
     try {
+      // Create the new folder
       await axios.post(`${BASE_URL}/directory/create`, {
         name: newFolderName,
         parent: currentPath,
         container: 'operation'
       }, { withCredentials: true });
+      
       message.success('Folder created successfully');
       setCreateFolderModal(false);
       setNewFolderName('');
-      fetchItems();
-      fetchDirectories();
+      
+      // Refresh the current directory contents
+      await fetchItems();
+      
+      // Force refresh the directories tree
+      console.log('Refreshing directories after folder creation...');
+      await fetchDirectories();
+      
+      // If we're in copy mode, refresh the copy destination list
+      if (copyModalVisible) {
+        console.log('Refreshing copy destinations...');
+        fetchDirectories();
+      }
     } catch (error) {
       console.error('Create folder error:', error);
       message.error(error.response?.data?.error || 'Error creating folder');
@@ -2072,6 +2144,7 @@ const OperationDashboard = () => {
           directoryItems={displayItems}
           currentPath={currentPath}
           folderTreeData={directories}  // Add this line to pass the directories
+          onLoadData={loadSubfolders}  // Add this line to handle loading subfolders on demand
 
           // Move Modal props
           moveModalVisible={moveModalVisible}
