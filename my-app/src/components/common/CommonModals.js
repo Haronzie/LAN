@@ -122,14 +122,47 @@ const CommonModals = ({
           <Form.Item label="Destination Folder (Optional)">
             <TreeSelect
               style={{ width: '100%' }}
-              value={selectedDestination}
-              dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
+              value={selectedDestination || undefined}
+              dropdownStyle={{ 
+                maxHeight: 400, 
+                overflow: 'auto',
+                padding: '8px 0'
+              }}
               treeData={folderTreeData}
-              placeholder="Select destination folder (recursively)"
+              placeholder="Select destination folder"
               treeDefaultExpandAll
+              treeLine
               allowClear
-              onChange={setSelectedDestination}
-              notFoundContent={<span style={{ color: '#888' }}>No data</span>}
+              showSearch
+              treeNodeFilterProp="title"
+              fieldNames={{ 
+                title: 'title', 
+                value: 'value', 
+                key: 'key', 
+                children: 'children' 
+              }}
+              treeIcon={false}
+              switcherIcon={<span style={{ display: 'inline-block', width: 16 }}>▸</span>}
+              onChange={(value, label, extra) => {
+                if (!value) {
+                  setSelectedDestination('');
+                  return;
+                }
+                // If value is an array (TreeSelect can be multi), join as path
+                let selectedPath = Array.isArray(value) ? value.join('/') : value;
+                // Always normalize to forward slashes
+                selectedPath = selectedPath.replace(/\\/g, '/');
+                if (selectedPath.includes('\\')) {
+                  console.warn('[CopyModal] WARNING: Detected backslash in path! Normalized to:', selectedPath);
+                }
+                console.log('[CopyModal] Selected destination:', selectedPath);
+                setSelectedDestination(selectedPath);
+              }}
+              notFoundContent={
+                <div style={{ padding: '8px 16px', color: '#888' }}>
+                  No folders found
+                </div>
+              }
             />
           </Form.Item>
         </Form>
