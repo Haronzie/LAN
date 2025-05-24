@@ -188,9 +188,6 @@ const InventoryDashboard = () => {
 
   // Render content area based on view mode
   const renderContentArea = () => {
-    // Ensure filteredItems is always an array
-    const safeFilteredItems = Array.isArray(filteredItems) ? filteredItems : [];
-    
     if (loading) {
       return (
         <Card style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -202,7 +199,7 @@ const InventoryDashboard = () => {
       );
     }
 
-    if (safeFilteredItems.length === 0) {
+    if (filteredItems.length === 0) {
       return (
         <Card style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Empty description="No inventory items found" />
@@ -214,7 +211,7 @@ const InventoryDashboard = () => {
       return (
         <Table 
           columns={columns} 
-          dataSource={safeFilteredItems} 
+          dataSource={filteredItems} 
           rowKey="id"
           pagination={{ 
             pageSize: 10,
@@ -228,7 +225,7 @@ const InventoryDashboard = () => {
     // Card view
     return (
       <Row gutter={[16, 16]}>
-        {safeFilteredItems.map(item => (
+        {filteredItems.map(item => (
           <Col key={item.id} xs={24} sm={12} lg={8} xl={6}>
             <Card 
               hoverable
@@ -272,25 +269,22 @@ const InventoryDashboard = () => {
 
   // Calculate statistics for CDRRMO dashboard
   const { stats, categoryStats, statusStats } = useMemo(() => {
-    // Ensure items is an array before processing
-    const safeItems = Array.isArray(items) ? items : [];
+    const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const totalItems = items.length;
+    const itemsNeedingRestock = items.filter(item => (item.quantity || 0) <= (item.lowStockThreshold || 5)).length;
     
-    const totalQuantity = safeItems.reduce((sum, item) => sum + (item?.quantity || 0), 0);
-    const totalItems = safeItems.length;
-    const itemsNeedingRestock = safeItems.filter(item => (item?.quantity || 0) <= (item?.lowStockThreshold || 5)).length;
-    
-    const lowStockItems = safeItems.filter(item => {
-      const qty = item?.quantity || 0;
-      return qty > 0 && qty <= (item?.lowStockThreshold || 5);
+    const lowStockItems = items.filter(item => {
+      const qty = item.quantity || 0;
+      return qty > 0 && qty <= (item.lowStockThreshold || 5);
     }).length;
     
-    const outOfStockItems = safeItems.filter(item => (item?.quantity || 0) === 0).length;
+    const outOfStockItems = items.filter(item => (item.quantity || 0) === 0).length;
     const inStockItems = totalItems - lowStockItems - outOfStockItems;
     
     // Calculate category distribution
     const categoryDistribution = {};
-    safeItems.forEach(item => {
-      const category = item?.category || 'Uncategorized';
+    items.forEach(item => {
+      const category = item.category || 'Uncategorized';
       categoryDistribution[category] = (categoryDistribution[category] || 0) + 1;
     });
     
@@ -300,7 +294,7 @@ const InventoryDashboard = () => {
         totalQuantity,
         lowStockItems,
         outOfStockItems,
-        inStockItems: Math.max(0, inStockItems), // Ensure non-negative
+        inStockItems: totalItems - lowStockItems - outOfStockItems,
         itemsNeedingRestock,
         restockUrgency: itemsNeedingRestock > 10 ? 'High' : itemsNeedingRestock > 5 ? 'Medium' : 'Low'
       },
