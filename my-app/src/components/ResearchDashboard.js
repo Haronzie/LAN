@@ -1305,16 +1305,15 @@ const ResearchDashboard = () => {
           </Col>
         </Row>
         {/* Navigation Row */}
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          {!isSearching && (
-            <Col>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16, alignItems: 'center' }}>
+          <Col style={{ display: 'flex', gap: 8 }}>
+            {/* Only show Go Up button when not at root level */}
+            {!isSearching && currentPath !== 'Research' && (
               <Button icon={<ArrowUpOutlined />} onClick={handleGoUp}>
                 Go Up
               </Button>
-            </Col>
-          )}
-          {isSearching && (
-            <Col>
+            )}
+            {isSearching && (
               <Button
                 icon={<ArrowUpOutlined />}
                 onClick={() => {
@@ -1324,8 +1323,8 @@ const ResearchDashboard = () => {
               >
                 Back to Browsing
               </Button>
-            </Col>
-          )}
+            )}
+          </Col>
           <Col>
             <Button
               icon={<FolderAddOutlined />}
