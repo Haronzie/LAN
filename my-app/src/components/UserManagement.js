@@ -93,6 +93,18 @@ const UserManagement = () => {
     fetchUsers();
   }, []);
 
+  // Focus username input when add user modal opens
+  useEffect(() => {
+    if (isAddUserModalOpen) {
+      const timer = setTimeout(() => {
+        if (usernameRef.current && usernameRef.current.input) {
+          usernameRef.current.input.focus();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isAddUserModalOpen]);
+
   // Sort admins first (alphabetically), then users (alphabetically),
   // then apply search filtering.
   useEffect(() => {
@@ -452,10 +464,11 @@ const UserManagement = () => {
             >
               <Input
                 ref={usernameRef}
+                autoFocus
                 placeholder="Enter new username"
                 onPressEnter={() => {
-                  if (passwordRef.current) {
-                    passwordRef.current.focus({ cursor: 'end' });
+                  if (passwordRef.current && passwordRef.current.input) {
+                    passwordRef.current.input.focus();
                   }
                 }}
               />

@@ -16,7 +16,8 @@ import {
   TreeSelect,
   Select,
   Spin,
-  Card
+  Card,
+  Pagination
 } from 'antd';
 import Dragger from 'antd/lib/upload/Dragger';
 import {
@@ -143,6 +144,8 @@ const FileManager = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
   const [createFolderModal, setCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
@@ -2097,81 +2100,159 @@ const FileManager = () => {
             </Col>
           </Row>
         ) : (
-          <Table
-            className="action-buttons-table"
-            columns={columns}
-            dataSource={sortedItems}
-            rowKey={(record) => `${record.type}-${record.id || record.name}`}
-            loading={loading}
-            pagination={{
-              position: ['bottom'],
-              pageSize: 10,
-              showSizeChanger: true,
-              pageSizeOptions: ['10', '20', '50', '100'],
-              showTotal: (total, range) => 
-                <span style={{ fontWeight: 500 }}>
-                  {range[0]}-{range[1]} of {total} items
-                </span>,
-              size: 'default',
-              showQuickJumper: true,
-              className: 'enhanced-pagination',
-              itemRender: (page, type, originalElement) => {
-                if (type === 'page') {
-                  return (
-                    <Button 
-                      type={page === originalElement.props.pagenum ? 'primary' : 'default'} 
-                      size="middle"
-                      style={{ 
-                        minWidth: '32px',
-                        borderRadius: '4px',
-                        margin: '0 3px',
-                        fontWeight: page === originalElement.props.pagenum ? 'bold' : 'normal'
+          <div style={{ minHeight: '50vh' }}>
+            {sortedItems.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', minHeight: '400px' }}>
+                <div style={{ marginBottom: '16px' }}>
+                  <Table
+                    className="action-buttons-table"
+                    columns={columns}
+                    dataSource={sortedItems.slice(
+                      (currentPage - 1) * pageSize,
+                      currentPage * pageSize
+                    )}
+                    rowKey={(record) => `${record.type}-${record.id || record.name}`}
+                    loading={loading}
+                    pagination={false}
+                    rowSelection={rowSelection}
+                    onRow={(record) => ({
+                      onClick: () => handleRowClick(record),
+                      style: { cursor: record.type === 'directory' ? 'pointer' : 'default' }
+                    })}
+                    tableLayout="fixed"
+                    scroll={{ x: 'max-content' }}
+                  />
+                </div>
+                {sortedItems.length > 5 && (
+                  <div style={{ marginTop: 'auto', padding: '8px 0', borderTop: '1px solid #f0f0f0' }}>
+                    <Pagination
+                      total={sortedItems.length}
+                      showTotal={(total, range) => (
+                        <span style={{ fontWeight: 500, marginRight: '16px' }}>
+                          {range[0]}-{range[1]} of {total} items
+                        </span>
+                      )}
+                      pageSize={pageSize}
+                      current={currentPage}
+                      showSizeChanger
+                      pageSizeOptions={['10', '20', '50', '100']}
+                      showQuickJumper
+                      itemRender={(page, type, originalElement) => {
+                        if (type === 'page') {
+                          return (
+                            <Button 
+                              type={page === currentPage ? 'primary' : 'default'}
+                              size="small"
+                              style={{ 
+                                minWidth: '32px',
+                                margin: '0 2px',
+                                fontWeight: page === currentPage ? 'bold' : 'normal'
+                              }}
+                              onClick={() => setCurrentPage(page)}
+                            >
+                              {page}
+                            </Button>
+                          );
+                        }
+                        if (type === 'prev') {
+                          return (
+                            <Button 
+                              size="small"
+                              style={{ marginRight: '8px' }}
+                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            >
+                              <LeftOutlined /> Previous
+                            </Button>
+                          );
+                        }
+                        if (type === 'next') {
+                          return (
+                            <Button 
+                              size="small"
+                              style={{ marginLeft: '8px' }}
+                              onClick={() => setCurrentPage(p => p + 1)}
+                            >
+                              Next <RightOutlined />
+                            </Button>
+                          );
+                        }
+                        return originalElement;
                       }}
-                    >
-                      {page}
-                    </Button>
-                  );
-                }
-                if (type === 'prev') {
-                  return (
-                    <Button 
-                      size="middle"
-                      style={{ 
-                        borderRadius: '4px',
-                        margin: '0 5px 0 0',
-                        fontWeight: 500
+                      onChange={(page) => setCurrentPage(page)}
+                      onShowSizeChange={(current, size) => {
+                        setPageSize(size);
+                        setCurrentPage(1);
                       }}
-                    >
-                      <LeftOutlined /> Previous
-                    </Button>
-                  );
-                }
-                if (type === 'next') {
-                  return (
-                    <Button 
-                      size="middle"
-                      style={{ 
-                        borderRadius: '4px',
-                        margin: '0 0 0 5px',
-                        fontWeight: 500
-                      }}
-                    >
-                      Next <RightOutlined />
-                    </Button>
-                  );
-                }
-                return originalElement;
-              }
-            }}
-            rowSelection={rowSelection}
-            onRow={(record) => ({
-              onClick: () => handleRowClick(record),
-              style: { cursor: record.type === 'directory' ? 'pointer' : 'default' }
-            })}
-            // Set table to auto layout with no horizontal scroll
-            tableLayout="fixed"
-            scroll={{ x: false }}
-          />
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px 20px',
+                textAlign: 'center',
+                borderRadius: '8px',
+                backgroundColor: '#fafafa',
+                border: '1px dashed #d9d9d9',
+                margin: '20px 0',
+                minHeight: '300px'
+              }}>
+                <FolderOpenOutlined style={{
+                  fontSize: '64px',
+                  color: '#bfbfbf',
+                  marginBottom: '16px'
+                }} />
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: 500,
+                  color: '#262626',
+                  marginBottom: '8px'
+                }}>
+                  This folder is empty
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: '#8c8c8c',
+                  maxWidth: '500px',
+                  marginBottom: '24px'
+                }}>
+                  Upload files or create a new folder to get started
+                </p>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <Button 
+                    type="primary" 
+                    icon={<UploadOutlined />}
+                    onClick={() => setUploadModalVisible(true)}
+                    style={{
+                      height: '40px',
+                      padding: '0 20px',
+                      borderRadius: '6px',
+                      fontWeight: 500
+                    }}
+                  >
+                    Upload Files
+                  </Button>
+                  <Button 
+                    type="default" 
+                    icon={<FolderAddOutlined />}
+                    onClick={() => setCreateFolderModal(true)}
+                    style={{
+                      height: '40px',
+                      padding: '0 20px',
+                      borderRadius: '6px',
+                      fontWeight: 500
+                    }}
+                  >
+                    New Folder
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Use the CommonModals component for standard modals */}
