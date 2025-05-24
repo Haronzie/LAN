@@ -20,6 +20,42 @@ import NotificationDropdown from './common/NotificationDropdown';
 import UserActivities from './UserActivities';
 import './dashboard-fix.css'; // Import dashboard CSS fixes
 
+// Welcome Message Component
+const WelcomeMessage = ({ name }) => {
+  const [visible, setVisible] = useState(false);
+  
+  useEffect(() => {
+    // Show the message after a short delay when the component mounts
+    const timer = setTimeout(() => setVisible(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div 
+      style={{
+        position: 'fixed',
+        top: '80px',
+        right: '20px',
+        padding: '12px 24px',
+        backgroundColor: '#1890ff',
+        color: 'white',
+        borderRadius: '4px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+        zIndex: 1000,
+        transform: visible ? 'translateX(0)' : 'translateX(100%)',
+        opacity: visible ? 1 : 0,
+        transition: 'all 0.5s ease-out',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}
+    >
+      <span>👋</span>
+      <span>Welcome back, <strong>{name}</strong>!</span>
+    </div>
+  );
+};
+
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
 
@@ -117,8 +153,18 @@ const AdminDashboard = () => {
     }
   ];
 
+  // Show welcome message only on initial load
+  const [showWelcome, setShowWelcome] = useState(true);
+  
+  useEffect(() => {
+    // Hide welcome message after 5 seconds
+    const timer = setTimeout(() => setShowWelcome(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <ConfigProvider warning={{ strict: false }}>
+      {showWelcome && <WelcomeMessage name={adminName} />}
       <Layout className="admin-layout" style={{ fontFamily: 'Roboto, sans-serif' }}>
         {isMobile && !collapsed && (
           <div
