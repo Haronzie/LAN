@@ -38,7 +38,8 @@ import {
   FileTextOutlined,
   FolderOutlined,
   ReloadOutlined,
-  MoreOutlined
+  MoreOutlined,
+  UserOutlined
 } from '@ant-design/icons';
 import Dragger from 'antd/lib/upload/Dragger';
 import { useNavigate } from 'react-router-dom';
@@ -1640,6 +1641,31 @@ const OperationDashboard = () => {
       dataIndex: 'formattedSize',
       key: 'size',
       render: (size, record) => record.type === 'directory' ? '--' : size
+    },
+    {
+      title: 'Uploaded By',
+      key: 'uploader',
+      width: 200,
+      ellipsis: true,
+      render: (_, record) => {
+        const uploader = record.uploader || record.created_by;
+        const displayName = uploader || 'System';
+        return (
+          <Tooltip title={`Uploaded by: ${displayName}`}>
+            <div style={{ 
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              <UserOutlined style={{ color: '#8c8c8c' }} />
+              <span>{displayName}</span>
+            </div>
+          </Tooltip>
+        );
+      }
     },
     {
       title: 'Actions',
