@@ -1368,7 +1368,7 @@ const ResearchDashboard = () => {
                 }
               }}
               loading={searchLoading}
-              allowClear
+              allowClear={!!searchTerm}
               enterButton
             />
           </Col>
