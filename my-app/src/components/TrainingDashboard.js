@@ -34,6 +34,7 @@ import {
   LockOutlined,
   FileOutlined,
   ReloadOutlined,
+  SearchOutlined,
   MoreOutlined
 } from '@ant-design/icons';
 import Dragger from 'antd/lib/upload/Dragger';
@@ -1300,41 +1301,44 @@ const TrainingDashboard = () => {
   return (
     <Layout style={{ minHeight: '84vh', background: '#f0f2f5' }}>
       <Content style={{ margin: '5px', padding: '10px', background: '#fff' }}>
-        {/* Top Bar */}
-        <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+        {/* Dashboard Header */}
+        <Row justify="space-between" align="middle" style={{ marginBottom: 20, padding: '0 4px' }}>
           <Col>
-            <h2 style={{ margin: 0 }}>Training</h2>
+            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 600 }}>Training</h2>
           </Col>
-          <Col style={{ display: 'flex', alignItems: 'center' }}>
-            <BatchActionsMenu
-              selectedItems={selectedRows}
-              onDelete={handleBatchDelete}
-              onCopy={handleBatchCopy}
-              onMove={handleBatchMove}
-              onDownload={handleBatchDownload}
-              selectionMode={selectionMode}
-              onToggleSelectionMode={handleToggleSelectionMode}
-              onCancelSelection={handleCancelSelection}
-            />
-            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+          <Col>
+            <Button 
+              type="primary" 
+              icon={<UploadOutlined />} 
+              onClick={handleOpenUploadModal}
+              size="middle"
+              style={{ fontWeight: 500 }}
+            >
               Upload File
             </Button>
           </Col>
         </Row>
-        {/* Navigation Row */}
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col>
-            <Button icon={<ArrowUpOutlined />} onClick={handleGoUp}>
-              Go Up
-            </Button>
-          </Col>
-          <Col>
+
+        {/* Navigation Bar */}
+        <Row 
+          gutter={[16, 16]} 
+          style={{ 
+            marginBottom: 16, 
+            display: 'flex',
+            alignItems: 'center'
+          }}
+        >
+          <Col style={{ display: 'flex', gap: 8 }}>
+            {/* Only show Go Up button when not at root level */}
+            {currentPath !== 'Training' && (
+              <Button icon={<ArrowUpOutlined />} onClick={handleGoUp}>
+                Go Up
+              </Button>
+            )}
             <Button icon={<FolderAddOutlined />} onClick={() => setCreateFolderModal(true)}>
               Create Folder
             </Button>
-          </Col>
-          <Col>
-            <Tooltip title="Refresh Files">
+            <Tooltip title="Refresh">
               <Button
                 icon={<ReloadOutlined />}
                 onClick={() => {
@@ -1346,18 +1350,20 @@ const TrainingDashboard = () => {
               />
             </Tooltip>
           </Col>
-          <Col style={{ width: '40%' }}>
+          
+          <Col flex="auto" style={{ maxWidth: 500 }}>
             <Input.Search
-              placeholder={isSearching
-                ? "Search in Training..."
-                : currentPath
+              placeholder={
+                isSearching
+                  ? "Search in Training..."
+                  : currentPath
                   ? `Search in ${currentPath}...`
-                  : "Search in Training..."}
+                  : "Search in Training..."
+              }
               value={searchTerm}
               onChange={(e) => {
                 const value = e.target.value;
                 setSearchTerm(value);
-                // If search is cleared, immediately reset search state
                 if (!value.trim()) {
                   setIsSearching(false);
                   setSearchResults([]);
@@ -1372,8 +1378,23 @@ const TrainingDashboard = () => {
                 }
               }}
               loading={searchLoading}
-              allowClear
-              enterButton
+              allowClear={!!searchTerm}
+              enterButton={<SearchOutlined />}
+              size="middle"
+            />
+          </Col>
+
+          <Col>
+            <BatchActionsMenu
+              selectedItems={selectedRows}
+              onDelete={handleBatchDelete}
+              onCopy={handleBatchCopy}
+              onMove={handleBatchMove}
+              onDownload={handleBatchDownload}
+              selectionMode={selectionMode}
+              onToggleSelectionMode={handleToggleSelectionMode}
+              onCancelSelection={handleCancelSelection}
+              style={{ marginLeft: 'auto' }}
             />
           </Col>
         </Row>
@@ -1383,124 +1404,6 @@ const TrainingDashboard = () => {
         {!isSearching && (
           <Breadcrumb style={{ marginBottom: 16 }}>{breadcrumbItems}</Breadcrumb>
         )}
-
-        {/* File Instructions Section */}
-        <div style={{ marginBottom: 24 }}>
-          <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
-            <Col><h3 style={{ margin: 0 }}>📬 File Instructions</h3></Col>
-            <Col>
-              <Space>
-                <Checkbox checked={hideDone} onChange={(e) => setHideDone(e.target.checked)}>
-                  Hide Completed
-                </Checkbox>
-                <Button
-                  type="dashed"
-                  icon={<DownloadOutlined />}
-                  size="small"
-                  onClick={fetchAllFilesWithMessages}
-                >
-                  Refresh
-                </Button>
-              </Space>
-            </Col>
-          </Row>
-          {allFilesWithMessages && allFilesWithMessages.map(file => {
-            const filteredMessages = hideDone
-              ? file.messages.filter(msg => !msg.is_done)
-              : file.messages;
-            if (!filteredMessages || filteredMessages.length === 0) return null;
-            return (
-              <Card
-                key={file.id}
-                type="inner"
-                size="small"
-                title={
-                  <Space>
-                    <span style={{ fontWeight: 500 }}>
-                      🗂 File: <a style={{ textDecoration: 'underline', color: '#1890ff' }}
-                        onClick={() => handleViewFile({
-                          id: file.id,
-                          name: file.name,
-                          directory: file.directory,
-                          type: 'file',
-                        })}
-                      >{file.name}</a>
-                    </span>
-                    <Badge count={filteredMessages.length} />
-                  </Space>
-                }
-                extra={<Button type="link" size="small" onClick={() => setCurrentPath(file.directory)}>
-                  Go to Folder
-                </Button>}
-                style={{ marginBottom: 12, borderRadius: 8, background: '#fafafa' }}
-              >
-                {filteredMessages.map(msg => {
-                  const isNew = !msg.is_done && !msg.seenAt;
-                  const bgColor = msg.is_done ? '#f6ffed' : isNew ? '#e6f7ff' : '#fffbe6';
-                  const borderColor = msg.is_done ? '#b7eb8f' : isNew ? '#91d5ff' : '#ffe58f';
-                  const statusText = msg.is_done ? '✅ Done' : isNew ? '🟦 New' : '🟨 Pending';
-                  const statusColor = msg.is_done ? 'green' : isNew ? '#1890ff' : '#faad14';
-                  return (
-                    <div
-                      key={msg.id}
-                      style={{
-                        background: bgColor,
-                        borderLeft: `4px solid ${borderColor}`,
-                        padding: '10px 12px',
-                        marginBottom: 10,
-                        borderRadius: 4,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: 13, marginBottom: 4 }}>
-                          <strong>📝:</strong> <span style={{ fontStyle: 'italic' }}>{msg.message}</span>
-                        </div>
-                        <div style={{ fontSize: 12, color: '#555' }}>
-                          👤 {msg.admin_name || 'N/A'} · 🕓 {new Date(msg.created_at).toLocaleString()}
-                        </div>
-                        <div style={{ fontSize: 12, marginTop: 4 }}>
-                          <strong>Status:</strong>{' '}
-                          <span style={{ color: statusColor, fontWeight: 500 }}>{statusText}</span>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                        <Button
-                          type="link"
-                          size="small"
-                          style={{ padding: 0, color: '#1890ff' }}
-                          onClick={() => {
-                            setCurrentPath(file.directory);
-                            setTimeout(() => {
-                              handleViewFile({
-                                id: file.id,
-                                name: file.name,
-                                directory: file.directory,
-                                type: 'file',
-                              });
-                            }, 300);
-                          }}
-                        >Go to File</Button>
-                        {!msg.is_done && (
-                          <Button
-                            type="primary"
-                            size="small"
-                            style={{ marginTop: 6 }}
-                            onClick={() => markAsDone(msg.id, file.id)}
-                          >
-                            Mark as Done
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </Card>
-            );
-          })}
-        </div>
 
         <Table
           columns={columns}
