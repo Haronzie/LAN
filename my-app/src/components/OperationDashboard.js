@@ -92,96 +92,146 @@ const OperationDashboard = () => {
   const [isLoadingDirectories, setIsLoadingDirectories] = useState(false);
 
   // Format directories for TreeSelect component
-  const formatDirectories = (dirs, parentPath = '', level = 0) => {
+  const formatDirectories = (dirs, parentPath = '') => {
     if (!Array.isArray(dirs)) {
       console.warn('formatDirectories received non-array input:', dirs);
       return [];
     }
     
-    return dirs.map(dir => {
+    return dirs.flatMap(dir => {
       if (!dir || typeof dir !== 'object' || !dir.name) {
         console.warn('Skipping invalid directory item:', dir);
-        return null;
+        return [];
       }
       
-      // For root level, use the name as is, otherwise build the path
-      const isRoot = level === 0;
-      const fullPath = isRoot ? dir.name : (parentPath ? `${parentPath}/${dir.name}` : dir.name);
+      // Handle both directory objects and string paths
+      const dirName = typeof dir === 'string' ? dir : dir.name;
+      const dirChildren = dir.children || [];
+      const hasChildren = Array.isArray(dirChildren) && dirChildren.length > 0;
+      const fullPath = parentPath ? `${parentPath}/${dirName}` : dirName;
       
-      // Format the title with proper indentation
-      const formattedDir = {
-        title: (
-          <span style={{ 
-            display: 'inline-block',
-            marginLeft: isRoot ? '0px' : `${level * 12}px`,
-            padding: '2px 0'
-          }}>
-            {isRoot ? null : '└─ '}{dir.name}
-          </span>
-        ),
+      console.log('Processing directory:', {
+        name: dirName,
+        fullPath,
+        hasChildren,
+        childrenCount: hasChildren ? dirChildren.length : 0
+      });
+      
+      // Create the directory node
+      const node = {
+        title: dirName,
         value: fullPath,
         key: fullPath,
-        children: dir.children ? formatDirectories(dir.children, fullPath, level + 1) : [],
-        isLeaf: !dir.children || dir.children.length === 0
+        isLeaf: !hasChildren,
+        children: hasChildren ? formatDirectories(dirChildren, fullPath) : undefined
       };
       
-      console.log('Formatted directory item:', {
-        name: dir.name,
-        fullPath,
-        level,
-        isRoot,
-        hasChildren: formattedDir.children && formattedDir.children.length > 0
-      });
-      
-      return formattedDir;
-    }).filter(Boolean); // Remove any null entries
+      return node;
+    }).filter(Boolean); // Remove any null/undefined entries
   };
 
-  // Fetch directories from the server
-  const fetchDirectories = useCallback(async () => {
-    console.log('Fetching directories...');
+  // Fetch all root level directories
+  const fetchDirectories = useCallback(async (retryCount = 0) => {
+    console.log('Fetching root directories... (attempt ' + (retryCount + 1) + ')');
     setIsLoadingDirectories(true);
+    
     try {
-      const response = await axios.get(`${BASE_URL}/directory/tree`, {
-        params: { container: 'operation' },
-        withCredentials: true
-      });
+      // Define all root containers we want to show
+      const rootContainers = ['Operation', 'Training', 'Research'];
+      const allDirectories = [];
       
-      console.log('Raw directories response:', response.data);
-      
-      if (response.data && Array.isArray(response.data)) {
-        // Add a root node if needed
-        const rootNode = {
-          name: 'Operation',
-          children: response.data
-        };
-        
-        // Format the directories for TreeSelect
-        const formattedDirs = formatDirectories([rootNode]);
-        console.log('Formatted directories with root:', formattedDirs);
-        setDirectories(formattedDirs);
-      } else {
-        console.warn('Unexpected directory data format:', response.data);
-        // Create a default root folder
-        const defaultRoot = [{
-          title: 'Operation',
-          value: 'Operation',
-          key: 'Operation',
-          children: []
-        }];
-        console.log('Using default root folder:', defaultRoot);
-        setDirectories(defaultRoot);
+      // Fetch each container's directory tree
+      for (const container of rootContainers) {
+        try {
+          const containerLower = container.toLowerCase();
+          const apiUrl = `${BASE_URL}/directory/tree?container=${containerLower}&_t=${Date.now()}`;
+          console.log(`Fetching directory tree from: ${apiUrl}`);
+          
+          const response = await axios.get(apiUrl, {
+            withCredentials: true,
+            timeout: 10000 // 10 second timeout
+          });
+          
+          console.log(`${container} directory response:`, {
+            status: response.status,
+            statusText: response.statusText,
+            data: response.data,
+            headers: response.headers
+          });
+          
+          if (Array.isArray(response.data)) {
+            console.log(`Found ${response.data.length} items in ${container}`);
+            if (response.data.length > 0) {
+              console.log(`First item in ${container}:`, response.data[0]);
+            }
+            
+            // Add the container as a parent node
+            allDirectories.push({
+              name: container,
+              children: response.data,
+              isRoot: true
+            });
+          } else if (typeof response.data === 'object' && response.data !== null) {
+            // Handle case where response is an object with a 'children' array
+            const children = response.data.children || [];
+            console.log(`Found ${children.length} items in ${container}'s children`);
+            
+            allDirectories.push({
+              name: container,
+              children: children,
+              isRoot: true
+            });
+          } else {
+            console.warn(`Unexpected response format for ${container}:`, typeof response.data);
+          }
+        } catch (error) {
+          console.error(`Error fetching ${container} directory:`, {
+            message: error.message,
+            response: error.response ? {
+              status: error.response.status,
+              statusText: error.response.statusText,
+              data: error.response.data
+            } : 'No response',
+            config: {
+              url: error.config?.url,
+              method: error.config?.method,
+              params: error.config?.params
+            }
+          });
+          // Continue with other containers even if one fails
+        }
       }
+      
+      // If we got any directories, format and set them
+      if (allDirectories.length > 0) {
+        console.log('All directories before formatting:', allDirectories);
+        const formattedDirs = formatDirectories(allDirectories);
+        console.log('Formatted directories:', formattedDirs);
+        setDirectories(formattedDirs);
+        return formattedDirs;
+      }
+      
+      throw new Error('No valid directory data received');
+      
     } catch (error) {
-      console.error('Error fetching directories:', error);
-      message.error('Failed to load directory structure');
-      // Set a default root folder if the API call fails
-      setDirectories([{
-        title: 'Operation',
-        value: 'Operation',
-        key: 'Operation',
+      console.error('Error in fetchDirectories:', error);
+      
+      // If we have retries left and it's a network error, retry
+      if (retryCount < 2 && (!error.response || error.code === 'ECONNABORTED')) {
+        console.log(`Retrying... (${retryCount + 1}/2)`);
+        return fetchDirectories(retryCount + 1);
+      }
+      
+      // Fallback to a default root folder
+      console.warn('Using fallback root folders');
+      const defaultRoots = ['Operation', 'Training', 'Research'].map(name => ({
+        title: name,
+        value: name,
+        key: name,
         children: []
-      }]);
+      }));
+      setDirectories(defaultRoots);
+      return defaultRoots;
     } finally {
       setIsLoadingDirectories(false);
     }

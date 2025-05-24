@@ -136,33 +136,39 @@ const CommonModals = ({
               showSearch
               treeNodeFilterProp="title"
               fieldNames={{ 
-                title: 'title', 
-                value: 'value', 
-                key: 'key', 
-                children: 'children' 
+                label: 'title',
+                value: 'value',
+                key: 'key',
+                children: 'children'
               }}
               treeIcon={false}
               switcherIcon={<span style={{ display: 'inline-block', width: 16 }}>▸</span>}
-              onChange={(value, label, extra) => {
+              onChange={(value) => {
+                console.log('TreeSelect onChange - value:', value);
                 if (!value) {
                   setSelectedDestination('');
                   return;
                 }
-                // If value is an array (TreeSelect can be multi), join as path
-                let selectedPath = Array.isArray(value) ? value.join('/') : value;
-                // Always normalize to forward slashes
+                // Handle both string and array values
+                let selectedPath = Array.isArray(value) ? value[0] : value;
+                // Normalize path
                 selectedPath = selectedPath.replace(/\\/g, '/');
-                if (selectedPath.includes('\\')) {
-                  console.warn('[CopyModal] WARNING: Detected backslash in path! Normalized to:', selectedPath);
-                }
-                console.log('[CopyModal] Selected destination:', selectedPath);
+                console.log('Selected destination path:', selectedPath);
                 setSelectedDestination(selectedPath);
               }}
+              treeNodeLabelProp="title"
               notFoundContent={
                 <div style={{ padding: '8px 16px', color: '#888' }}>
-                  No folders found
+                  {folderTreeData && folderTreeData.length === 0 
+                    ? 'No folders available' 
+                    : 'No matching folders found'}
                 </div>
               }
+              onDropdownVisibleChange={(open) => {
+                if (open) {
+                  console.log('Dropdown opened. Current folderTreeData:', folderTreeData);
+                }
+              }}
             />
           </Form.Item>
         </Form>
