@@ -352,7 +352,10 @@ const folderColorsArray = Object.values(folderColors);
                     size="small"
                     type="primary" 
                     icon={<FilterOutlined />} 
-                    onClick={() => setDateRange(null)}
+                    onClick={() => {
+                      setDateRange(null);
+                      setFilteredChartData(transformedChartData);
+                    }}
                     style={{ marginLeft: 'auto', marginRight: '8px' }}
                   >
                     Clear Filter
@@ -365,7 +368,13 @@ const folderColorsArray = Object.values(folderColors);
                   Select date range to filter data:
                 </Text>
                 <DatePicker.RangePicker 
-                  onChange={(dates) => setDateRange(dates)}
+                  value={dateRange}
+                  onChange={(dates) => {
+                    setDateRange(dates);
+                    if (!dates) {
+                      setFilteredChartData(transformedChartData);
+                    }
+                  }}
                   format="MMM DD, YYYY"
                   placeholder={['Start Date', 'End Date']}
                   allowClear={true}
@@ -524,7 +533,24 @@ const folderColorsArray = Object.values(folderColors);
                 />
               </div>
             ) : (
-              <Text type="secondary">No uploads available</Text>
+              <div style={{ 
+                minHeight: 300,
+                display: 'flex', 
+                flexDirection: 'column', 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                padding: '24px',
+                textAlign: 'center',
+                margin: '0 auto',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}>
+                <FileOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
+                <Text type="secondary" style={{ fontSize: 16, marginBottom: 8, fontWeight: 500 }}>No uploads yet</Text>
+                <Text type="secondary" style={{ maxWidth: 280, lineHeight: '1.4' }}>
+                  Upload files to see analytics and statistics about your uploads.
+                </Text>
+              </div>
             )}
           </Card>
         </Col>

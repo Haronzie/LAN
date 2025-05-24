@@ -948,6 +948,15 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	_, _ = fc.App.DeleteFileRecordByPath(oldRelativePath)
 
 	log.Printf("[MoveFile] Creating new file record for: %s", newRelativePath)
+	// Ensure we have a valid CreatedAt time
+	createdAt := fr.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+		log.Printf("[MoveFile] Warning: Original file had zero CreatedAt, using current time: %v", createdAt)
+	} else {
+		log.Printf("[MoveFile] Preserving original CreatedAt: %v", createdAt)
+	}
+
 	newRecord := models.FileRecord{
 		FileName:    finalName,
 		FilePath:    newRelativePath,
@@ -955,6 +964,7 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 		Size:        fr.Size,
 		ContentType: fr.ContentType,
 		Uploader:    user.Username,
+		CreatedAt:   createdAt, // Use the preserved or current time
 	}
 
 	if err := fc.App.CreateFileRecord(newRecord); err != nil {
