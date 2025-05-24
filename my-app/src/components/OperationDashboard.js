@@ -990,6 +990,11 @@ const OperationDashboard = () => {
       message.error('Folder name cannot be empty');
       return;
     }
+    
+    const newFolderPath = currentPath === 'Operation' 
+      ? `Operation/${newFolderName}`
+      : `${currentPath}/${newFolderName}`;
+    
     try {
       // Create the new folder
       await axios.post(`${BASE_URL}/directory/create`, {
@@ -1005,13 +1010,50 @@ const OperationDashboard = () => {
       // Refresh the current directory contents
       await fetchItems();
       
-      // Force refresh the directories tree
-      console.log('Refreshing directories after folder creation...');
-      await fetchDirectories();
+      // Update the directories state to include the new folder
+      const updateDirectories = (dirs) => {
+        return dirs.map(dir => {
+          // If this is the parent directory where the new folder was created
+          if (dir.value === currentPath || (currentPath === 'Operation' && dir.value === 'Operation')) {
+            // Add the new folder to the children if it doesn't exist
+            const folderExists = dir.children?.some(child => child.title === newFolderName);
+            if (!folderExists) {
+              return {
+                ...dir,
+                isLeaf: false, // Ensure the parent is not a leaf anymore
+                children: [
+                  ...(dir.children || []),
+                  {
+                    title: newFolderName,
+                    value: newFolderPath,
+                    key: newFolderPath,
+                    isLeaf: true, // New folder is initially a leaf until expanded
+                    children: []
+                  }
+                ]
+              };
+            }
+          }
+          
+          // Recursively update children
+          if (dir.children && dir.children.length > 0) {
+            return {
+              ...dir,
+              children: updateDirectories(dir.children)
+            };
+          }
+          
+          return dir;
+        });
+      };
+      
+      // Update the directories state
+      setDirectories(prevDirs => updateDirectories(prevDirs));
       
       // If we're in copy mode, refresh the copy destination list
       if (copyModalVisible) {
         console.log('Refreshing copy destinations...');
+        // Force a refresh of the directories to ensure consistency
         fetchDirectories();
       }
     } catch (error) {
@@ -1812,7 +1854,28 @@ const OperationDashboard = () => {
 
   const finalizeMove = async (overwrite) => {
     try {
+      // Check if source and destination are the same
+      const normalizedCurrentPath = currentPath.replace(/\\/g, '/');
+      const normalizedDestination = moveDestination.replace(/\\/g, '/');
+      
+      if (normalizedCurrentPath === normalizedDestination) {
+        message.warning('Source and destination are the same. No action needed.');
+        setMoveModalVisible(false);
+        return;
+      }
+
       if (moveItem.type === 'directory') {
+        // Check if trying to move a directory into itself or its subdirectories
+        const sourcePath = normalizedCurrentPath ? 
+          `${normalizedCurrentPath}/${moveItem.name}`.toLowerCase() : 
+          moveItem.name.toLowerCase();
+        const destPath = normalizedDestination.toLowerCase();
+        
+        if (destPath.startsWith(sourcePath + '/') || destPath === sourcePath) {
+          message.error('Cannot move a folder into itself or its subdirectories');
+          return;
+        }
+
         // Use the global moveFolder function
         await moveFolder(
           moveItem,
@@ -1826,6 +1889,30 @@ const OperationDashboard = () => {
           fetchDirectories
         );
       } else {
+        // For files, check if the file already exists in the destination
+        if (!overwrite) {
+          try {
+            const res = await axios.get(
+              `${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`,
+              { withCredentials: true }
+            );
+            
+            const fileExists = (res.data || []).some(f => 
+              f.name === moveItem.name && 
+              (f.directory === moveDestination || f.directory === undefined)
+            );
+            
+            if (fileExists) {
+              throw new Error('File already exists at destination');
+            }
+          } catch (err) {
+            if (err.message === 'File already exists at destination') {
+              throw err;
+            }
+            console.warn('Error checking for existing file at destination:', err);
+          }
+        }
+
         console.log('Moving file with:', {
           id: moveItem.id.toString(),
           filename: moveItem.name,
@@ -1843,7 +1930,11 @@ const OperationDashboard = () => {
             new_parent: moveDestination,
             overwrite: overwrite
           },
-          { withCredentials: true }
+          { 
+            withCredentials: true,
+            // Add timeout to prevent hanging
+            timeout: 30000 // 30 seconds
+          }
         );
       }
 
@@ -1855,7 +1946,19 @@ const OperationDashboard = () => {
       fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Move finalization error:', error);
-      message.error(error.response?.data?.error || 'Error moving item');
+      
+      // Handle specific error cases with user-friendly messages
+      if (error.message === 'File already exists at destination') {
+        // This should be handled by the conflict modal, but just in case
+        message.error('A file with this name already exists at the destination');
+      } else if (error.response?.status === 404) {
+        message.error('The source file or destination folder was not found. Please refresh and try again.');
+      } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        message.error('The operation timed out. Please try again.');
+      } else {
+        message.error(error.response?.data?.error || 'Error moving item. Please try again.');
+      }
+      
       setMoveModalVisible(false);
     }
   };
