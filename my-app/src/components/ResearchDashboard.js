@@ -1305,7 +1305,14 @@ const ResearchDashboard = () => {
           </Col>
         </Row>
         {/* Navigation Row */}
-        <Row gutter={[16, 16]} style={{ marginBottom: 16, alignItems: 'center' }}>
+        <Row 
+          gutter={[16, 16]} 
+          style={{ 
+            marginBottom: 16, 
+            display: 'flex',
+            alignItems: 'center'
+          }}
+        >
           <Col style={{ display: 'flex', gap: 8 }}>
             {/* Only show Go Up button when not at root level */}
             {!isSearching && currentPath !== 'Research' && (
@@ -1324,8 +1331,6 @@ const ResearchDashboard = () => {
                 Back to Browsing
               </Button>
             )}
-          </Col>
-          <Col>
             <Button
               icon={<FolderAddOutlined />}
               onClick={() => setCreateFolderModal(true)}
@@ -1333,9 +1338,7 @@ const ResearchDashboard = () => {
             >
               Create Folder
             </Button>
-          </Col>
-          <Col>
-            <Tooltip title="Refresh Files">
+            <Tooltip title="Refresh">
               <Button
                 icon={<ReloadOutlined />}
                 onClick={() => {
@@ -1347,35 +1350,37 @@ const ResearchDashboard = () => {
               />
             </Tooltip>
           </Col>
-          <Col style={{ width: '40%' }}>
-            <Input.Search
-              placeholder={isSearching
-                ? "Search in Research..."
-                : currentPath
-                  ? `Search in ${currentPath}...`
-                  : "Search in Research..."}
-              value={searchTerm}
-              onChange={(e) => {
-                const value = e.target.value;
-                setSearchTerm(value);
-                // If search is cleared, immediately reset search state
-                if (!value.trim()) {
-                  setIsSearching(false);
-                  setSearchResults([]);
-                }
-              }}
-              onSearch={(value) => {
-                if (value.trim()) {
-                  performSearch(value);
-                } else {
-                  setIsSearching(false);
-                  setSearchResults([]);
-                }
-              }}
-              loading={searchLoading}
-              allowClear={!!searchTerm}
-              enterButton
-            />
+          <Col style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ flex: 1, maxWidth: 500 }}>
+              <Input.Search
+                placeholder={isSearching
+                  ? "Search in Research..."
+                  : currentPath
+                    ? `Search in ${currentPath}...`
+                    : "Search in Research..."}
+                value={searchTerm}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSearchTerm(value);
+                  // If search is cleared, immediately reset search state
+                  if (!value.trim()) {
+                    setIsSearching(false);
+                    setSearchResults([]);
+                  }
+                }}
+                onSearch={(value) => {
+                  if (value.trim()) {
+                    performSearch(value);
+                  } else {
+                    setIsSearching(false);
+                    setSearchResults([]);
+                  }
+                }}
+                loading={searchLoading}
+                allowClear={!!searchTerm}
+                enterButton
+              />
+            </div>
           </Col>
         </Row>
 
@@ -1389,8 +1394,8 @@ const ResearchDashboard = () => {
           rowKey={(record) => record.id || record.name + record.type}
           loading={loading}
           pagination={false}
-          scroll={{ y: '49vh' }}  // for content scrolling on table
           rowSelection={rowSelection}
+          scroll={undefined}
           onRow={(record) => ({
             onClick: () => handleRowClick(record),
             style: { cursor: record.type === 'directory' ? 'pointer' : 'default' } // Only show pointer cursor for directories
