@@ -1086,7 +1086,7 @@ const TrainingDashboard = () => {
   // ----------------------------------
   // Copy
   // ----------------------------------
-  const handleCopy = (record) => {
+  const handleCopy = async (record) => {
     // Check if user has permission to copy
     const isOwner = record.type === 'directory' 
       ? record.created_by === currentUser 
@@ -1097,30 +1097,54 @@ const TrainingDashboard = () => {
       return;
     }
 
-    // Generate a suggested name for the copy
-    let baseName = record.name;
-    let extension = '';
-    const dotIndex = record.name.lastIndexOf('.');
-    if (dotIndex !== -1 && record.type !== 'directory') {
-      baseName = record.name.substring(0, dotIndex);
-      extension = record.name.substring(dotIndex);
-    }
-
+    // Start with the original name as default
     let suggestedName = record.name;
-    const existingNames = items
-      .filter(item => item.parent === currentPath)
-      .map(item => item.name);
 
-    if (existingNames.includes(record.name)) {
-      let counter = 1;
-      let newName;
-      do {
-        newName = record.type === 'directory'
-          ? `${baseName} (${counter})`
-          : `${baseName} (${counter})${extension}`;
-        counter++;
-      } while (existingNames.includes(newName));
-      suggestedName = newName;
+    // Only check for conflicts if we're copying within the same directory
+    if (currentPath === (selectedMainFolder || currentPath)) {
+      // Generate a suggested name for the copy
+      let baseName = record.name;
+      let extension = '';
+      const dotIndex = record.name.lastIndexOf('.');
+      if (dotIndex !== -1 && record.type !== 'directory') {
+        baseName = record.name.substring(0, dotIndex);
+        extension = record.name.substring(dotIndex);
+      }
+
+      // Check for conflicts in the current directory
+      try {
+        const res = await axios.get(
+          `${BASE_URL}/files?directory=${encodeURIComponent(currentPath)}`,
+          { withCredentials: true }
+        );
+        
+        const existingNames = (res.data || []).map(f => f.name);
+        
+        // Only suggest a new name if there's a conflict
+        if (existingNames.includes(record.name)) {
+          // Check if the filename already ends with a number in parentheses
+          const match = baseName.match(/(.+)\s\((\d+)\)$/);
+          let counter = 1;
+          
+          if (match) {
+            // If it does, use that number + 1 as the starting point
+            baseName = match[1];
+            counter = parseInt(match[2], 10) + 1;
+          }
+          
+          let newName;
+          do {
+            newName = record.type === 'directory'
+              ? `${baseName} (${counter})`
+              : `${baseName} (${counter})${extension}`;
+            counter++;
+          } while (existingNames.includes(newName));
+          suggestedName = newName;
+        }
+      } catch (error) {
+        console.error('Error checking for existing files:', error);
+        // Continue with original name if there's an error checking
+      }
     }
 
     setCopyItem(record);
@@ -1732,6 +1756,8 @@ const TrainingDashboard = () => {
           setCopyModalVisible={setCopyModalVisible}
           copyNewName={copyNewName}
           setCopyNewName={setCopyNewName}
+          selectedDestination={selectedDestination}
+          setSelectedDestination={setSelectedDestination}
           handleCopyConfirm={handleCopyConfirm}
           directoryItems={items}
           currentPath={currentPath}

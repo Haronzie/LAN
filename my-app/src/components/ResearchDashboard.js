@@ -30,7 +30,8 @@ import {
   SwapOutlined,
   FileOutlined,
   ReloadOutlined,
-  MoreOutlined
+  MoreOutlined,
+  UserOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -212,35 +213,7 @@ const ResearchDashboard = () => {
     setRenameModalVisible(true);
   };
 
-  const handleCopy = (record) => {
-    // condition in naming the copied file
-    let baseName = record.name;
-    let extension = '';
-    const dotIndex = record.name.lastIndexOf('.');
-    if (dotIndex !== -1) {
-      baseName = record.name.substring(0, dotIndex);
-      extension = record.name.substring(dotIndex);
-    }
 
-    let suggestedName = record.name;
-    const destination = selectedDestination || currentPath;
-    const existingNames = items
-      .filter(item => item.parent === destination)
-      .map(item => item.name);
-
-    if (existingNames.includes(record.name)) {
-      let counter = 1;
-      let newName;
-      do {
-        newName = `${baseName}(${counter})${extension}`;
-        counter++;
-      } while (existingNames.includes(newName));
-      suggestedName = newName;
-    }
-    setCopyItem(record);
-    setCopyNewName(suggestedName);
-    setCopyModalVisible(true);
-  };
 
   const fetchSubFolders = async (mainFolder) => {
     try {
@@ -903,6 +876,84 @@ const ResearchDashboard = () => {
   // ----------------------------------
   // Copy
   // ----------------------------------
+  const handleCopy = async (record) => {
+    try {
+      console.log('Starting copy operation for:', record);
+      
+      // Start with the original name as default
+      let suggestedName = record.name;
+      
+      // Only check for conflicts if we're copying within the same directory
+      if (currentPath === (selectedMainFolder || currentPath)) {
+        // Extract base name and extension for files
+        let baseName = record.name;
+        let extension = '';
+        const dotIndex = record.name.lastIndexOf('.');
+        if (dotIndex !== -1 && record.type === 'file') {
+          baseName = record.name.substring(0, dotIndex);
+          extension = record.name.substring(dotIndex);
+        }
+        
+        // Check for conflicts in the current directory
+        try {
+          const res = await axios.get(
+            `${BASE_URL}/files?directory=${encodeURIComponent(currentPath || 'Research')}`,
+            { withCredentials: true }
+          );
+          
+          const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+          
+          // Only suggest a new name if there's a conflict
+          if (existingNames.includes(record.name)) {
+            // Check if the filename already ends with a number in parentheses
+            const match = baseName.match(/(.+)\s\((\d+)\)$/);
+            let counter = 1;
+            
+            if (match) {
+              // If it does, use that number + 1 as the starting point
+              baseName = match[1];
+              counter = parseInt(match[2], 10) + 1;
+            }
+            
+            let newName;
+            do {
+              newName = record.type === 'file' 
+                ? `${baseName} (${counter})${extension}`
+                : `${baseName} (${counter})`;
+              counter++;
+            } while (existingNames.includes(newName));
+            suggestedName = newName;
+          }
+        } catch (error) {
+          console.warn('Error checking existing items:', error);
+          // Continue with original name if there's an error checking
+        }
+      }
+      
+      // Don't set initial destination yet - let user select
+      const initialDestination = '';
+      
+      // Ensure directories are loaded
+      if (directories.length === 0) {
+        console.log('No directories loaded, fetching...');
+        await fetchDirectories();
+      } else {
+        console.log('Using existing directories:', directories);
+      }
+      
+      // Set up the copy operation
+      setCopyItem(record);
+      setCopyNewName(suggestedName);
+      setSelectedDestination(initialDestination);
+      setCopyModalVisible(true);
+      
+      console.log('Copy modal should now be visible');
+    } catch (error) {
+      console.error('Error preparing copy operation:', error);
+      message.error('Error preparing to copy item');
+    }
+  };
+
   const handleCopyConfirm = async () => {
     if (!copyNewName.trim()) {
       message.error('New name cannot be empty');
@@ -943,6 +994,7 @@ const ResearchDashboard = () => {
       setCopyNewName('');
       setSelectedDestination('');
       fetchItems();
+      fetchAllFilesWithMessages();
     } catch (error) {
       console.error('Copy error:', error);
       message.error(error.response?.data?.error || 'Error copying item');
@@ -1135,23 +1187,10 @@ const ResearchDashboard = () => {
               icon={<ArrowLeftOutlined />}
             >
               Go to folder
-            </Button>
           </Space>
         );
       }
-    }] : []),
-    {
-      title: 'Type',
-      dataIndex: 'type',
-      key: 'type',
-      render: (type) => (type === 'directory' ? 'Folder' : 'File')
-    },
-    {
-      title: 'Size',
-      dataIndex: 'formattedSize',
-      key: 'size',
-      render: (size, record) => {
-        if (record.type === 'directory') return '--';
+      return name;
         return size || formatFileSize(record.size) || 'Unknown';
       }
     },
@@ -1428,6 +1467,43 @@ const ResearchDashboard = () => {
           handleCopyConfirm={handleCopyConfirm}
           directoryItems={items}
           currentPath={currentPath}
+          folderTreeData={directories}
+          onLoadData={async (key) => {
+            // This function is called when a folder is expanded in the tree
+            // We need to fetch subdirectories for the expanded folder
+            try {
+              const res = await axios.get(
+                `${BASE_URL}/directory/list?directory=${encodeURIComponent(key)}&container=research`,
+                { withCredentials: true }
+              );
+              
+              // Update the directories state with the new subdirectories
+              const updateDirectories = (dirs) => {
+                return dirs.map(dir => {
+                  if (dir.key === key) {
+                    // Add children to the expanded directory
+                    const children = res.data.map(subDir => ({
+                      title: subDir.name,
+                      key: subDir.path,
+                      isLeaf: !subDir.has_children,
+                      value: subDir.path
+                    }));
+                    return { ...dir, children };
+                  }
+                  if (dir.children) {
+                    // Recursively search for the directory to update
+                    return { ...dir, children: updateDirectories(dir.children) };
+                  }
+                  return dir;
+                });
+              };
+              
+              setDirectories(prevDirectories => updateDirectories(prevDirectories));
+            } catch (error) {
+              console.error('Error loading subdirectories:', error);
+              message.error('Failed to load subdirectories');
+            }
+          }}
 
           // Move Modal props
           moveModalVisible={moveModalVisible}

@@ -1126,6 +1126,7 @@ const OperationDashboard = () => {
     console.log("Uploading to directory:", normalizedPath); // for debugging
 
     try {
+      // Get existing files in the target directory
       const existingFilesRes = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(normalizedPath)}`, {
         withCredentials: true
       });
@@ -1133,8 +1134,41 @@ const OperationDashboard = () => {
       const existingNames = existingFiles.map(f => f.name);
 
       if (uploadingFiles.length === 1) {
+        const file = uploadingFiles[0];
+        let filename = file.name;
+        
+        // Only check for conflicts if the file already exists
+        if (existingNames.includes(filename)) {
+          const { name: baseName, ext } = path.parse(filename);
+          let counter = 1;
+          
+          // Check if filename already has a number in parentheses
+          const match = baseName.match(/^(.*?)\s*\((\d+)\)$/);
+          if (match) {
+            // If it does, extract the base name and start counter from the existing number
+            filename = `${match[1].trim()} (${parseInt(match[2], 10) + 1})${ext}`;
+          } else {
+            // Otherwise, add (1) to the filename
+            filename = `${baseName} (1)${ext}`;
+          }
+          
+          // Keep incrementing the number until we find an available name
+          while (existingNames.includes(filename)) {
+            filename = filename.replace(
+              /^(.*?\s*\(\d+\)|.*?)(\(\d+\))?(\.[^.]+)?$/,
+              (_, prefix, num, ext) => {
+                const newNum = num ? parseInt(num.replace(/[()]/g, ''), 10) + 1 : 1;
+                return `${prefix} (${newNum})${ext || ''}`;
+              }
+            );
+          }
+        }
+        
+        // Create a new File object with the potentially modified name
+        const newFile = new File([file], filename, { type: file.type });
+        
         const formData = new FormData();
-        formData.append('file', uploadingFiles[0]);
+        formData.append('file', newFile);
         formData.append('directory', normalizedPath);
         formData.append('container', 'operation');
 
@@ -1450,50 +1484,58 @@ const OperationDashboard = () => {
     try {
       console.log('Starting copy operation for:', record);
       
-      // Extract base name and extension for files
-      let baseName = record.name;
-      let extension = '';
-      const dotIndex = record.name.lastIndexOf('.');
-      if (dotIndex !== -1 && record.type === 'file') {
-        baseName = record.name.substring(0, dotIndex);
-        extension = record.name.substring(dotIndex);
+      // Start with the original name as default
+      let suggestedName = record.name;
+      
+      // Only check for conflicts if we're copying within the same directory
+      if (currentPath === (selectedMainFolder || currentPath)) {
+        // Extract base name and extension for files
+        let baseName = record.name;
+        let extension = '';
+        const dotIndex = record.name.lastIndexOf('.');
+        if (dotIndex !== -1 && record.type === 'file') {
+          baseName = record.name.substring(0, dotIndex);
+          extension = record.name.substring(dotIndex);
+        }
+        
+        // Check for conflicts in the current directory
+        try {
+          const res = await axios.get(
+            `${BASE_URL}/files?directory=${encodeURIComponent(currentPath || 'Operation')}`,
+            { withCredentials: true }
+          );
+          
+          const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+          
+          // Only suggest a new name if there's a conflict
+          if (existingNames.includes(record.name)) {
+            // Check if the filename already ends with a number in parentheses
+            const match = baseName.match(/(.+)\s\((\d+)\)$/);
+            let counter = 1;
+            
+            if (match) {
+              // If it does, use that number + 1 as the starting point
+              baseName = match[1];
+              counter = parseInt(match[2], 10) + 1;
+            }
+            
+            let newName;
+            do {
+              newName = record.type === 'file' 
+                ? `${baseName} (${counter})${extension}`
+                : `${baseName} (${counter})`;
+              counter++;
+            } while (existingNames.includes(newName));
+            suggestedName = newName;
+          }
+        } catch (error) {
+          console.warn('Error checking existing items:', error);
+          // Continue with original name if there's an error checking
+        }
       }
-
+      
       // Don't set initial destination yet - let user select
       const initialDestination = '';
-      
-      // Get existing items in the current directory for name conflict check
-      const dirParam = encodeURIComponent(currentPath || 'Operation');
-      let existingNames = [];
-      
-      try {
-        const [dirRes, fileRes] = await Promise.all([
-          axios.get(`${BASE_URL}/directory/list?directory=${dirParam}`, { withCredentials: true }),
-          axios.get(`${BASE_URL}/files?directory=${dirParam}`, { withCredentials: true })
-        ]);
-
-        // Get all existing names in the current directory
-        existingNames = [
-          ...(Array.isArray(dirRes?.data) ? dirRes.data.map(d => d.name) : []),
-          ...(Array.isArray(fileRes?.data) ? fileRes.data.map(f => f.name) : [])
-        ];
-      } catch (error) {
-        console.warn('Error checking existing items:', error);
-      }
-
-      // If name exists, generate a new one
-      let suggestedName = record.name;
-      if (existingNames.includes(record.name)) {
-        let counter = 1;
-        let newName;
-        do {
-          newName = record.type === 'file' 
-            ? `${baseName}(${counter})${extension}`
-            : `${baseName}(${counter})`;
-          counter++;
-        } while (existingNames.includes(newName));
-        suggestedName = newName;
-      }
       
       // Ensure directories are loaded
       if (directories.length === 0) {
@@ -1638,12 +1680,26 @@ const OperationDashboard = () => {
           { withCredentials: true }
         );
       }
+      // Refresh both the current directory and the directory tree
+      await Promise.all([
+        fetchItems(),
+        fetchDirectories()
+      ]);
+      
       message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
       setCopyModalVisible(false);
       setCopyNewName('');
       setCopyItem(null);
       setSelectedDestination('');
-      fetchItems();
+      
+      // If we copied a directory, also refresh the directory tree to show the new folder
+      if (copyItem.type === 'directory') {
+        // Force a refresh of the parent directory in the tree
+        const parentPath = selectedDestination || currentPath;
+        if (parentPath) {
+          loadSubfolders(parentPath).catch(console.error);
+        }
+      }
     } catch (error) {
       console.error('Copy error:', error);
       message.error(error.response?.data?.error || 'Error copying item');
