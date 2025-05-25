@@ -31,7 +31,8 @@ import {
   FileOutlined,
   ReloadOutlined,
   MoreOutlined,
-  UserOutlined
+  UserOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -1247,10 +1248,8 @@ const ResearchDashboard = () => {
           onCopy={handleCopy}
           onMove={handleMove}
           onDelete={handleDelete}
-          onMoreInfo={(record) => {
-            // Add more info functionality if needed
-            message.info(`File: ${record.name}`);
-          }}
+          showMoreInfo={false}
+          onMoreInfo={() => {}}
         />
       )
     }
@@ -1360,16 +1359,6 @@ const ResearchDashboard = () => {
             <h2 style={{ margin: 0 }}>Research</h2>
           </Col>
           <Col style={{ display: 'flex', alignItems: 'center' }}>
-            <BatchActionsMenu
-              selectedItems={selectedRows}
-              onDelete={handleBatchDelete}
-              onCopy={handleBatchCopy}
-              onMove={handleBatchMove}
-              onDownload={handleBatchDownload}
-              selectionMode={selectionMode}
-              onToggleSelectionMode={handleToggleSelectionMode}
-              onCancelSelection={handleCancelSelection}
-            />
             <Button 
               type="primary" 
               icon={<UploadOutlined />} 
@@ -1427,37 +1416,51 @@ const ResearchDashboard = () => {
               />
             </Tooltip>
           </Col>
-          <Col style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ flex: 1, maxWidth: 500 }}>
-              <Input.Search
-                placeholder={isSearching
+          <Col flex="auto" style={{ maxWidth: 500 }}>
+            <Input.Search
+              placeholder={
+                isSearching
                   ? "Search in Research..."
                   : currentPath
-                    ? `Search in ${currentPath}...`
-                    : "Search in Research..."}
-                value={searchTerm}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setSearchTerm(value);
-                  // If search is cleared, immediately reset search state
-                  if (!value.trim()) {
-                    setIsSearching(false);
-                    setSearchResults([]);
-                  }
-                }}
-                onSearch={(value) => {
-                  if (value.trim()) {
-                    performSearch(value);
-                  } else {
-                    setIsSearching(false);
-                    setSearchResults([]);
-                  }
-                }}
-                loading={searchLoading}
-                allowClear={!!searchTerm}
-                enterButton
-              />
-            </div>
+                  ? `Search in ${currentPath}...`
+                  : "Search in Research..."
+              }
+              value={searchTerm}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSearchTerm(value);
+                if (!value.trim()) {
+                  setIsSearching(false);
+                  setSearchResults([]);
+                }
+              }}
+              onSearch={(value) => {
+                if (value.trim()) {
+                  performSearch(value);
+                } else {
+                  setIsSearching(false);
+                  setSearchResults([]);
+                }
+              }}
+              loading={searchLoading}
+              allowClear={!!searchTerm}
+              enterButton={<SearchOutlined />}
+              size="middle"
+            />
+          </Col>
+
+          <Col>
+            <BatchActionsMenu
+              selectedItems={selectedRows}
+              onDelete={handleBatchDelete}
+              onCopy={handleBatchCopy}
+              onMove={handleBatchMove}
+              onDownload={handleBatchDownload}
+              selectionMode={selectionMode}
+              onToggleSelectionMode={handleToggleSelectionMode}
+              onCancelSelection={handleCancelSelection}
+              style={{ marginLeft: 'auto' }}
+            />
           </Col>
         </Row>
 
