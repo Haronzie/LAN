@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Dropdown, Button, Menu, Typography } from 'antd';
 import {
   DeleteOutlined,
@@ -106,28 +106,44 @@ const BatchActionsMenu = ({
   // Combine base menu items with selection action items if applicable
   const menuItems = [...baseMenuItems, ...(selectionMode && selectedItems.length > 0 ? selectionActionItems : [])];
 
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+
+  const handleMenuClick = (e) => {
+    if (e.key === 'select') {
+      onToggleSelectionMode();
+    } else if (e.key === 'cancel') {
+      onCancelSelection();
+    }
+    setDropdownVisible(false);
+  };
+
+  const handleButtonClick = () => {
+    if (selectionMode) {
+      onCancelSelection();
+    } else {
+      onToggleSelectionMode();
+    }
+  };
+
   return (
     <div style={{ display: 'flex', gap: 8 }}>
       <Dropdown
         overlay={
-          <Menu items={menuItems} />
+          <Menu 
+            items={menuItems}
+            onClick={handleMenuClick}
+          />
         }
         trigger={['click']}
         placement="bottomRight"
+        visible={dropdownVisible}
+        onVisibleChange={setDropdownVisible}
       >
         <Button 
           type={selectionMode ? "primary" : "default"}
           icon={<CheckOutlined />}
           style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-          onClick={(e) => {
-            // Prevent default to avoid double trigger
-            e.preventDefault();
-            e.stopPropagation();
-            // If in selection mode, clicking the button will cancel selection
-            if (selectionMode) {
-              onCancelSelection();
-            }
-          }}
+          onClick={handleButtonClick}
         >
           {selectionMode 
             ? (selectedItems.length > 0 ? `${selectedItems.length} Selected` : 'Cancel')
