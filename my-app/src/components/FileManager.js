@@ -944,19 +944,25 @@ const FileManager = () => {
     }
     try {
       let finalName = renameNewName.trim();
+      let originalExtension = '';
       
-      // For files, preserve the original extension
+      // For files, extract and handle the extension
       if (selectedItem.type === 'file') {
         const oldName = selectedItem.name;
         const lastDotIndex = oldName.lastIndexOf('.');
         
-        // If the original file had an extension, append it to the new name
+        // If the original file had an extension, save it
         if (lastDotIndex > 0) {
-          const extension = oldName.substring(lastDotIndex);
-          // Only add extension if the new name doesn't already have it
-          if (!finalName.endsWith(extension)) {
-            finalName = `${finalName}${extension}`;
+          originalExtension = oldName.substring(lastDotIndex);
+          
+          // Remove any existing extension from the new name
+          const newNameLastDotIndex = finalName.lastIndexOf('.');
+          if (newNameLastDotIndex > 0) {
+            finalName = finalName.substring(0, newNameLastDotIndex);
           }
+          
+          // Add the original extension back
+          finalName = `${finalName}${originalExtension}`;
         }
       }
 
@@ -976,7 +982,8 @@ const FileManager = () => {
           `${BASE_URL}/file/rename`,
           {
             old_filename: selectedItem.name,
-            new_filename: finalName
+            new_filename: finalName,
+            directory: currentPath
           },
           { withCredentials: true }
         );
@@ -984,11 +991,12 @@ const FileManager = () => {
       message.success('Item renamed successfully');
       setRenameModalVisible(false);
       setSelectedItem(null);
+      setRenameNewName('');
       fetchItems();
     } catch (error) {
       console.error('Rename error:', error);
       message.error(error.response?.data?.error || 'Error renaming item');
-    }  
+    }
   };
 
   const handleCopy = async (record) => {
@@ -1916,7 +1924,11 @@ const FileManager = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedItem(record);
-                          setRenameNewName(record.name);
+                          // Set only the filename without extension in the input field
+                          const name = record.name;
+                          const lastDotIndex = name.lastIndexOf('.');
+                          const displayName = lastDotIndex > 0 ? name.substring(0, lastDotIndex) : name;
+                          setRenameNewName(displayName);
                           setRenameModalVisible(true);
                         }}
                       />

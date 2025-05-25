@@ -109,21 +109,7 @@ const CommonModals = ({
         title="Copy Item"
         open={copyModalVisible}
         onOk={handleCopyConfirm}
-        onCancel={() => {
-          setCopyModalVisible(false);
-          // Reset copy form state
-          setCopyNewName('');
-          setSelectedDestination('');
-          if (handleMainFolderChange) handleMainFolderChange('');
-          if (handleSubFolderChange) handleSubFolderChange('');
-        }}
-        afterClose={() => {
-          // Additional cleanup after close animation
-          setCopyNewName('');
-          setSelectedDestination('');
-          if (handleMainFolderChange) handleMainFolderChange('');
-          if (handleSubFolderChange) handleSubFolderChange('');
-        }}
+        onCancel={() => setCopyModalVisible(false)}
         okText="Copy"
         width={700}
       >
@@ -140,7 +126,7 @@ const CommonModals = ({
               <div style={{ marginBottom: 8 }}>
                 <Select
                   style={{ width: '100%' }}
-                  placeholder="Select destination folder"
+                  placeholder="Select main folder"
                   value={selectedMainFolder || undefined}
                   onChange={handleMainFolderChange}
                   showSearch
@@ -149,6 +135,9 @@ const CommonModals = ({
                     option.children.toLowerCase().includes(input.toLowerCase())
                   }
                 >
+                  <Select.Option key="" value="">
+                    Root Directory
+                  </Select.Option>
                   <Select.Option key="Research" value="Research">
                     Research
                   </Select.Option>
@@ -161,7 +150,7 @@ const CommonModals = ({
                 </Select>
               </div>
               
-              {selectedMainFolder && ( // Only show path section when a main folder is selected
+              {selectedMainFolder && (
                 <div style={{ border: '1px solid #d9d9d9', borderRadius: 4, padding: 8 }}>
                   <div style={{ marginBottom: 8 }}>
                     <div style={{ fontWeight: 500, marginBottom: 4 }}>Current Path:</div>
