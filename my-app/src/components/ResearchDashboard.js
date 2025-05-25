@@ -1171,6 +1171,46 @@ const ResearchDashboard = () => {
         return name;
       }
     },
+    {
+      title: 'Type',
+      dataIndex: 'type',
+      key: 'type',
+      render: (type) => (type === 'directory' ? 'Folder' : 'File')
+    },
+    {
+      title: 'Size',
+      dataIndex: 'formattedSize',
+      key: 'size',
+      render: (size, record) => {
+        if (record.type === 'directory') return '--';
+        return size || formatFileSize(record.size) || 'Unknown';
+      }
+    },
+    {
+      title: 'Uploaded By',
+      key: 'uploader',
+      width: 200,
+      ellipsis: true,
+      render: (_, record) => {
+        const uploader = record.uploader || record.created_by;
+        const displayName = uploader || 'System';
+        return (
+          <Tooltip title={`Uploaded by: ${displayName}`}>
+            <div style={{ 
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              <UserOutlined style={{ color: '#8c8c8c' }} />
+              <span>{displayName}</span>
+            </div>
+          </Tooltip>
+        );
+      }
+    },
     // If we're showing search results, add a Location column
     ...(isSearching ? [{
       title: 'Location',
@@ -1187,13 +1227,11 @@ const ResearchDashboard = () => {
               icon={<ArrowLeftOutlined />}
             >
               Go to folder
+            </Button>
           </Space>
         );
       }
-      return name;
-        return size || formatFileSize(record.size) || 'Unknown';
-      }
-    },
+    }] : []),
     {
       title: 'Actions',
       key: 'actions',
