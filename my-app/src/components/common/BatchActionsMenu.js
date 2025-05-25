@@ -37,7 +37,6 @@ const BatchActionsMenu = ({
   return (
     <Button 
       type="default"
-      icon={<CheckOutlined />}
       style={{ display: 'flex', alignItems: 'center', gap: 8 }}
       onClick={handleButtonClick}
     >
