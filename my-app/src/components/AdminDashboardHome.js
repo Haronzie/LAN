@@ -196,17 +196,14 @@ useEffect(() => {
   }
 }, [dateRange, transformedChartDataMemo]);
 
-// Colors matching the original chart
+// Chart colors
 const folderColors = {
   'Operation': '#13c2c2',
   'Training': '#faad14',
   'Research': '#52c41a'
 };
 
-// Convert array of colors to array format
 const folderColorsArray = Object.values(folderColors);
-
-
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -262,329 +259,475 @@ const folderColorsArray = Object.values(folderColors);
   }, []);
 
   return (
-    <div className="dashboard-container" style={{ 
-      maxWidth: 1200, 
-      margin: '0 auto',
+    <div style={{ 
+      height: 'calc(100vh - 64px)',
+      overflow: 'hidden',
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      padding: '16px',
+      backgroundColor: '#f5f7fa'
     }}>
-      <Title level={3} style={{ marginBottom: 24, textAlign: 'center' }}>
+      {/* Title */}
+      <Title level={3} style={{ 
+        margin: '0 0 16px 0',
+        textAlign: 'center',
+        fontWeight: 600,
+        color: '#1a365d'
+      }}>
         Welcome to the Admin Dashboard
       </Title>
       
-      <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12} md={8}>
-          <Card 
-            bodyStyle={{ padding: '24px' }}
-            style={{ height: '100%', borderRadius: 8 }}
-            hoverable
-          >
-            <Statistic 
-              title="Total Users" 
-              value={totalUsers} 
-              loading={loadingUsers}
-              valueStyle={{ fontSize: 32, fontWeight: 600 }}
-              prefix={<UserOutlined />}
-            />
-          </Card>
-        </Col>
-        
-        <Col xs={24} sm={12} md={8}>
-          <Card 
-            bodyStyle={{ padding: '24px' }}
-            style={{ height: '100%', borderRadius: 8 }}
-            hoverable
-          >
-            <Statistic 
-              title="Total Files" 
-              value={totalFiles} 
-              loading={loadingFiles}
-              valueStyle={{ fontSize: 32, fontWeight: 600 }}
-              prefix={<FileOutlined />}
-            />
-          </Card>
-        </Col>
-        
-        <Col xs={24} md={8}>
-          <Card 
-            bodyStyle={{ padding: '24px' }}
-            style={{ height: '100%', borderRadius: 8 }}
-            hoverable
-          >
-            <Statistic 
-              title="Admin Users" 
-              value={adminCount} 
-              loading={loadingUsers}
-              valueStyle={{ fontSize: 32, fontWeight: 600 }}
-              prefix={<TeamOutlined />}
-            />
-          </Card>
-        </Col>
-      </Row>
+      {/* Stats Row */}
+      <div style={{ 
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gap: '16px',
+        marginBottom: '24px'
+      }}>
+        {/* Total Users Card */}
+        <Card 
+          style={{ 
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            transition: 'all 0.3s ease',
+            border: 'none',
+            height: '100%'
+          }}
+          bodyStyle={{ 
+            padding: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            height: '100%'
+          }}
+          className="hover:shadow-lg"
+        >
+          <div style={{ 
+            width: '56px',
+            height: '56px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(49, 130, 206, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '16px',
+            flexShrink: 0
+          }}>
+            <UserOutlined style={{ fontSize: '24px', color: '#3182ce' }} />
+          </div>
+          <div>
+            <div style={{ 
+              fontSize: '14px',
+              color: '#718096',
+              marginBottom: '4px'
+            }}>
+              Total Users
+            </div>
+            {loadingUsers ? (
+              <div style={{ height: '32px', display: 'flex', alignItems: 'center' }}>
+                <div className="animate-pulse bg-gray-200 rounded" style={{ width: '60px', height: '24px' }}></div>
+              </div>
+            ) : (
+              <div style={{ 
+                fontSize: '24px',
+                fontWeight: 700,
+                color: '#2d3748',
+                lineHeight: '1.2'
+              }}>
+                {totalUsers.toLocaleString()}
+              </div>
+            )}
+          </div>
+        </Card>
 
-      <Row gutter={[24, 24]}>
-        <Col xs={24} lg={12}>
+        {/* Total Files Card */}
+        <Card 
+          style={{ 
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            transition: 'all 0.3s ease',
+            border: 'none',
+            height: '100%'
+          }}
+          bodyStyle={{ 
+            padding: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            height: '100%'
+          }}
+          className="hover:shadow-lg"
+        >
+          <div style={{ 
+            width: '56px',
+            height: '56px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '16px',
+            flexShrink: 0
+          }}>
+            <FileOutlined style={{ fontSize: '24px', color: '#10b981' }} />
+          </div>
+          <div>
+            <div style={{ 
+              fontSize: '14px',
+              color: '#718096',
+              marginBottom: '4px'
+            }}>
+              Total Files
+            </div>
+            {loadingFiles ? (
+              <div style={{ height: '32px', display: 'flex', alignItems: 'center' }}>
+                <div className="animate-pulse bg-gray-200 rounded" style={{ width: '60px', height: '24px' }}></div>
+              </div>
+            ) : (
+              <div style={{ 
+                fontSize: '24px',
+                fontWeight: 700,
+                color: '#2d3748',
+                lineHeight: '1.2'
+              }}>
+                {totalFiles.toLocaleString()}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Admin Users Card */}
+        <Card 
+          style={{ 
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            transition: 'all 0.3s ease',
+            border: 'none',
+            height: '100%'
+          }}
+          bodyStyle={{ 
+            padding: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            height: '100%'
+          }}
+          className="hover:shadow-lg"
+        >
+          <div style={{ 
+            width: '56px',
+            height: '56px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '16px',
+            flexShrink: 0
+          }}>
+            <TeamOutlined style={{ fontSize: '24px', color: '#f59e0b' }} />
+          </div>
+          <div>
+            <div style={{ 
+              fontSize: '14px',
+              color: '#718096',
+              marginBottom: '4px'
+            }}>
+              Admin Users
+            </div>
+            {loadingUsers ? (
+              <div style={{ height: '32px', display: 'flex', alignItems: 'center' }}>
+                <div className="animate-pulse bg-gray-200 rounded" style={{ width: '60px', height: '24px' }}></div>
+              </div>
+            ) : (
+              <div style={{ 
+                fontSize: '24px',
+                fontWeight: 700,
+                color: '#2d3748',
+                lineHeight: '1.2'
+              }}>
+                {adminCount.toLocaleString()}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Regular Users Card */}
+        <Card 
+          style={{ 
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            transition: 'all 0.3s ease',
+            border: 'none',
+            height: '100%'
+          }}
+          bodyStyle={{ 
+            padding: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            height: '100%'
+          }}
+          className="hover:shadow-lg"
+        >
+          <div style={{ 
+            width: '56px',
+            height: '56px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '16px',
+            flexShrink: 0
+          }}>
+            <UserOutlined style={{ fontSize: '24px', color: '#8b5cf6' }} />
+          </div>
+          <div>
+            <div style={{ 
+              fontSize: '14px',
+              color: '#718096',
+              marginBottom: '4px'
+            }}>
+              Regular Users
+            </div>
+            {loadingUsers ? (
+              <div style={{ height: '32px', display: 'flex', alignItems: 'center' }}>
+                <div className="animate-pulse bg-gray-200 rounded" style={{ width: '60px', height: '24px' }}></div>
+              </div>
+            ) : (
+              <div style={{ 
+                fontSize: '24px',
+                fontWeight: 700,
+                color: '#2d3748',
+                lineHeight: '1.2'
+              }}>
+                {regularCount.toLocaleString()}
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Main Content */}
+      <div style={{ 
+        display: 'flex', 
+        flex: 1,
+        gap: '16px',
+        minHeight: 0,
+        overflow: 'hidden'
+      }}>
+        {/* Left Column - Chart */}
+        <div style={{ 
+          flex: 2, 
+          display: 'flex', 
+          flexDirection: 'column',
+          minWidth: 0
+        }}>
           <Card 
             style={{ 
-              borderRadius: 8,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-            }}
-            bodyStyle={{ padding: '0' }}
-          >
-            {/* Chart Header with Improved Layout */}
-            <div style={{
-              display: 'flex',
+              flex: 1, 
+              display: 'flex', 
               flexDirection: 'column',
-              padding: '20px 24px 0',
-              borderBottom: '1px solid #f0f0f0'
+              overflow: 'hidden',
+              borderRadius: 8,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}
+            bodyStyle={{ 
+              padding: 0,
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* Chart Header */}
+            <div style={{
+              padding: '16px 24px',
+              borderBottom: '1px solid #edf2f7',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
             }}>
               <div style={{ 
                 display: 'flex', 
-                justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: '16px'
+                gap: '8px'
               }}>
-                <Title level={4} style={{ margin: 0, fontSize: '18px' }}>
-                  <CalendarOutlined style={{ marginRight: 8 }} /> 
-                  File Upload Analytics
-                </Title>
-                
+                <CalendarOutlined style={{ color: '#4a5568' }} />
+                <Text strong style={{ fontSize: 16 }}>File Upload Analytics</Text>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '8px' }}>
                 {dateRange && (
                   <Button 
                     size="small"
-                    type="primary" 
-                    icon={<FilterOutlined />} 
                     onClick={() => {
                       setDateRange(null);
                       setFilteredChartData(transformedChartData);
                     }}
-                    style={{ marginLeft: 'auto', marginRight: '8px' }}
+                    icon={<FilterOutlined />}
                   >
                     Clear Filter
                   </Button>
                 )}
               </div>
-              
-              <div style={{ marginBottom: '16px' }}>
-                <Text type="secondary" style={{ display: 'block', marginBottom: '8px' }}>
-                  Select date range to filter data:
-                </Text>
-                <DatePicker.RangePicker 
-                  value={dateRange}
-                  onChange={(dates) => {
-                    setDateRange(dates);
-                    if (!dates) {
-                      setFilteredChartData(transformedChartData);
-                    }
-                  }}
-                  format="MMM DD, YYYY"
-                  placeholder={['Start Date', 'End Date']}
-                  allowClear={true}
-                  style={{ 
-                    width: '100%',
-                    height: '38px'
-                  }}
-                />
-              </div>
             </div>
-            {filteredChartData.length > 0 ? (
-              <div style={{ width: '100%', height: 380, padding: '24px 24px 40px 24px' }}>
-                <Bar
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    layout: {
-                      padding: {
-                        left: 24,
-                        right: 24,
-                        top: 24,
-                        bottom: 40
-                      }
-                    },
-                    plugins: {
-                      legend: {
-                        position: 'top',
-                        align: 'center',
-                        labels: {
-                          boxWidth: 16,
-                          usePointStyle: true,
-                          pointStyle: 'circle',
-                          padding: 20,
-                          font: {
-                            size: 13,
-                            weight: 500
+            
+            {/* Date Range Picker */}
+            <div style={{ 
+              padding: '12px 24px',
+              borderBottom: '1px solid #edf2f7'
+            }}>
+              <DatePicker.RangePicker 
+                value={dateRange}
+                onChange={(dates) => {
+                  setDateRange(dates);
+                  if (!dates) {
+                    setFilteredChartData(transformedChartData);
+                  }
+                }}
+                format="MMM DD, YYYY"
+                placeholder={['Start Date', 'End Date']}
+                allowClear={true}
+                style={{ width: '100%' }}
+              />
+            </div>
+            
+            {/* Chart Container */}
+            <div style={{ 
+              flex: 1,
+              padding: '16px 24px 24px',
+              minHeight: 0,
+              overflow: 'auto'
+            }}>
+              {filteredChartData.length > 0 ? (
+                <div style={{ height: '100%', minHeight: '300px' }}>
+                  <Bar
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: 'top',
+                          align: 'center',
+                          labels: {
+                            boxWidth: 12,
+                            usePointStyle: true,
+                            padding: 16,
+                            font: { size: 12 }
                           }
                         }
                       },
-                      title: {
-                        display: false,
-                      },
-                      tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        titleColor: '#fff',
-                        bodyColor: '#fff',
-                        titleFont: {
-                          size: 14,
-                          weight: 'bold'
-                        },
-                        bodyFont: {
-                          size: 13
-                        },
-                        padding: 12,
-                        cornerRadius: 6,
-                        boxPadding: 6,
-                        callbacks: {
-                          title: (tooltipItems) => {
-                            return tooltipItems[0].label;
-                          },
-                          label: (context) => {
-                            const folderName = context.dataset.label;
-                            const value = context.raw || 0;
-                            return `${folderName}: ${value}`;
-                          }
+                      scales: {
+                        x: { grid: { display: false } },
+                        y: { 
+                          beginAtZero: true,
+                          grid: { color: 'rgba(0,0,0,0.05)' },
+                          ticks: { stepSize: 1 }
                         }
                       }
-                    },
-                    scales: {
-                      x: {
-                        title: {
-                          display: true,
-                          text: 'Month',
-                          color: '#333',
-                          font: {
-                            weight: '600',
-                            size: 16,
-                            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-                          },
-                          padding: { top: 5, bottom: 25 }
-                        },
-                        grid: {
-                          display: true,
-                          drawBorder: true,
-                          borderDash: [],
-                          color: 'rgba(0, 0, 0, 0.05)',
-                          drawOnChartArea: false,
-                          drawTicks: false
-                        },
-                        ticks: {
-                          maxRotation: 0,
-                          minRotation: 0,
-                          padding: 15,
-                          font: {
-                            size: 14,
-                            weight: '600',
-                            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-                          },
-                          color: '#333',
-                          autoSkip: false
-                        }
-                      },
-                      y: {
-                        title: {
-                          display: true,
-                          text: 'Number of Files',
-                          color: '#555',
-                          font: {
-                            weight: '600',
-                            size: 14,
-                            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-                          },
-                          padding: { bottom: 10, top: 10, left: 10, right: 10 },
-                          rotation: 0,
-                          position: 'left'
-                        },
-                        afterFit: function(scaleInstance) {
-                          // Add some extra padding for the horizontal label
-                          scaleInstance.paddingLeft += 15;
-                        },
-                        beginAtZero: true,
-                        border: {
-                          display: true,
-                          dash: [4, 4],
-                          color: 'rgba(0, 0, 0, 0.1)'
-                        },
-                        grid: {
-                          display: true,
-                          color: 'rgba(0, 0, 0, 0.05)',
-                          borderDash: [2, 4]
-                        },
-                        ticks: {
-                          precision: 0,
-                          stepSize: 1,
-                          padding: 10,
-                          color: '#666',
-                          font: {
-                            size: 12,
-                            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-                          }
-                        }
-                      }
-                    }
-                  }}
-                  data={{
-                    labels: filteredChartData.map(item => item.monthYear),
-                    datasets: validFolders.map((folder, index) => {
-                      const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
-                      return {
-                        label: capitalizedFolder,
-                        data: filteredChartData.map(item => item[capitalizedFolder] || 0),
-                        backgroundColor: folderColorsArray[index],
-                      };
-                    })
-                  }}
-                />
-              </div>
-            ) : (
-              <div style={{ 
-                minHeight: 300,
-                display: 'flex', 
-                flexDirection: 'column', 
-                justifyContent: 'center', 
-                alignItems: 'center',
-                padding: '24px',
-                textAlign: 'center',
-                margin: '0 auto',
-                maxWidth: '100%',
-                boxSizing: 'border-box'
-              }}>
-                <FileOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
-                <Text type="secondary" style={{ fontSize: 16, marginBottom: 8, fontWeight: 500 }}>No uploads yet</Text>
-                <Text type="secondary" style={{ maxWidth: 280, lineHeight: '1.4' }}>
-                  Upload files to see analytics and statistics about your uploads.
-                </Text>
-              </div>
-            )}
+                    }}
+                    data={{
+                      labels: filteredChartData.map(item => item.monthYear),
+                      datasets: validFolders.map((folder, index) => {
+                        const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
+                        return {
+                          label: capitalizedFolder,
+                          data: filteredChartData.map(item => item[capitalizedFolder] || 0),
+                          backgroundColor: folderColors[capitalizedFolder],
+                          borderRadius: 4
+                        };
+                      })
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{ 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  justifyContent: 'center', 
+                  alignItems: 'center',
+                  color: '#a0aec0',
+                  textAlign: 'center',
+                  padding: '24px'
+                }}>
+                  <FileOutlined style={{ fontSize: 32, marginBottom: 12 }} />
+                  <Text style={{ color: '#a0aec0' }}>No uploads yet</Text>
+                </div>
+              )}
+            </div>
           </Card>
-        </Col>
-        
-        <Col xs={24} lg={12}>
+        </div>
+
+        {/* Right Column - Logs */}
+        <div style={{ 
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column',
+          gap: '16px',
+          minWidth: 0
+        }}>
+          {/* Audit Logs Card */}
           <Card 
-            title="Recent Audit Logs"
-            style={{ borderRadius: 8, marginBottom: 24 }}
-            headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
-            bodyStyle={{ padding: '16px 24px' }}
-            extra={
-              <Button 
-                type="link" 
-                size="small" 
-                onClick={() => navigate('audit-logs')}
-                style={{ padding: '0 4px' }}
-              >
-                View All
-              </Button>
+            title={
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span>Recent Audit Logs</span>
+                <Button 
+                  type="link" 
+                  size="small" 
+                  onClick={() => navigate('audit-logs')}
+                  style={{ padding: 0, height: 'auto' }}
+                >
+                  View All
+                </Button>
+              </div>
             }
+            style={{ 
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              borderRadius: 8,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}
+            bodyStyle={{ 
+              padding: 0,
+              flex: 1,
+              overflow: 'auto'
+            }}
           >
             {auditLogs.length > 0 ? (
               <List
                 size="small"
-                dataSource={auditLogs.slice(0, 5)}
+                dataSource={auditLogs.slice(0, 10)}
                 renderItem={(item) => (
-                  <List.Item style={{ padding: '8px 0' }}>
+                  <List.Item 
+                    style={{ 
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #edf2f7',
+                      transition: 'background-color 0.2s'
+                    }}
+                    className="hover:bg-gray-50"
+                  >
                     <div style={{ width: '100%' }}>
-                      <Text strong style={{ display: 'block' }}>
-                        {new Date(item.created_at).toLocaleString()}
-                      </Text>
-                      <Text type="secondary" style={{ display: 'block' }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        marginBottom: 4
+                      }}>
+                        <Text strong style={{ fontSize: 12, color: '#4a5568' }}>
+                          {new Date(item.created_at).toLocaleString()}
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {item.user_name || 'System'}
+                        </Text>
+                      </div>
+                      <Text style={{ 
+                        display: 'block',
+                        fontSize: 13,
+                        lineHeight: 1.4
+                      }}>
                         {item.details}
                       </Text>
                     </div>
@@ -592,49 +735,98 @@ const folderColorsArray = Object.values(folderColors);
                 )}
               />
             ) : (
-              <Text type="secondary">No audit logs available</Text>
+              <div style={{ 
+                padding: '24px', 
+                textAlign: 'center',
+                color: '#a0aec0'
+              }}>
+                No audit logs available
+              </div>
             )}
           </Card>
-          
+
+          {/* Activities Card */}
           <Card 
-            title="Recent User Activities"
-            style={{ borderRadius: 8 }}
-            headStyle={{ borderBottom: 0, padding: '16px 24px 8px' }}
-            bodyStyle={{ padding: '16px 24px' }}
-            extra={
-              <Button 
-                type="link" 
-                size="small" 
-                onClick={() => navigate('user-activities')}
-                style={{ padding: '0 4px' }}
-              >
-                View All
-              </Button>
+            title={
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span>Recent Activities</span>
+                <Button 
+                  type="link" 
+                  size="small" 
+                  onClick={() => navigate('activities')}
+                  style={{ padding: 0, height: 'auto' }}
+                >
+                  View All
+                </Button>
+              </div>
             }
+            style={{ 
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              borderRadius: 8,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}
+            bodyStyle={{ 
+              padding: 0,
+              flex: 1,
+              overflow: 'auto'
+            }}
           >
             {activities.length > 0 ? (
               <List
                 size="small"
-                dataSource={activities.slice(0, 3)}
+                dataSource={activities.slice(0, 10)}
                 renderItem={(item) => (
-                  <List.Item style={{ padding: '8px 0' }}>
+                  <List.Item 
+                    style={{ 
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #edf2f7',
+                      transition: 'background-color 0.2s'
+                    }}
+                    className="hover:bg-gray-50"
+                  >
                     <div style={{ width: '100%' }}>
-                      <Text strong style={{ display: 'block' }}>
-                        {new Date(item.timestamp).toLocaleString()}
-                      </Text>
-                      <Text type="secondary" style={{ display: 'block' }}>
-                        {item.event}
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        marginBottom: 4
+                      }}>
+                        <Text strong style={{ fontSize: 12, color: '#4a5568' }}>
+                          {new Date(item.timestamp || item.created_at).toLocaleString()}
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {item.user_name || 'System'}
+                        </Text>
+                      </div>
+                      <Text style={{ 
+                        display: 'block',
+                        fontSize: 13,
+                        lineHeight: 1.4
+                      }}>
+                        {item.action || item.details}
                       </Text>
                     </div>
                   </List.Item>
                 )}
               />
             ) : (
-              <Text type="secondary">No user activities available</Text>
+              <div style={{ 
+                padding: '24px', 
+                textAlign: 'center',
+                color: '#a0aec0'
+              }}>
+                No activities to show
+              </div>
             )}
           </Card>
-        </Col>
-      </Row>
+        </div>
+      </div>
     </div>
   );
 };
