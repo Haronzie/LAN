@@ -1144,7 +1144,7 @@ const FileManager = () => {
 
   const fetchSubFolders = async (mainFolder, forCopy = false, includeRoot = true) => {
     try {
-      // First, ensure we get all main folders if we're at the root level and need to include them
+      // If we're at the root level and need to include root folders
       if (mainFolder === '' && includeRoot) {
         // Always include the main folders (Research, Training, Operation) when at root level
         const rootFolders = ['Research', 'Training', 'Operation'].map(folder => ({
@@ -1154,15 +1154,39 @@ const FileManager = () => {
         }));
 
         if (forCopy) {
+          // For copy operation, we'll handle the full tree differently
           setCopySubFolders(rootFolders);
+          
+          // Preload first level of subfolders for better UX
+          for (const folder of rootFolders) {
+            try {
+              const res = await axios.get(
+                `${BASE_URL}/directory/list?directory=${encodeURIComponent(folder.path)}`,
+                { withCredentials: true }
+              );
+              
+              const subfolders = (res.data || [])
+                .filter(item => item.type === 'directory')
+                .map(subfolder => ({
+                  name: subfolder.name,
+                  path: `${folder.path}/${subfolder.name}`,
+                  isRoot: false
+                }));
+                
+              setCopySubFolders(prev => [...prev, ...subfolders]);
+            } catch (err) {
+              console.error(`Error preloading subfolders for ${folder.path}:`, err);
+            }
+          }
         } else {
           setSubFolders(rootFolders);
         }
         return;
       }
 
-      // Then fetch the actual contents of the specified folder
-      const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
+      // For non-root folders, fetch their immediate subfolders
+      const res = await axios.get(
+        `${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
         { withCredentials: true }
       );
 
@@ -1174,16 +1198,22 @@ const FileManager = () => {
           path: mainFolder ? `${mainFolder}/${folder.name}` : folder.name,
           isRoot: false
         }))
-        .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
+        .sort((a, b) => a.name.localeCompare(b.name));
 
       if (forCopy) {
-        setCopySubFolders(folders);
+        // When fetching for copy, we want to keep existing folders and add new ones
+        setCopySubFolders(prevFolders => {
+          const existingPaths = new Set(prevFolders.map(f => f.path));
+          const newFolders = folders.filter(f => !existingPaths.has(f.path));
+          return [...prevFolders, ...newFolders];
+        });
       } else {
         setSubFolders(folders);
       }
 
       // For debugging
       console.log(`Fetched subfolders for ${mainFolder || 'root'}:`, folders);
+      return folders;
 
     } catch (error) {
       console.error('Error fetching subfolders:', error);
@@ -1193,31 +1223,120 @@ const FileManager = () => {
       } else {
         setSubFolders([]);
       }
+      return [];
     }
   };
 
-  const handleMainFolderChange = (value) => {
+  // Helper function to recursively fetch all subfolders for the copy operation
+  const fetchAllSubFolders = async (folderPath, forCopy = false) => {
+    try {
+      const res = await axios.get(
+        `${BASE_URL}/directory/list?directory=${encodeURIComponent(folderPath)}`,
+        { withCredentials: true }
+      );
+
+      // Process immediate subfolders
+      const subfolders = (res.data || [])
+        .filter(item => item.type === 'directory')
+        .map(folder => ({
+          name: folder.name,
+          path: `${folderPath}/${folder.name}`,
+          isRoot: false
+        }));
+
+      if (forCopy && subfolders.length > 0) {
+        // Add the subfolders to copySubFolders
+        setCopySubFolders(prevFolders => {
+          const existingPaths = new Set(prevFolders.map(f => f.path));
+          const newFolders = subfolders.filter(f => !existingPaths.has(f.path));
+          return [...prevFolders, ...newFolders];
+        });
+
+        // Recursively fetch subfolders for each subfolder
+        for (const subfolder of subfolders) {
+          await fetchAllSubFolders(subfolder.path, forCopy);
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching subfolders for ${folderPath}:`, error);
+    }
+  };
+
+  const handleMainFolderChange = async (value) => {
     setSelectedMainFolder(value);
     setSelectedSubFolder('');
-    setMoveDestination(value); // Set the destination to the main folder by default
-
+    setMoveDestination(value);
+    setSelectedDestination(value);
+    
+    // Reset subfolders
+    setSubFolders([]);
+    
     if (value) {
-      // When a main folder is selected, fetch its subfolders
-      fetchSubFolders(value, false, false);
+      try {
+        // Fetch subfolders for the selected main folder
+        const res = await axios.get(
+          `${BASE_URL}/directory/list?directory=${encodeURIComponent(value)}`,
+          { withCredentials: true }
+        );
+        
+        // Process the response to get subfolders
+        const newSubFolders = (res.data || [])
+          .filter(item => item.type === 'directory')
+          .map(folder => ({
+            name: folder.name,
+            path: `${value}/${folder.name}`,
+            isRoot: false
+          }));
+        
+        // Update the subfolders state
+        setSubFolders(newSubFolders);
+      } catch (error) {
+        console.error('Error loading main folder subfolders:', error);
+        message.error('Failed to load folder contents');
+        setSubFolders([]);
+      }
     } else {
-      // When no main folder is selected, fetch root folders
+      // If no main folder is selected, reset to root
       fetchSubFolders('', false, true);
     }
   };
 
-  const handleSubFolderChange = (value) => {
-    setSelectedSubFolder(value);
-    if (value) {
-      // Combine main folder and subfolder for the full path
-      setMoveDestination(`${selectedMainFolder}/${value}`);
-    } else {
-      // If no subfolder is selected, use just the main folder
-      setMoveDestination(selectedMainFolder);
+  const handleSubFolderChange = async (folderPath) => {
+    setSelectedSubFolder(folderPath);
+    
+    // Update the destination path
+    const destination = folderPath || selectedMainFolder;
+    setMoveDestination(destination);
+    setSelectedDestination(destination);
+    
+    // If a folder is selected, load its subfolders
+    if (folderPath) {
+      try {
+        // Show loading state
+        setSubFolders([]);
+        
+        // Fetch subfolders for the selected folder
+        const res = await axios.get(
+          `${BASE_URL}/directory/list?directory=${encodeURIComponent(folderPath)}`,
+          { withCredentials: true }
+        );
+        
+        // Process the response to get subfolders
+        const newSubFolders = (res.data || [])
+          .filter(item => item.type === 'directory')
+          .map(folder => ({
+            name: folder.name,
+            path: `${folderPath}/${folder.name}`,
+            isRoot: false
+          }));
+        
+        // Update the subfolders state
+        setSubFolders(newSubFolders);
+      } catch (error) {
+        console.error('Error loading subfolders:', error);
+        message.error('Failed to load subfolders');
+        setSubFolders([]);
+      }
     }
   };
 
