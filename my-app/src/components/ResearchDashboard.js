@@ -1536,37 +1536,57 @@ const ResearchDashboard = () => {
           directoryItems={items}
           currentPath={currentPath}
           folderTreeData={directories}
-          onLoadData={async (key) => {
-            // This function is called when a folder is expanded in the tree
-            // We need to fetch subdirectories for the expanded folder
+          onLoadData={async (treeNode) => {
             try {
+              const { key, children } = treeNode;
+              
+              // If children already exist, don't load again
+              if (children && children.length > 0) {
+                return;
+              }
+              
+              // Fetch subdirectories for the expanded folder
               const res = await axios.get(
                 `${BASE_URL}/directory/list?directory=${encodeURIComponent(key)}&container=research`,
                 { withCredentials: true }
               );
               
-              // Update the directories state with the new subdirectories
-              const updateDirectories = (dirs) => {
-                return dirs.map(dir => {
-                  if (dir.key === key) {
-                    // Add children to the expanded directory
-                    const children = res.data.map(subDir => ({
-                      title: subDir.name,
-                      key: subDir.path,
-                      isLeaf: !subDir.has_children,
-                      value: subDir.path
-                    }));
-                    return { ...dir, children };
+              // Create a mapping of path to node for easier updates
+              const updateNode = (nodes, targetKey) => {
+                return nodes.map(node => {
+                  if (node.key === targetKey) {
+                    // Update the current node with its children
+                    return {
+                      ...node,
+                      children: res.data.map(subDir => ({
+                        title: subDir.name,
+                        key: subDir.path,
+                        value: subDir.path,
+                        isLeaf: !subDir.has_children,
+                        children: []
+                      })),
+                      isLeaf: res.data.length === 0 // Mark as leaf if no children
+                    };
                   }
-                  if (dir.children) {
-                    // Recursively search for the directory to update
-                    return { ...dir, children: updateDirectories(dir.children) };
+                  
+                  // Recursively update children
+                  if (node.children) {
+                    return {
+                      ...node,
+                      children: updateNode(node.children, targetKey)
+                    };
                   }
-                  return dir;
+                  
+                  return node;
                 });
               };
               
-              setDirectories(prevDirectories => updateDirectories(prevDirectories));
+              // Update the directories state with the new subdirectories
+              setDirectories(prevDirectories => {
+                const updated = updateNode([...prevDirectories], key);
+                return updated;
+              });
+              
             } catch (error) {
               console.error('Error loading subdirectories:', error);
               message.error('Failed to load subdirectories');

@@ -57,12 +57,12 @@ const CommonModals = ({
   handleModalUpload,
   container,
 
-  // New prop for folder tree data
-  folderTreeData,
+  // Folder tree data for the TreeSelect component
+  folderTreeData = [],
 
   // New props for copy subfolders
-  forCopy,
-  copySubFolders,
+  forCopy = false,
+  copySubFolders = false,
 }) => {
   return (
     <>
@@ -142,28 +142,22 @@ const CommonModals = ({
                 children: 'children'
               }}
               treeIcon={false}
-              loadData={({ key, children }) => {
+              loadData={async (treeNode) => {
                 // This function is called when a folder is expanded
-                return new Promise(resolve => {
-                  // If children already exist, don't load again
-                  if (children && children.length > 0) {
-                    resolve();
-                    return;
-                  }
-                  
-                  // Call the onLoadData prop to load subfolders
-                  if (onLoadData) {
-                    onLoadData(key).then(() => {
-                      resolve();
-                    });
-                  } else {
-                    resolve();
-                  }
-                });
+                const { key, children } = treeNode;
+                
+                // If children already exist, don't load again
+                if (children && children.length > 0) {
+                  return;
+                }
+                
+                // Call the onLoadData prop to load subfolders
+                if (onLoadData) {
+                  await onLoadData(key);
+                }
               }}
               switcherIcon={<span style={{ display: 'inline-block', width: 16 }}>▸</span>}
               onChange={(value) => {
-                console.log('TreeSelect onChange - value:', value);
                 if (!value) {
                   setSelectedDestination('');
                   return;
@@ -172,7 +166,6 @@ const CommonModals = ({
                 let selectedPath = Array.isArray(value) ? value[0] : value;
                 // Normalize path
                 selectedPath = selectedPath.replace(/\\/g, '/');
-                console.log('Selected destination path:', selectedPath);
                 setSelectedDestination(selectedPath);
               }}
               treeNodeLabelProp="title"
@@ -183,11 +176,12 @@ const CommonModals = ({
                     : 'No matching folders found'}
                 </div>
               }
-              onDropdownVisibleChange={(open) => {
-                if (open) {
-                  console.log('Dropdown opened. Current folderTreeData:', folderTreeData);
-                }
-              }}
+              treeDefaultExpandAll={false}
+              treeDefaultExpandedKeys={[]}
+              showCheckedStrategy={TreeSelect.SHOW_CHILD}
+              treeCheckable={false}
+              treeNodeFilterProp="title"
+              dropdownMatchSelectWidth={400}
             />
           </Form.Item>
         </Form>

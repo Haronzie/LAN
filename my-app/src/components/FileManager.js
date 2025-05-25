@@ -175,6 +175,7 @@ const FileManager = () => {
   const [copySelectedMainFolder, setCopySelectedMainFolder] = useState('');
   const [copySelectedSubFolder, setCopySelectedSubFolder] = useState('');
   const [copySubFolders, setCopySubFolders] = useState([]);
+  const [copyError, setCopyError] = useState(null);
   // const [selectedFiles, setSelectedFiles] = useState([]); // Uncomment if needed for future enhancements
 
   // const navigate = useNavigate(); // Uncomment if navigation is needed
@@ -942,12 +943,29 @@ const FileManager = () => {
       return;
     }
     try {
+      let finalName = renameNewName.trim();
+      
+      // For files, preserve the original extension
+      if (selectedItem.type === 'file') {
+        const oldName = selectedItem.name;
+        const lastDotIndex = oldName.lastIndexOf('.');
+        
+        // If the original file had an extension, append it to the new name
+        if (lastDotIndex > 0) {
+          const extension = oldName.substring(lastDotIndex);
+          // Only add extension if the new name doesn't already have it
+          if (!finalName.endsWith(extension)) {
+            finalName = `${finalName}${extension}`;
+          }
+        }
+      }
+
       if (selectedItem.type === 'directory') {
         await axios.put(
           `${BASE_URL}/directory/rename`,
           {
             old_name: selectedItem.name,
-            new_name: renameNewName,
+            new_name: finalName,
             parent: currentPath
           },
           { withCredentials: true }
@@ -958,7 +976,7 @@ const FileManager = () => {
           `${BASE_URL}/file/rename`,
           {
             old_filename: selectedItem.name,
-            new_filename: renameNewName
+            new_filename: finalName
           },
           { withCredentials: true }
         );
@@ -970,7 +988,7 @@ const FileManager = () => {
     } catch (error) {
       console.error('Rename error:', error);
       message.error(error.response?.data?.error || 'Error renaming item');
-    }
+    }  
   };
 
   const handleCopy = async (record) => {
@@ -994,18 +1012,28 @@ const FileManager = () => {
   const handleCopyConfirm = async () => {
     if (!copyNewName.trim()) {
       message.error('New name cannot be empty');
+      return;
     }
     if (!copyItem) {
       message.error('No item selected to copy');
       return;
     }
-    // Use selectedDestination if set, otherwise build from main/sub folder
+
+    // Reset any previous errors
+    setCopyError(null);
+    
+    // Determine the destination path
     let destinationPath = selectedDestination || copySelectedMainFolder;
     if (!selectedDestination && copySelectedSubFolder) {
       destinationPath = `${destinationPath}/${copySelectedSubFolder}`;
     }
     // Normalize path for safety (remove duplicate slashes)
     destinationPath = destinationPath.replace(/\\+/g, '/');
+
+    if (!destinationPath) {
+      message.error('Please select a destination folder');
+      return;
+    }
 
     try {
       // For files, check if a file with the same name already exists at the destination
@@ -1030,6 +1058,13 @@ const FileManager = () => {
               await finalizeCopy(true);
             },
             onKeepBoth: async () => {
+              // Generate a unique name by appending a timestamp
+              const timestamp = new Date().getTime();
+              const ext = path.extname(copyItem.name);
+              const baseName = path.basename(copyItem.name, ext);
+              const newName = `${baseName}_copy_${timestamp}${ext}`;
+              
+              setCopyNewName(newName);
               await finalizeCopy(false);
             },
             onSkip: () => {
@@ -1045,6 +1080,7 @@ const FileManager = () => {
       await finalizeCopy(false);
     } catch (err) {
       console.error('Copy error:', err);
+      setCopyError(err.response?.data?.error || 'Error checking for conflict or copying item');
       message.error(err.response?.data?.error || 'Error checking for conflict or copying item');
     }
   };

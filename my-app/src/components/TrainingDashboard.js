@@ -1039,8 +1039,18 @@ const TrainingDashboard = () => {
       message.error('Only the owner can rename this item.');
       return;
     }
+    
+    // For files, remove the extension when showing in the input field
+    let displayName = record.name;
+    if (record.type === 'file') {
+      const lastDotIndex = record.name.lastIndexOf('.');
+      if (lastDotIndex > 0) {
+        displayName = record.name.substring(0, lastDotIndex);
+      }
+    }
+    
     setSelectedItem(record);
-    setRenameNewName(record.name);
+    setRenameNewName(displayName);
     setRenameModalVisible(true);
   };
 
@@ -1050,12 +1060,29 @@ const TrainingDashboard = () => {
       return;
     }
     try {
+      let finalName = renameNewName.trim();
+      
+      // For files, preserve the original extension
+      if (selectedItem.type === 'file') {
+        const oldName = selectedItem.name;
+        const lastDotIndex = oldName.lastIndexOf('.');
+        
+        // If the original file had an extension, append it to the new name
+        if (lastDotIndex > 0) {
+          const extension = oldName.substring(lastDotIndex);
+          // Only add extension if the new name doesn't already have it
+          if (!finalName.endsWith(extension)) {
+            finalName = `${finalName}${extension}`;
+          }
+        }
+      }
+
       if (selectedItem.type === 'directory') {
         await axios.put(
           `${BASE_URL}/directory/rename`,
           {
             old_name: selectedItem.name,
-            new_name: renameNewName,
+            new_name: finalName,
             parent: currentPath,
             container: 'training'
           },
@@ -1067,7 +1094,7 @@ const TrainingDashboard = () => {
           {
             directory: currentPath,
             old_filename: selectedItem.name,
-            new_filename: renameNewName,
+            new_filename: finalName,
             container: 'training'
           },
           { withCredentials: true }
