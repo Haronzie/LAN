@@ -1,11 +1,35 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Row, Col, Card, Statistic, List, Button, Typography, message, DatePicker, Space } from 'antd';
+import { Row, Col, Card as AntdCard, Statistic, List, Button, Typography, message, DatePicker, Space } from 'antd';
 import { UserOutlined, FileOutlined, TeamOutlined, CalendarOutlined, FilterOutlined } from '@ant-design/icons';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title as ChartTitle, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import axios from 'axios';
 import moment from 'moment';
+import styled from 'styled-components';
+
+const Card = styled(AntdCard)`
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1.1);
+  border: none;
+  height: 100%;
+  cursor: pointer;
+  
+  &:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    z-index: 1;
+  }
+`;
+
+const CardBody = styled.div`
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  transition: all 0.25s ease;
+`;
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTitle, Tooltip, Legend);
@@ -285,22 +309,8 @@ const folderColorsArray = Object.values(folderColors);
         marginBottom: '24px'
       }}>
         {/* Total Users Card */}
-        <Card 
-          style={{ 
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-            transition: 'all 0.3s ease',
-            border: 'none',
-            height: '100%'
-          }}
-          bodyStyle={{ 
-            padding: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            height: '100%'
-          }}
-          className="hover:shadow-lg"
-        >
+        <Card>
+          <CardBody>
           <div style={{ 
             width: '56px',
             height: '56px',
@@ -337,25 +347,12 @@ const folderColorsArray = Object.values(folderColors);
               </div>
             )}
           </div>
+          </CardBody>
         </Card>
 
         {/* Total Files Card */}
-        <Card 
-          style={{ 
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-            transition: 'all 0.3s ease',
-            border: 'none',
-            height: '100%'
-          }}
-          bodyStyle={{ 
-            padding: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            height: '100%'
-          }}
-          className="hover:shadow-lg"
-        >
+        <Card>
+          <CardBody>
           <div style={{ 
             width: '56px',
             height: '56px',
@@ -392,25 +389,12 @@ const folderColorsArray = Object.values(folderColors);
               </div>
             )}
           </div>
+          </CardBody>
         </Card>
 
         {/* Admin Users Card */}
-        <Card 
-          style={{ 
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-            transition: 'all 0.3s ease',
-            border: 'none',
-            height: '100%'
-          }}
-          bodyStyle={{ 
-            padding: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            height: '100%'
-          }}
-          className="hover:shadow-lg"
-        >
+        <Card>
+          <CardBody>
           <div style={{ 
             width: '56px',
             height: '56px',
@@ -447,25 +431,12 @@ const folderColorsArray = Object.values(folderColors);
               </div>
             )}
           </div>
+          </CardBody>
         </Card>
 
         {/* Regular Users Card */}
-        <Card 
-          style={{ 
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-            transition: 'all 0.3s ease',
-            border: 'none',
-            height: '100%'
-          }}
-          bodyStyle={{ 
-            padding: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            height: '100%'
-          }}
-          className="hover:shadow-lg"
-        >
+        <Card>
+          <CardBody>
           <div style={{ 
             width: '56px',
             height: '56px',
@@ -502,6 +473,7 @@ const folderColorsArray = Object.values(folderColors);
               </div>
             )}
           </div>
+          </CardBody>
         </Card>
       </div>
 
