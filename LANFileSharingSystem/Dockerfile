@@ -6,17 +6,20 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Install LibreOffice
+RUN apt-get update && apt-get install -y \
+    libreoffice \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the rest of your source code
 COPY . .
 
 # (Optional) Make sure all needed deps are added to go.sum
 RUN go mod tidy
 
-RUN apt-get update && apt-get install -y curl
-
 WORKDIR /app/cmd/server
-
-RUN ls -la
 
 # Build the Go app
 RUN go build -o main .

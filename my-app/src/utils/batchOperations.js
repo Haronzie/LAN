@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { message } from 'antd';
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 /**
  * Utility functions for batch operations on files
  */
@@ -16,7 +18,7 @@ export const batchDelete = async (items, currentPath, container, onSuccess) => {
   if (!items || items.length === 0) return;
 
   const deletePromises = items.map(item => {
-    const endpoint = item.type === 'directory' ? '/directory/delete' : '/delete-file';
+    const endpoint = item.type === 'directory' ? `${BASE_URL}/directory/delete` : `${BASE_URL}/delete-file`;
     const data = item.type === 'directory'
       ? { name: item.name, parent: currentPath, container }
       : { filename: item.name, directory: currentPath, container };
@@ -113,7 +115,7 @@ export const batchDeleteUsers = async (users, onSuccess) => {
   // Process users sequentially to handle errors better
   for (const user of users) {
     try {
-      await axios.delete('/user/delete', {
+      await axios.delete(`${BASE_URL}/user/delete`, {
         data: { username: user.username },
         withCredentials: true
       });

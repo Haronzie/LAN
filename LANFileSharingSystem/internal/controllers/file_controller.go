@@ -1146,10 +1146,11 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Run LibreOffice to convert to PDF
-			// Use default installations paths for LibreOffice on Windows
 			libreOfficePaths := []string{
-				`C:\Program Files\LibreOffice\program\soffice.exe`,
-				`C:\Program Files (x86)\LibreOffice\program\soffice.exe`,
+				"/usr/bin/libreoffice", // Linux path (Docker)
+				"/usr/bin/soffice",     // Alternative Linux path
+				`C:\Program Files\LibreOffice\program\soffice.exe`,       // Windows path
+				`C:\Program Files (x86)\LibreOffice\program\soffice.exe`, // Windows path
 				"soffice", // Try the command directly if in PATH
 			}
 
