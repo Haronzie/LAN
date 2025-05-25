@@ -44,9 +44,17 @@ const BatchActionsMenu = ({
     onClick: onToggleSelectionMode
   };
 
+  // Cancel selection menu item
+  const cancelMenuItem = {
+    key: 'cancel',
+    icon: <CloseOutlined />,
+    label: 'Cancel',
+    onClick: onCancelSelection
+  };
+
   // Base menu items always include the selection toggle
   const baseMenuItems = [
-    selectionMenuItem
+    selectionMode ? cancelMenuItem : selectionMenuItem
   ];
   
   // Additional menu items when in selection mode with items selected
@@ -98,18 +106,6 @@ const BatchActionsMenu = ({
   // Combine base menu items with selection action items if applicable
   const menuItems = [...baseMenuItems, ...(selectionMode && selectedItems.length > 0 ? selectionActionItems : [])];
 
-  if (!selectionMode) {
-    return (
-      <Button 
-        icon={<CheckOutlined />}
-        onClick={onToggleSelectionMode}
-        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-      >
-        Select Files
-      </Button>
-    );
-  }
-
   return (
     <div style={{ display: 'flex', gap: 8 }}>
       <Dropdown
@@ -120,11 +116,23 @@ const BatchActionsMenu = ({
         placement="bottomRight"
       >
         <Button 
-          type="primary" 
+          type={selectionMode ? "primary" : "default"}
           icon={<CheckOutlined />}
           style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          onClick={(e) => {
+            // Prevent default to avoid double trigger
+            e.preventDefault();
+            e.stopPropagation();
+            // If in selection mode, clicking the button will cancel selection
+            if (selectionMode) {
+              onCancelSelection();
+            }
+          }}
         >
-          {selectedItems.length > 0 ? `${selectedItems.length} Selected` : 'Cancel'}
+          {selectionMode 
+            ? (selectedItems.length > 0 ? `${selectedItems.length} Selected` : 'Cancel')
+            : 'Select Files'
+          }
         </Button>
       </Dropdown>
     </div>
