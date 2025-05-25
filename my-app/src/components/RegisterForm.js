@@ -54,17 +54,9 @@ const RegisterForm = () => {
       const res = await axios.post(`${BASE_URL}/register`, values, { 
         withCredentials: true 
       });
-      message.success(res.data.message);
-      // Automatically log in after registration
-      await axios.post(`${BASE_URL}/login`, {
-        username: values.username,
-        password: values.password
-      }, { 
-        withCredentials: true 
-      });
-      // Save username to localStorage for adminName
-      localStorage.setItem('username', values.username);
-      navigate('/admin');
+      message.success('Registration successful! Please log in with your new credentials.');
+      // Redirect to login page after successful registration
+      navigate('/login');
     } catch (error) {
       // Log the error for debugging
       console.error('Registration error:', error, error?.response);
