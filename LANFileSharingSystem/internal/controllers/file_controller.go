@@ -323,6 +323,12 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// RenameRequest represents a request to rename a file
+type RenameRequest struct {
+	OldFilename string `json:"old_filename"`
+	NewFilename string `json:"new_filename"`
+}
+
 // RenameFile renames a file both in local storage and in the database.
 func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
@@ -336,10 +342,7 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		OldFilename string `json:"old_filename"`
-		NewFilename string `json:"new_filename"`
-	}
+	var req RenameRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -351,43 +354,97 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1) Get the old file record to see the old path
-	oldFR, err := fc.App.GetFileRecord(req.OldFilename)
+	// Get the current directory from query parameters
+	directory := strings.TrimSpace(r.URL.Query().Get("directory"))
+	if directory == "" {
+		models.RespondError(w, http.StatusBadRequest, "Directory parameter is required")
+		return
+	}
+
+	// Ensure the directory is clean and doesn't contain any path traversal
+	directory = filepath.Clean(directory)
+	if strings.HasPrefix(directory, "..") || strings.Contains(directory, "..") {
+		models.RespondError(w, http.StatusBadRequest, "Invalid directory path")
+		return
+	}
+
+	// Ensure directory uses consistent slashes for comparison
+	normalizedDir := filepath.ToSlash(filepath.Clean(directory))
+	log.Printf("🔍 Rename - Looking for file: '%s' in directory: '%s' (normalized: '%s')", req.OldFilename, directory, normalizedDir)
+
+	// 1) Get all files with the same name (case-insensitive)
+	rows, err := fc.App.DB.Query(`
+		SELECT id, file_name, file_path 
+		FROM files 
+		WHERE LOWER(file_name) = LOWER($1)`,
+		req.OldFilename)
+
 	if err != nil {
-		models.RespondError(w, http.StatusNotFound, "Old file not found in database")
+		log.Printf("❌ Database query error: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, "Error searching for files")
+		return
+	}
+	defer rows.Close()
+
+	var matchingFile *models.FileRecord
+	for rows.Next() {
+		var fr models.FileRecord
+		if err := rows.Scan(&fr.ID, &fr.FileName, &fr.FilePath); err != nil {
+			log.Printf("⚠️ Error scanning row: %v", err)
+			continue
+		}
+
+		// Normalize the file path for comparison
+		fileDir := filepath.ToSlash(filepath.Dir(fr.FilePath))
+		log.Printf("🔍 Checking file: %s (dir: %s) against target dir: %s", fr.FileName, fileDir, normalizedDir)
+
+		// Check if this is an exact match for the current directory (case-insensitive)
+		if strings.EqualFold(fileDir, normalizedDir) {
+			log.Printf("✅ Found matching file: %s in directory: %s", fr.FileName, fileDir)
+			matchingFile = &fr
+			break
+		}
+	}
+
+	if matchingFile == nil {
+		log.Printf("❌ File '%s' not found in directory '%s' (normalized: '%s')", req.OldFilename, directory, normalizedDir)
+		models.RespondError(w, http.StatusNotFound, "File not found in the specified directory")
 		return
 	}
 
 	// 2) Build the new relative path (keep the same folder, just change the file name)
-	oldFullPath := filepath.Join("Cdrrmo", oldFR.FilePath)
-	newRelativePath := filepath.Join(filepath.Dir(oldFR.FilePath), req.NewFilename)
+	oldFullPath := filepath.Join("Cdrrmo", matchingFile.FilePath)
+	newRelativePath := filepath.Join(normalizedDir, req.NewFilename)
 	newFullPath := filepath.Join("Cdrrmo", newRelativePath)
+
+	log.Printf("🔄 Renaming file:\n  From: %s\n  To:   %s", oldFullPath, newFullPath)
 
 	// 3) Rename on disk
 	if err := os.Rename(oldFullPath, newFullPath); err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error renaming file in storage")
+		log.Printf("❌ Error renaming file on disk: %v", err)
+		models.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Error renaming file in storage: %v", err))
 		return
 	}
 
-	// 4) Update DB record to reflect new file_name and new file_path
-	if err := fc.App.RenameFileRecord(req.OldFilename, req.NewFilename, newRelativePath); err != nil {
+	// 4) Retrieve the file ID before renaming
+	fileID := matchingFile.ID
+
+	// 5) Update DB record to reflect new file_name and new file_path
+	if err := fc.App.RenameFileRecord(fileID, req.NewFilename, newRelativePath); err != nil {
+		// Try to revert the file system change if DB update fails
+		os.Rename(newFullPath, oldFullPath)
 		models.RespondError(w, http.StatusInternalServerError, "Error updating file record")
 		return
 	}
 
-	// Retrieve fileID for the new file path
-	fileID, err := fc.App.GetFileIDByPath(newRelativePath)
-	if err == nil && fileID > 0 {
-		// If we found the file ID, figure out the next version
-		latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
-		newVer := latestVer + 1
-
-		// Insert a version record for the new name/path
-		if verr := fc.App.CreateFileVersion(fileID, newVer, newRelativePath); verr != nil {
-			log.Println("Warning: failed to create file version record:", verr)
+	// 6) Update the version record with the new path instead of creating a new version
+	if fileID > 0 {
+		// Update the latest version record with the new path
+		if verr := fc.App.UpdateLatestVersionPath(fileID, newRelativePath); verr != nil {
+			log.Println("Warning: failed to update file version record:", verr)
 		}
 
-		// ✅ Log the audit event as a RENAME action (not UPLOAD)
+		// Log the audit event as a RENAME action
 		action := "RENAME"
 		details := fmt.Sprintf("File renamed from '%s' to '%s'", req.OldFilename, req.NewFilename)
 		fc.App.LogAudit(user.Username, fileID, action, details)

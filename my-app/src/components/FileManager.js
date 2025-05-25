@@ -978,12 +978,15 @@ const FileManager = () => {
         );
         fetchFolderTree();
       } else {
+        // For files, include the current directory in the request
+        const params = new URLSearchParams();
+        params.append('directory', currentPath || '');
+        
         await axios.put(
-          `${BASE_URL}/file/rename`,
+          `${BASE_URL}/file/rename?${params.toString()}`,
           {
             old_filename: selectedItem.name,
-            new_filename: finalName,
-            directory: currentPath
+            new_filename: finalName
           },
           { withCredentials: true }
         );

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -722,15 +723,44 @@ func (app *App) EnsureDirectoryInDB(name, parent string) error {
 	return nil
 }
 
-// Enhance this method to update both file_name AND file_path
-func (app *App) RenameFileRecord(oldFilename, newFilename, newFilePath string) error {
-	_, err := app.DB.Exec(`
+// RenameFileRecord updates both the file_name and file_path for a specific file.
+// It uses the file ID to ensure we only update the exact file we want.
+func (app *App) RenameFileRecord(fileID int, newFilename, newFilePath string) error {
+	// Get the directory from the new file path
+	newDir := filepath.Dir(newFilePath)
+	
+	// Log the update for debugging
+	log.Printf("🔄 Updating database record for file ID %d:\n  New filename: %s\n  New path: %s\n  Directory: %s",
+		fileID, newFilename, newFilePath, newDir)
+
+	result, err := app.DB.Exec(`
         UPDATE files
         SET file_name = $1,
-            file_path = $2
-        WHERE file_name = $3
-    `, newFilename, newFilePath, oldFilename)
-	return err
+            file_path = $2,
+            directory = $3
+        WHERE id = $4
+    `, 
+		newFilename, 
+		newFilePath,
+		newDir,
+		fileID)
+		
+	if err != nil {
+		log.Printf("❌ Database update error: %v", err)
+		return fmt.Errorf("database error: %v", err)
+	}
+	
+	// Check if any rows were affected
+	rowsAffected, _ := result.RowsAffected()
+	log.Printf("✅ Updated %d rows in database", rowsAffected)
+	
+	if rowsAffected == 0 {
+		errMsg := fmt.Sprintf("no file found with ID: %d", fileID)
+		log.Printf("❌ %s", errMsg)
+		return fmt.Errorf("no file found with ID: %d", fileID)
+	}
+	
+	return nil
 }
 
 func (app *App) DeleteFileRecord(fileName string) (int, error) {
@@ -1232,6 +1262,28 @@ func (app *App) ListAllFiles() ([]FileRecord, error) {
 		files = append(files, file)
 	}
 	return files, nil
+}
+
+// UpdateLatestVersionPath updates the path of the latest version of a file
+func (app *App) UpdateLatestVersionPath(fileID int, newPath string) error {
+	// First, get the latest version number for this file
+	latestVer, err := app.GetLatestVersionNumber(fileID)
+	if err != nil {
+		return fmt.Errorf("error getting latest version number: %v", err)
+	}
+
+	// Update the path for the latest version
+	_, err = app.DB.Exec(`
+		UPDATE file_versions 
+		SET file_path = $1 
+		WHERE file_id = $2 AND version_number = $3`,
+		newPath, fileID, latestVer)
+
+	if err != nil {
+		return fmt.Errorf("error updating version path: %v", err)
+	}
+
+	return nil
 }
 
 // GetFileRecordByID retrieves a file record by its ID.
