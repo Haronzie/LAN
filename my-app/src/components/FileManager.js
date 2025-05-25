@@ -43,7 +43,6 @@ import axios from 'axios';
 import path from 'path-browserify';
 import debounce from 'lodash.debounce';
 import BatchActionsMenu from './common/BatchActionsMenu';
-import SelectionHeader from './common/SelectionHeader';
 import { batchDelete, batchDownload } from '../utils/batchOperations';
 import CommonModals from './common/CommonModals';
 import './action-buttons-fix.css'; // Import CSS to fix action buttons
@@ -1644,10 +1643,10 @@ const FileManager = () => {
         });
 
         await axios.post(
-          `${BASE_URL}/move-file`,
+          `${BASE_URL}/files/move`,
           {
             id: fileId,
-            filename: moveItem.name,
+            name: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
             overwrite,
@@ -2097,16 +2096,7 @@ const FileManager = () => {
           )}
         </Row>
 
-        {selectionMode && selectedRows.length > 0 && (
-          <SelectionHeader
-            selectedItems={selectedRows}
-            onDelete={handleBatchDelete}
-            onCopy={handleBatchCopy}
-            onMove={handleBatchMove}
-            onDownload={handleBatchDownload}
-            onCancelSelection={handleCancelSelection}
-          />
-        )}
+
 
         {/* Render cards at root level, table otherwise */}
         {loading ? (

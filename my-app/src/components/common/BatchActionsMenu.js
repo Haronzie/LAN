@@ -112,23 +112,20 @@ const BatchActionsMenu = ({
 
   return (
     <div style={{ display: 'flex', gap: 8 }}>
-      <Button 
-        type="primary" 
-        icon={<CheckOutlined />}
-        onClick={onCancelSelection}
-        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-      >
-        {selectedItems.length > 0 ? `${selectedItems.length} Selected` : 'Cancel'}
-      </Button>
-      
       <Dropdown
         overlay={
-          <Menu items={menuItems.slice(1)} /> // Skip the first item (selection toggle) since we're handling it with the button
+          <Menu items={menuItems} />
         }
         trigger={['click']}
         placement="bottomRight"
       >
-        <Button icon={<MoreOutlined />} />
+        <Button 
+          type="primary" 
+          icon={<CheckOutlined />}
+          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          {selectedItems.length > 0 ? `${selectedItems.length} Selected` : 'Cancel'}
+        </Button>
       </Dropdown>
     </div>
   );
