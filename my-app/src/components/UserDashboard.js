@@ -59,7 +59,7 @@ const UserDashboard = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080'}/logout`, {}, { withCredentials: true });
+      await axios.post(`${BASE_URL}/logout`, {}, { withCredentials: true });
       message.success('Logged out successfully.');
       navigate('/login');
     } catch (error) {

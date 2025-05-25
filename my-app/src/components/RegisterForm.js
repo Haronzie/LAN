@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom';
 
 const { Title } = Typography;
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 // Using relative URLs - proxy in package.json will handle the backend URL
 
 const passwordPolicyContent = (
@@ -29,7 +31,7 @@ const RegisterForm = () => {
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const res = await axios.get('/admin-exists', { 
+        const res = await axios.get(`${BASE_URL}/admin-exists`, { 
           withCredentials: true 
         });
         setAdminExists(res.data.exists);
@@ -49,12 +51,12 @@ const RegisterForm = () => {
 
   const onFinish = async (values) => {
     try {
-      const res = await axios.post('/register', values, { 
+      const res = await axios.post(`${BASE_URL}/register`, values, { 
         withCredentials: true 
       });
       message.success(res.data.message);
       // Automatically log in after registration
-      await axios.post('/login', {
+      await axios.post(`${BASE_URL}/login`, {
         username: values.username,
         password: values.password
       }, { 

@@ -28,7 +28,6 @@ import axios from 'axios';
 const { Content } = Layout;
 const { Option } = Select;
 
-const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 const UserFileManager = () => {
   const [files, setFiles] = useState([]);
@@ -96,7 +95,7 @@ const UserFileManager = () => {
 
   const handleDeleteFile = async (fileName) => {
     try {
-      await axios.delete('/delete-resource', {
+      await axios.delete(`${BASE_URL}/delete-resource`, {
         data: { resource_type: 'file', name: fileName },
         withCredentials: true
       });
@@ -110,7 +109,7 @@ const UserFileManager = () => {
   const handleRenameConfirm = async () => {
     try {
       await axios.put(
-        '/rename-resource',
+        `${BASE_URL}/rename-resource`,
         {
           resource_type: 'file',
           old_name: selectedFile,
@@ -129,7 +128,7 @@ const UserFileManager = () => {
   const handleMoveConfirm = async () => {
     try {
       await axios.put(
-        '/move-resource',
+        `${BASE_URL}/move-resource`,
         {
           resource_type: 'file',
           source: selectedFile,
@@ -148,7 +147,7 @@ const UserFileManager = () => {
   const handleCopyConfirm = async () => {
     try {
       await axios.post(
-        '/copy-resource',
+        `${BASE_URL}/copy-resource`,
         {
           file_name: selectedFile,
           new_name: copyNewName,

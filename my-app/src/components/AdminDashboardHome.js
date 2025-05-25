@@ -10,6 +10,8 @@ import moment from 'moment';
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTitle, Tooltip, Legend);
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const { Text, Title } = Typography;
 
 const AdminDashboardHome = () => {
@@ -209,7 +211,7 @@ const folderColorsArray = Object.values(folderColors);
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
-      const res = await axios.get('/users', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/users`, { withCredentials: true });
       setUsers(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -222,7 +224,7 @@ const folderColorsArray = Object.values(folderColors);
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get('/files/all', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/files/all`, { withCredentials: true });
       setFiles(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching files:', error);
@@ -234,7 +236,7 @@ const folderColorsArray = Object.values(folderColors);
 
   const fetchAuditLogs = async () => {
     try {
-      const res = await axios.get('/auditlogs', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/auditlogs`, { withCredentials: true });
       setAuditLogs(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching audit logs:', error);
@@ -244,7 +246,7 @@ const folderColorsArray = Object.values(folderColors);
 
   const fetchActivities = async () => {
     try {
-      const res = await axios.get('/activities', { withCredentials: true });
+      const res = await axios.get(`${BASE_URL}/activities`, { withCredentials: true });
       setActivities(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching activities:', error);
