@@ -113,6 +113,8 @@ const TrainingDashboard = () => {
   // Directory tree for moving/copying files/folders
   const [directories, setDirectories] = useState([]);
 
+  // Folder navigation functions are defined later in the file
+
   // Format directories for TreeSelect component with all root folders
   const folderTreeData = React.useMemo(() => {
     const formatFolders = (folders, parentPath = '') => {
@@ -731,11 +733,26 @@ const TrainingDashboard = () => {
   // Navigation & Breadcrumb
   // ----------------------------------
   const handleFolderClick = (folderName) => {
-    const newPath = path.join(currentPath, folderName);
+    // Special case for parent directory navigation
+    if (folderName === '..') {
+      const parentPath = currentPath.split('/').slice(0, -1).join('/');
+      setCurrentPath(parentPath || 'Training');
+      return;
+    }
+
+    // For regular folder navigation
+    let newPath;
+    if (currentPath === 'Training') {
+      newPath = `Training/${folderName}`;
+    } else {
+      newPath = `${currentPath}/${folderName}`;
+    }
+    
     // Allow navigation to any root folder (Training, Operation, Research) and their subdirectories
     const allowedRoots = ['Training', 'Operation', 'Research'];
     const isPathAllowed = allowedRoots.some(root => newPath.startsWith(root));
     if (!isPathAllowed) return;
+    
     setCurrentPath(newPath);
   };
 
@@ -747,26 +764,39 @@ const TrainingDashboard = () => {
   };
 
   const getPathSegments = (p) => {
-    const parts = p.split('/').filter(Boolean);
-    return parts; // Return all parts as we need to know which root folder we're in
+    // Split the path and filter out empty segments
+    return p.split('/').filter(Boolean);
   };
 
   const segments = getPathSegments(currentPath);
-  const rootFolder = segments[0] || 'Training'; // Default to Training if no segments
-  const breadcrumbItems = [
-    <Breadcrumb.Item key={rootFolder.toLowerCase()}>
-      <a onClick={() => setCurrentPath(rootFolder)}>{rootFolder}</a>
+  const breadcrumbItems = [];
+
+  // Always add the root 'Training' item
+  breadcrumbItems.push(
+    <Breadcrumb.Item key="root">
+      <a onClick={() => setCurrentPath('Training')}>Training</a>
     </Breadcrumb.Item>
-  ];
-  segments.forEach((seg, index) => {
-    const partialPath = [rootFolder, ...segments.slice(1, index + 1)].join('/');
-    const isLast = index === segments.length - 1;
-    breadcrumbItems.push(
-      <Breadcrumb.Item key={index}>
-        {isLast ? seg : <a onClick={() => setCurrentPath(partialPath)}>{seg}</a>}
-      </Breadcrumb.Item>
-    );
-  });
+  );
+
+  // Add subfolder segments if they exist
+  if (segments.length > 0) {
+    let currentPath = '';
+    
+    segments.forEach((seg, index) => {
+      // Skip the first segment if it's 'Training' to avoid duplicate
+      if (index === 0 && seg === 'Training') return;
+      
+      // Build the path up to this segment
+      currentPath = currentPath ? `${currentPath}/${seg}` : seg;
+      const isLast = index === segments.length - 1;
+      
+      breadcrumbItems.push(
+        <Breadcrumb.Item key={`seg-${index}`}>
+          {isLast ? seg : <a onClick={() => setCurrentPath(`Training/${currentPath}`)}>{seg}</a>}
+        </Breadcrumb.Item>
+      );
+    });
+  }
 
   // ----------------------------------
   // Upload Modal
@@ -1281,48 +1311,74 @@ const TrainingDashboard = () => {
   // ----------------------------------
   // Move
   // ----------------------------------
-  const fetchSubFolders = async (mainFolder) => {
+  const fetchSubFolders = async (folderPath) => {
     try {
-      const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
-        { withCredentials: true }
-      );
-
-      // Filter to only include directories
-      const folders = (res.data || [])
+      // Normalize the path to ensure consistent format
+      const normalizedPath = folderPath.replace(/^\/+|\/+$/g, '');
+      
+      // Make the API call to get subfolders
+      const response = await axios.get(`${BASE_URL}/directories?path=${encodeURIComponent(normalizedPath)}`, {
+        withCredentials: true
+      });
+      
+      // Process the response to get folder names
+      const folders = Array.isArray(response.data) 
+        ? response.data 
+        : (response.data && Array.isArray(response.data.children) 
+          ? response.data.children 
+          : []);
+      
+      // Return folders with full path information
+      return folders
         .filter(item => item.type === 'directory')
         .map(folder => ({
-          name: folder.name,
-          path: `${mainFolder}/${folder.name}`
+          ...folder,
+          path: `${normalizedPath}/${folder.name}`.replace(/\/+/g, '/')
         }));
-
-      setSubFolders(folders);
     } catch (error) {
       console.error('Error fetching subfolders:', error);
       message.error('Failed to load subfolders');
-      setSubFolders([]);
+      return [];
     }
   };
 
-  const handleMainFolderChange = (value) => {
+  const handleMainFolderChange = async (value) => {
     setSelectedMainFolder(value);
     setSelectedSubFolder('');
-    setMoveDestination(value); // Set the destination to the main folder by default
+    setSelectedDestination(value);
+    setMoveDestination(value);
 
     if (value) {
-      fetchSubFolders(value);
+      const folders = await fetchSubFolders(value);
+      setSubFolders(folders);
     } else {
       setSubFolders([]);
     }
   };
 
-  const handleSubFolderChange = (value) => {
+  const handleSubFolderChange = async (value) => {
     setSelectedSubFolder(value);
-    if (value) {
-      // Combine main folder and subfolder for the full path
-      setMoveDestination(`${selectedMainFolder}/${value}`);
-    } else {
-      // If no subfolder is selected, use just the main folder
+    
+    // If value is empty, we're going back to the main folder
+    if (!value) {
+      setSelectedDestination(selectedMainFolder);
       setMoveDestination(selectedMainFolder);
+      return;
+    }
+
+    // If we have a value, it could be a path with multiple segments
+    const fullPath = value.startsWith(selectedMainFolder) ? value : `${selectedMainFolder}/${value}`;
+    setSelectedDestination(fullPath);
+    setMoveDestination(fullPath);
+
+    // Load subfolders for the selected path
+    try {
+      const folders = await fetchSubFolders(fullPath);
+      setSubFolders(folders);
+    } catch (error) {
+      console.error('Error loading subfolders:', error);
+      message.error('Failed to load subfolders');
+      setSubFolders([]);
     }
   };
 
