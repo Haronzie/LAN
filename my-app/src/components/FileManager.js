@@ -2502,7 +2502,18 @@ const FileManager = () => {
         <Modal
           title="Upload File"
           open={uploadModalVisible}
-          onCancel={() => setUploadModalVisible(false)}
+          onCancel={() => {
+            // Reset all form state when modal is closed
+            setUploadModalVisible(false);
+            setUploadingFile([]);
+            setFileUploadMessage('');
+            setTargetUsername('');
+            // Reset the instruction template dropdown
+            const instructionSelect = document.querySelector('.ant-select-selection-item');
+            if (instructionSelect) {
+              instructionSelect.textContent = 'Select a predefined message';
+            }
+          }}
           onOk={() => {
             // Only allow upload if either:
             // 1. Not sending to a user (no targetUsername)
