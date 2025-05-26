@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Table, Button, Input, message, Modal, Form, Space, Popover, Layout } from 'antd';
+import { Table, Button, Input, message, Modal, Form, Space, Popover, Layout, Card, Typography, theme, Tooltip, Badge } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   UserDeleteOutlined,
   InfoCircleOutlined,
-  MoreOutlined
+  SearchOutlined,
+  UserAddOutlined,
+  UserSwitchOutlined,
+  TeamOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -15,6 +20,7 @@ import SelectionHeader from './common/SelectionHeader';
 import { batchDeleteUsers } from '../utils/batchOperations';
 
 const { Content } = Layout;
+const { Title, Text } = Typography;
 
 const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
@@ -316,12 +322,34 @@ const UserManagement = () => {
     {
       title: 'Username',
       dataIndex: 'username',
-      key: 'username'
+      key: 'username',
+      render: (text) => <Text strong>{text}</Text>,
+      sorter: (a, b) => a.username.localeCompare(b.username),
     },
     {
       title: 'Role',
       dataIndex: 'role',
-      key: 'role'
+      key: 'role',
+      render: (role) => (
+        <Badge 
+          color={role === 'admin' ? 'blue' : 'default'}
+          text={
+            <span style={{ textTransform: 'capitalize' }}>
+              {role}
+              {role === 'admin' && (
+                <Tooltip title="Administrator">
+                  <CheckCircleOutlined style={{ marginLeft: 8, color: token.colorPrimary }} />
+                </Tooltip>
+              )}
+            </span>
+          }
+        />
+      ),
+      filters: [
+        { text: 'Admin', value: 'admin' },
+        { text: 'User', value: 'user' },
+      ],
+      onFilter: (value, record) => record.role === value,
     },
     {
       title: 'Actions',
@@ -342,121 +370,186 @@ const UserManagement = () => {
                               record.username !== firstAdmin.username;
 
         return (
-          <Space>
+          <Space size="small">
             {canEdit && (
-              <Button
-                size="small"
-                icon={<EditOutlined />}
-                onClick={() => openUpdateModal(record)}
-              >
-                Edit
-              </Button>
+              <Tooltip title="Edit user">
+                <Button
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => openUpdateModal(record)}
+                  style={{ color: token.colorPrimary }}
+                />
+              </Tooltip>
             )}
             {canDelete && (
-              <Button
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => handleDeleteUser(record.username)}
-              >
-                Delete
-              </Button>
+              <Tooltip title="Delete user">
+                <Button
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => handleDeleteUser(record.username)}
+                />
+              </Tooltip>
             )}
-            {record.role !== 'admin' && (
-              <Button
-                size="small"
-                type="default"
-                onClick={() => handleAssignAdmin(record.username)}
-              >
-                Make Admin
-              </Button>
-            )}
-            {canRevokeAdmin && (
-              <Button
-                size="small"
-                danger
-                icon={<UserDeleteOutlined />}
-                onClick={() => handleRevokeAdmin(record.username)}
-              >
-                Revoke Admin
-              </Button>
-            )}
+            {record.role !== 'admin' ? (
+              <Tooltip title="Make admin">
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<UserSwitchOutlined style={{ color: token.colorPrimary }} />}
+                  onClick={() => handleAssignAdmin(record.username)}
+                />
+              </Tooltip>
+            ) : canRevokeAdmin ? (
+              <Tooltip title="Revoke admin">
+                <Button
+                  size="small"
+                  type="text"
+                  danger
+                  icon={<UserDeleteOutlined />}
+                  onClick={() => handleRevokeAdmin(record.username)}
+                />
+              </Tooltip>
+            ) : null}
           </Space>
         );
       }
     }
   ];
 
+    const { token } = theme.useToken();
+
+  const headerStyle = {
+    backgroundColor: token.colorBgContainer,
+    borderRadius: token.borderRadiusLG,
+    boxShadow: token.boxShadowTertiary,
+    marginBottom: token.marginLG,
+    padding: `${token.paddingLG}px ${token.paddingLG}px`,
+  };
+
+  const cardStyle = {
+    borderRadius: token.borderRadiusLG,
+    boxShadow: token.boxShadowTertiary,
+    marginBottom: token.marginLG,
+  };
+
   return (
-    <Layout style={{ minHeight: '91vh', background: '#f0f2f5' }}>
-      <Content style={{ margin: '24px', padding: '24px', background: '#fff' }}>
-        <div style={{ position: 'relative', marginBottom: 16 }}>
-          <h2 style={{ textAlign: 'center', margin: 0 }}></h2>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setIsAddUserModalOpen(true)}
-            style={{ position: 'absolute', right: 0, top: 0 }}
-          >
-            Add User
-          </Button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-          <Input
-            placeholder="Search by username"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ width: 300, marginRight: 16 }}
-          />
-          <BatchActionsMenu
-            selectedItems={selectedRows}
-            onDelete={handleBatchDeleteUsers}
-            showCopy={false}
-            showMove={false}
-            showDownload={false}
-            itemType="user"
-            selectionMode={selectionMode}
-            onToggleSelectionMode={handleToggleSelectionMode}
-            onCancelSelection={handleCancelSelection}
-          />
+    <Layout style={{ minHeight: '91vh', background: token.colorBgLayout }}>
+      <Content style={{ margin: '24px', padding: '0 24px' }}>
+        <div style={headerStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Title level={4} style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <TeamOutlined /> User Management
+            </Title>
+            <Button
+              type="primary"
+              icon={<UserAddOutlined />}
+              onClick={() => setIsAddUserModalOpen(true)}
+              style={{ borderRadius: token.borderRadiusSM }}
+            >
+              Add User
+            </Button>
+          </div>
         </div>
 
+        <Card 
+          title={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <Input
+                  placeholder="Search users..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  prefix={<SearchOutlined />}
+                  style={{ width: 300, borderRadius: token.borderRadiusSM }}
+                  allowClear
+                />
+                {filteredUsers.length > 0 && (
+                  <Text type="secondary" style={{ fontSize: 14 }}>
+                    Showing {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}
+                  </Text>
+                )}
+              </div>
+              <BatchActionsMenu
+                selectedItems={selectedRows}
+                onDelete={handleBatchDeleteUsers}
+                showCopy={false}
+                showMove={false}
+                showDownload={false}
+                itemType="user"
+                selectionMode={selectionMode}
+                onToggleSelectionMode={handleToggleSelectionMode}
+                onCancelSelection={handleCancelSelection}
+              />
+            </div>
+          }
+          style={cardStyle}
+          bodyStyle={{ padding: 0 }}
+          bordered={false}
+        >
+          {selectionMode && selectedRows.length > 0 && (
+            <div style={{ 
+              padding: '12px 24px', 
+              backgroundColor: token.colorPrimaryBg,
+              borderBottom: `1px solid ${token.colorBorderSecondary}`,
+              marginBottom: -1
+            }}>
+              <SelectionHeader
+                selectedItems={selectedRows}
+                onDelete={handleBatchDeleteUsers}
+                showCopy={false}
+                showMove={false}
+                showDownload={false}
+                itemType="user"
+                onCancelSelection={handleCancelSelection}
+              />
+            </div>
+          )}
 
-
-        {selectionMode && selectedRows.length > 0 && (
-          <SelectionHeader
-            selectedItems={selectedRows}
-            onDelete={handleBatchDeleteUsers}
-            showCopy={false}
-            showMove={false}
-            showDownload={false}
-            itemType="user"
-            onCancelSelection={handleCancelSelection}
+          <Table
+            columns={columns}
+            dataSource={filteredUsers}
+            rowKey="username"
+            loading={loading}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} users`,
+              style: { margin: '16px 24px' },
+              position: ['bottomRight']
+            }}
+            rowSelection={rowSelection}
+            locale={{
+              emptyText: (
+                <div style={{ padding: '40px 0' }}>
+                  <Text type="secondary">No users found</Text>
+                </div>
+              )
+            }}
+            style={{ borderTop: `1px solid ${token.colorBorderSecondary}` }}
           />
-        )}
-
-        <Table
-          columns={columns}
-          dataSource={filteredUsers}
-          rowKey="username"
-          loading={loading}
-          pagination={false}
-          // Removed fixed height scroll to allow natural table expansion
-          rowSelection={rowSelection}
-        />
+        </Card>
 
         {/* Add User Modal */}
         <Modal
           open={isAddUserModalOpen}
-          title="Add New User"
+          title={
+            <span>
+              <UserAddOutlined style={{ marginRight: 8 }} />
+              Add New User
+            </span>
+          }
           onCancel={() => {
             addUserForm.resetFields();
             setIsAddUserModalOpen(false);
           }}
           onOk={handleAddUserOk}
-          okText="Add"
+          okText="Add User"
+          okButtonProps={{ style: { borderRadius: token.borderRadiusSM } }}
+          cancelButtonProps={{ style: { borderRadius: token.borderRadiusSM } }}
           destroyOnClose
           centered
+          width={500}
         >
           <Form form={addUserForm} layout="vertical">
             <Form.Item
@@ -501,11 +594,20 @@ const UserManagement = () => {
         {/* Update User Modal */}
         <Modal
           open={isUpdateUserModalOpen}
-          title="Update User"
+          title={
+            <span>
+              <EditOutlined style={{ marginRight: 8 }} />
+              Update User
+            </span>
+          }
           onCancel={() => setIsUpdateUserModalOpen(false)}
           onOk={handleUpdateUser}
-          okText="Update"
+          okText="Save Changes"
+          okButtonProps={{ style: { borderRadius: token.borderRadiusSM } }}
+          cancelButtonProps={{ style: { borderRadius: token.borderRadiusSM } }}
           destroyOnClose
+          centered
+          width={500}
         >
           <Form form={updateForm} layout="vertical">
             <Form.Item name="old_username" label="Old Username">
