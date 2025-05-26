@@ -1835,30 +1835,19 @@ const FileManager = () => {
         key: 'uploader',
         align: 'center',
         width: '15%',
-        minWidth: 100,
+        minWidth: 120,
         render: (text, record) => {
-          // For search results, check multiple possible fields for uploader info
-          if (isSearching) {
-            return (
-              <span>{
-                record.uploader || 
-                record.created_by || 
-                record.uploaded_by || 
-                record.uploader_name || 
-                record.creator || 
-                record.owner || 
-                '-'
-              }</span>
-            );
-          }
-          // For regular view
-          return (
-            <span>{
-              record.type === 'directory' ? 
-                (record.created_by || record.uploader || '-') : 
-                (record.uploader || record.created_by || '-')
-            }</span>
-          );
+          // Always check multiple possible fields for uploader info
+          const uploader = record.uploader || 
+                          record.created_by || 
+                          record.uploaded_by || 
+                          record.uploader_name || 
+                          record.creator || 
+                          record.owner ||
+                          (record.type === 'directory' ? record.created_by : null) ||
+                          '-';
+          
+          return <span>{uploader}</span>;
         },
       }
     ];
