@@ -617,12 +617,37 @@ const folderColorsArray = Object.values(folderColors);
                           }
                         }
                       },
+                      layout: {
+                        padding: {
+                          left: 10,
+                          right: 10,
+                          top: 10,
+                          bottom: 10
+                        }
+                      },
                       scales: {
-                        x: { grid: { display: false } },
+                        x: { 
+                          grid: { display: false },
+                          ticks: {
+                            maxRotation: 45,
+                            minRotation: 45,
+                            padding: 8,
+                            autoSkip: false,
+                            font: {
+                              size: 11
+                            }
+                          }
+                        },
                         y: { 
                           beginAtZero: true,
-                          grid: { color: 'rgba(0,0,0,0.05)' },
-                          ticks: { stepSize: 1 }
+                          grid: { 
+                            color: 'rgba(0,0,0,0.05)',
+                            drawBorder: false
+                          },
+                          ticks: { 
+                            stepSize: 1,
+                            padding: 8
+                          }
                         }
                       }
                     }}
