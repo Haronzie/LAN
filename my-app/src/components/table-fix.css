@@ -1,9 +1,10 @@
-/* Table styles to ensure action buttons are visible and proper scrolling */
+/* Table styles to ensure action buttons are visible */
 
-/* Make sure the action column has enough width but allows natural width in Operation search */
+/* Make sure the action column has enough width */
 .ant-table-wrapper .ant-table-thead > tr > th:last-child,
 .ant-table-wrapper .ant-table-tbody > tr > td:last-child {
-  min-width: 200px !important;
+  min-width: 300px !important;
+  width: 300px !important;
   white-space: nowrap !important;
   text-align: left !important;
   padding-right: 16px !important;
@@ -44,17 +45,41 @@
   box-shadow: none !important;
 }
 
-/* Custom table container styles */
-.ant-table-wrapper .ant-table {
-  width: 100% !important;
+/* Fix for Ant Design v5 */
+.ant-table-wrapper .ant-table-container {
+  overflow-x: auto !important;
 }
 
-/* Fix for table in Operation search */
-.operation-search-table .ant-table-container {
-  overflow-x: visible !important;
+/* Ensure the table has enough width */
+.ant-table {
+  min-width: 800px !important;
 }
 
-/* Responsive table container */
+/* Specific class for our table with action buttons */
+.action-buttons-table .ant-table-tbody > tr > td:last-child {
+  min-width: 300px !important;
+  width: 300px !important;
+  padding-right: 16px !important;
+  text-align: left !important;
+  overflow: visible !important;
+}
+
+/* Make sure the action buttons are visible */
+.action-buttons-table .ant-table-tbody > tr > td:last-child .ant-space {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  flex-wrap: nowrap !important;
+}
+
+/* Force the action column to be visible */
+.action-buttons-table th:last-child,
+.action-buttons-table td:last-child {
+  position: sticky !important;
+  right: 0 !important;
+  z-index: 2 !important;
+  background-color: #fff !important;
+}
 .ant-table-wrapper {
   width: 100%;
 }
