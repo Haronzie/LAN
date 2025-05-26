@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Badge, Dropdown, List, Avatar, Button, Space, Typography, Empty, Tag } from 'antd';
+import { Badge, Dropdown, List, Avatar, Button, Space, Typography, Empty, Tag, Tooltip } from 'antd';
 import { 
   BellOutlined, 
   FileOutlined, 
   CheckOutlined, 
   ClockCircleOutlined, 
   MessageOutlined,
-  InfoCircleOutlined 
+  InfoCircleOutlined,
+  FolderOpenOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -378,31 +379,102 @@ const NotificationDropdown = () => {
                           >
                             <div>
                               <div 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (!msg.isInstruction) {
-                                    console.log('Notification message clicked, navigating to:', file.name, 'in', file.directory);
-                                    localStorage.setItem('highPriorityNavigation', 'true');
-                                    navigateToFile(file, e);
-                                  } else if (file.file_id) {
-                                    // For instructions with file_id, navigate to the file
-                                    navigateToFile({
-                                      ...file,
-                                      id: file.file_id,
-                                      directory: file.directory || ''
-                                    }, e);
-                                  }
-                                }}
                                 style={{ 
-                                  cursor: 'pointer',
-                                  textDecoration: 'none',
-                                  fontWeight: 'bold',
+                                  marginBottom: 4,
                                   display: 'flex',
                                   alignItems: 'center',
+                                  justifyContent: 'space-between'
+                                }}
+                              >
+                                <div 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!msg.isInstruction) {
+                                      console.log('Notification message clicked, navigating to:', file.name, 'in', file.directory);
+                                      localStorage.setItem('highPriorityNavigation', 'true');
+                                      navigateToFile(file, e);
+                                    } else if (file.file_id) {
+                                      // For instructions with file_id, navigate to the file
+                                      navigateToFile({
+                                        ...file,
+                                        id: file.file_id,
+                                        directory: file.directory || ''
+                                      }, e);
+                                    }
+                                  }}
+                                  style={{ 
+                                    cursor: 'pointer',
+                                    textDecoration: 'none',
+                                    fontWeight: 'bold',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    flex: 1,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                  }}
+                                >
+                                  <FileOutlined style={{ marginRight: 8 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {file.name || 'File Instruction'}
+                                  </span>
+                                </div>
+                                <Tooltip title="Open file location">
+                                  <Button 
+                                    type="text" 
+                                    size="small" 
+                                    icon={<FolderOpenOutlined />} 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigateToFile(file, e);
+                                    }}
+                                  />
+                                </Tooltip>
+                              </div>
+                              {/* File path with clickable segments */}
+                              {file.directory && (
+                                <div style={{ 
+                                  fontSize: '12px', 
+                                  color: '#666',
+                                  marginBottom: 8,
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  alignItems: 'center'
+                                }}>
+                                  <span style={{ marginRight: 4 }}>Path:</span>
+                                  {file.directory.split('/').filter(Boolean).map((segment, idx, arr) => {
+                                    const pathSoFar = arr.slice(0, idx + 1).join('/');
+                                    return (
+                                      <React.Fragment key={idx}>
+                                        <span 
+                                          style={{ 
+                                            color: '#1890ff', 
+                                            cursor: 'pointer',
+                                            ':hover': { textDecoration: 'underline' }
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigateToFile({
+                                              ...file,
+                                              directory: pathSoFar
+                                            }, e);
+                                          }}
+                                        >
+                                          {segment}
+                                        </span>
+                                        {idx < arr.length - 1 && <span style={{ margin: '0 4px' }}>/</span>}
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              <div 
+                                style={{ 
+                                  marginBottom: 4,
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                  display: 'flex',
                                   gap: 8,
-                                  ':hover': {
-                                    textDecoration: 'underline'
-                                  }
+                                  alignItems: 'center'
                                 }}
                               >
                                 {msg.isInstruction ? (

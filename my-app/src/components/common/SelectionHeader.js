@@ -26,9 +26,7 @@ const SelectionHeader = ({
   showMove = true,
   showDownload = true,
   showDelete = true,
-  itemType = "file",
-  itemPlural = "files",
-  itemSingular = "file"
+  itemType = "file", // 'file' or 'user'
 }) => {
   if (!selectedItems || selectedItems.length === 0) {
     return null;
@@ -50,7 +48,7 @@ const SelectionHeader = ({
     menuItems.push({
       key: 'delete',
       icon: <DeleteOutlined />,
-      label: `Delete ${selectedItems.length} ${selectedItems.length === 1 ? itemSingular : itemPlural}`,
+      label: `Delete ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
       onClick: onDelete
     });
   }
@@ -59,7 +57,7 @@ const SelectionHeader = ({
     menuItems.push({
       key: 'copy',
       icon: <CopyOutlined />,
-      label: `Copy ${selectedItems.length} ${selectedItems.length === 1 ? itemSingular : itemPlural}`,
+      label: `Copy ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
       onClick: onCopy
     });
   }
@@ -68,7 +66,7 @@ const SelectionHeader = ({
     menuItems.push({
       key: 'move',
       icon: <SwapOutlined />,
-      label: `Move ${selectedItems.length} ${selectedItems.length === 1 ? itemSingular : itemPlural}`,
+      label: `Move ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
       onClick: onMove
     });
   }
@@ -77,7 +75,7 @@ const SelectionHeader = ({
     menuItems.push({
       key: 'download',
       icon: <DownloadOutlined />,
-      label: `Download ${selectedItems.length} ${selectedItems.length === 1 ? itemSingular : itemPlural}`,
+      label: `Download ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
       onClick: onDownload
     });
   }
@@ -94,7 +92,9 @@ const SelectionHeader = ({
         marginBottom: '16px'
       }}
     >
-      <Text strong>{selectedItems.length} {selectedItems.length === 1 ? itemSingular : itemPlural} selected</Text>
+      <Text strong>
+        {selectedItems.length} {selectedItems.length === 1 ? itemType : `${itemType}s`} selected
+      </Text>
       <Dropdown menu={{ items: menuItems }} placement="bottomRight" trigger={['click']}>
         <Button type="text" icon={<MoreOutlined style={{ fontSize: '20px' }} />} />
       </Dropdown>
