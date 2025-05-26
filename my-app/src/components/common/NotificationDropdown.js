@@ -192,7 +192,12 @@ const NotificationDropdown = () => {
     // Create a unique ID for this navigation to prevent caching issues
     const navigationId = `nav-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
-    // Store the complete navigation state
+    // Build the complete path including the file
+    const completePath = pathSegments.length > 0 
+      ? `${directory}/${file.name}`
+      : file.name;
+    
+    // Store the complete navigation state with all necessary path information
     const navigationState = {
       id: file.id,
       name: file.name,
@@ -204,10 +209,16 @@ const NotificationDropdown = () => {
       exactLocation: true,
       fullPath: directory,
       navigationId: navigationId,
-      // Store the complete path including the file
-      completePath: pathSegments.length > 0 
-        ? `${directory}/${file.name}`
-        : file.name
+      completePath: completePath,
+      // Add additional metadata for deep linking
+      isDeepLink: pathSegments.length > 1, // True if this is a deep link
+      targetFile: file.name,
+      targetPath: directory,
+      // Store the full path hierarchy for navigation
+      pathHierarchy: pathSegments.reduce((acc, segment, index) => {
+        const path = index === 0 ? segment : `${acc[index-1].path}/${segment}`;
+        return [...acc, { name: segment, path }];
+      }, [])
     };
     
     console.log('Navigation state:', navigationState);
@@ -218,6 +229,11 @@ const NotificationDropdown = () => {
     localStorage.setItem('notificationNavigation', 'true');
     localStorage.setItem('directNavigation', 'true');
     localStorage.setItem('highPriorityNavigation', 'true');
+    
+    // Store additional metadata for deep linking
+    localStorage.setItem('deepLinkPath', directory);
+    localStorage.setItem('deepLinkTarget', file.name);
+    localStorage.setItem('deepLinkSegments', JSON.stringify(pathSegments));
     
     // Determine the target route based on the main folder
     let targetRoute = '/user/operation'; // Default
@@ -242,13 +258,18 @@ const NotificationDropdown = () => {
     // Add a small delay to ensure localStorage is updated before navigation
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Navigate to the target route
+    // Navigate to the target route with additional state
     navigate(targetRoute, {
       state: {
         fromNotification: true,
         fileToOpen: navigationState,
-        timestamp: Date.now()
-      }
+        timestamp: Date.now(),
+        isDeepLink: pathSegments.length > 1,
+        deepLinkPath: directory,
+        deepLinkTarget: file.name
+      },
+      // Force a full page reload to ensure clean state
+      replace: true
     });
   };
 

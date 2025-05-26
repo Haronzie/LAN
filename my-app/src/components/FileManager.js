@@ -2503,7 +2503,20 @@ const FileManager = () => {
           title="Upload File"
           open={uploadModalVisible}
           onCancel={() => setUploadModalVisible(false)}
-          onOk={handleUpload}
+          onOk={() => {
+            // Only allow upload if either:
+            // 1. Not sending to a user (no targetUsername)
+            // 2. Sending to a user with a message (targetUsername and fileUploadMessage)
+            if (!targetUsername || (targetUsername && fileUploadMessage.trim())) {
+              handleUpload();
+            } else {
+              message.error('Please enter a message when sending to a user.');
+            }
+          }}
+          okButtonProps={{
+            disabled: targetUsername && !fileUploadMessage.trim(),
+            style: targetUsername && !fileUploadMessage.trim() ? { backgroundColor: '#ff4d4f', borderColor: '#ff4d4f' } : {}
+          }}
         >
         <Dragger
           multiple
@@ -2708,12 +2721,19 @@ const FileManager = () => {
           </Select>
         </Form.Item>
 
-        <Form.Item label="Instruction (optional)">
+        <Form.Item 
+          label={targetUsername ? "Message" : "Instruction (optional)"}
+          validateStatus={targetUsername && !fileUploadMessage.trim() ? 'error' : ''}
+          help={targetUsername && !fileUploadMessage.trim() ? 'A message is required when sending to a user' : ''}
+        >
           <Input.TextArea
             value={fileUploadMessage}
             onChange={(e) => setFileUploadMessage(e.target.value)}
             rows={3}
-            placeholder="You can type a custom instruction or use a template above"
+            placeholder={targetUsername 
+              ? 'Enter a message for the recipient...' 
+              : 'You can type a custom instruction or use a template above'}
+            status={targetUsername && !fileUploadMessage.trim() ? 'error' : ''}
           />
         </Form.Item>
 
@@ -2725,9 +2745,34 @@ const FileManager = () => {
         >
           <UserSearchSelect
             value={targetUsername}
-            onUserSelect={(value) => setTargetUsername(value)}
+            onUserSelect={(value) => {
+              setTargetUsername(value);
+              // Clear message when user is deselected
+              if (!value) setFileUploadMessage('');
+            }}
             required={!!fileUploadMessage.trim()}
           />
+        </Form.Item>
+        
+        <Form.Item
+          validateStatus={!fileUploadMessage.trim() && targetUsername ? 'error' : ''}
+          help={!fileUploadMessage.trim() && targetUsername ? 'Please enter a message when sending to a user.' : ''}
+          style={{ marginTop: 16 }}
+        >
+          <Button 
+            type="primary" 
+            onClick={() => {
+              if (targetUsername && fileUploadMessage.trim()) {
+                handleUpload();
+              } else {
+                message.error('Please enter a message and select a user');
+              }
+            }}
+            disabled={!targetUsername || !fileUploadMessage.trim()}
+            style={{ width: '100%' }}
+          >
+            Send to User
+          </Button>
         </Form.Item>
       </Modal>
     </Content>
