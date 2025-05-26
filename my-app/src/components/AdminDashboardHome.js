@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Row, Col, Card as AntdCard, Statistic, List, Button, Typography, message, DatePicker, Space } from 'antd';
-import { UserOutlined, FileOutlined, TeamOutlined, CalendarOutlined, FilterOutlined } from '@ant-design/icons';
+import { UserOutlined, FileOutlined, TeamOutlined, CalendarOutlined, FilterOutlined, CheckCircleOutlined, ClockCircleOutlined, MessageOutlined } from '@ant-design/icons';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title as ChartTitle, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import axios from 'axios';
@@ -43,7 +43,9 @@ const AdminDashboardHome = () => {
   const [files, setFiles] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [fileMessages, setFileMessages] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [dateRange, setDateRange] = useState(null);
   const [filteredChartData, setFilteredChartData] = useState([]);
@@ -275,11 +277,40 @@ const folderColorsArray = Object.values(folderColors);
     }
   };
 
+  const fetchFileMessages = async () => {
+    setLoadingMessages(true);
+    try {
+      const res = await axios.get(`${BASE_URL}/file/messages`, { withCredentials: true });
+      setFileMessages(Array.isArray(res.data) ? res.data : []);
+    } catch (error) {
+      console.error('Error fetching file messages:', error);
+      message.error('Failed to fetch file messages: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  const handleMarkAsDone = async (messageId) => {
+    try {
+      await axios.patch(
+        `${BASE_URL}/file/message/${messageId}/done`,
+        {},
+        { withCredentials: true }
+      );
+      fetchFileMessages();
+      message.success('Task marked as completed');
+    } catch (error) {
+      console.error('Error updating task status:', error);
+      message.error('Failed to update task status');
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchFiles();
     fetchAuditLogs();
     fetchActivities();
+    fetchFileMessages();
   }, []);
 
   return (
@@ -628,7 +659,7 @@ const folderColorsArray = Object.values(folderColors);
           </Card>
         </div>
 
-        {/* Right Column - Logs */}
+        {/* Right Column - Activity Logs */}
         <div style={{ 
           flex: 1, 
           display: 'flex', 
