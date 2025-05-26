@@ -59,7 +59,7 @@ const SelectionHeader = ({
     menuItems.push({
       key: 'copy',
       icon: <CopyOutlined />,
-      label: `Copy ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
+      label: `Copy ${selectedItems.length} ${selectedItems.length === 1 ? itemSingular : itemPlural}`,
       onClick: onCopy
     });
   }
@@ -68,7 +68,7 @@ const SelectionHeader = ({
     menuItems.push({
       key: 'move',
       icon: <SwapOutlined />,
-      label: `Move ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
+      label: `Move ${selectedItems.length} ${selectedItems.length === 1 ? itemSingular : itemPlural}`,
       onClick: onMove
     });
   }
@@ -77,7 +77,7 @@ const SelectionHeader = ({
     menuItems.push({
       key: 'download',
       icon: <DownloadOutlined />,
-      label: `Download ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
+      label: `Download ${selectedItems.length} ${selectedItems.length === 1 ? itemSingular : itemPlural}`,
       onClick: onDownload
     });
   }
