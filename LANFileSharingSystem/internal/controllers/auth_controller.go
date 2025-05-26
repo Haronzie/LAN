@@ -1,8 +1,11 @@
 package controllers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"strings"
 	"unicode"
@@ -192,20 +195,36 @@ func (ac *AuthController) Logout(w http.ResponseWriter, r *http.Request) {
 
 // ForgotPassword handles resetting a user's password.
 func (ac *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received request to %s %s", r.Method, r.URL.Path)
+	log.Printf("Content-Type: %s", r.Header.Get("Content-Type"))
+
 	if r.Method != http.MethodPost {
-		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		errMsg := fmt.Sprintf("Invalid request method: %s", r.Method)
+		log.Println(errMsg)
+		models.RespondError(w, http.StatusMethodNotAllowed, errMsg)
 		return
 	}
+
+	// Log request body for debugging
+	bodyBytes, _ := io.ReadAll(r.Body)
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // Reset the request body
+	log.Printf("Request body: %s", string(bodyBytes))
 
 	var req struct {
 		Username        string `json:"username"`
 		NewPassword     string `json:"newPassword"`
 		ConfirmPassword string `json:"confirmPassword"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+
+	// Decode the request body again since we read it for logging
+	if err := json.NewDecoder(bytes.NewBuffer(bodyBytes)).Decode(&req); err != nil {
+		errMsg := fmt.Sprintf("Error decoding request body: %v", err)
+		log.Println(errMsg)
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
 		return
 	}
+
+	log.Printf("Decoded request: username=%s, newPassword=***, confirmPassword=***", req.Username)
 
 	req.Username = strings.TrimSpace(req.Username)
 	req.NewPassword = strings.TrimSpace(req.NewPassword)
