@@ -1401,35 +1401,77 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 	}
 
 	fileIDStr := r.URL.Query().Get("file_id")
-	fileID, err := strconv.Atoi(fileIDStr)
-	if err != nil {
-		models.RespondError(w, http.StatusBadRequest, "Invalid file ID")
-		return
-	}
-
-	log.Printf("📨 Fetching messages for file ID %d by user '%s'", fileID, user.Username)
+	queryWithoutFileID := fileIDStr == ""
 
 	var rows *sql.Rows
-	if user.Role == "admin" {
-		// Admin can see all messages for this file
-		rows, err = fc.App.DB.Query(`
-			SELECT id, file_id, sender, receiver, message, is_done, created_at
-			FROM file_messages
-			WHERE file_id = $1
-			ORDER BY created_at DESC
-		`, fileID)
+	var query string
+	var args []interface{}
+
+	if queryWithoutFileID {
+		// If no file_id is provided, return all messages for the current user
+		log.Printf("📨 Fetching all messages for user '%s'", user.Username)
+		
+		if user.Role == "admin" {
+			// Admin can see all messages
+			query = `
+				SELECT id, file_id, sender, receiver, message, is_done, created_at
+				FROM file_messages
+				ORDER BY created_at DESC
+			`
+		} else {
+			// Regular users only see messages addressed to them
+			query = `
+				SELECT id, file_id, sender, receiver, message, is_done, created_at
+				FROM file_messages
+				WHERE LOWER(receiver) = LOWER($1)
+				ORDER BY created_at DESC
+			`
+			args = append(args, user.Username)
+		}
 	} else {
-		// Regular users only see messages addressed to them - using case-insensitive comparison
-		rows, err = fc.App.DB.Query(`
-			SELECT id, file_id, sender, receiver, message, is_done, created_at
-			FROM file_messages
-			WHERE file_id = $1 AND LOWER(receiver) = LOWER($2)
-			ORDER BY created_at DESC
-		`, fileID, user.Username)
+		// If file_id is provided, filter by file_id
+		fileID, err := strconv.Atoi(fileIDStr)
+		if err != nil {
+			models.RespondError(w, http.StatusBadRequest, "Invalid file ID")
+			return
+		}
+
+		log.Printf("📨 Fetching messages for file ID %d by user '%s'", fileID, user.Username)
+
+		if user.Role == "admin" {
+			// Admin can see all messages for this file
+			query = `
+				SELECT id, file_id, sender, receiver, message, is_done, created_at
+				FROM file_messages
+				WHERE file_id = $1
+				ORDER BY created_at DESC
+			`
+			args = append(args, fileID)
+		} else {
+			// Regular users only see messages addressed to them
+			query = `
+				SELECT id, file_id, sender, receiver, message, is_done, created_at
+				FROM file_messages
+				WHERE file_id = $1 AND LOWER(receiver) = LOWER($2)
+				ORDER BY created_at DESC
+			`
+			args = append(args, fileID, user.Username)
+		}
+	}
+
+	// Execute the query
+	if len(args) > 0 {
+		rows, err = fc.App.DB.Query(query, args...)
+	} else {
+		rows, err = fc.App.DB.Query(query)
 	}
 
 	if err != nil {
-		log.Printf("❌ Error fetching messages for file %d: %v", fileID, err)
+		if queryWithoutFileID {
+			log.Printf("❌ Error fetching messages: %v", err)
+		} else {
+			log.Printf("❌ Error fetching messages for file: %v", err)
+		}
 		models.RespondError(w, http.StatusInternalServerError, "Failed to fetch messages")
 		return
 	}
@@ -1445,7 +1487,11 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 		messages = append(messages, msg)
 	}
 
-	log.Printf("📨 Found %d messages for file ID %d", len(messages), fileID)
+	if queryWithoutFileID {
+		log.Printf("📨 Found %d messages", len(messages))
+	} else {
+		log.Printf("📨 Found %d messages for file", len(messages))
+	}
 	models.RespondJSON(w, http.StatusOK, messages)
 }
 
