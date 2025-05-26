@@ -48,9 +48,9 @@ const NotificationDropdown = () => {
       // Add a timestamp to prevent caching
       const timestamp = new Date().getTime();
       
-      // First, try to get file messages
+      // Get all files with messages for the current user
       const messagesRes = await axios.get(
-        `${BASE_URL}/files-with-messages?_t=${timestamp}`, // updated
+        `${BASE_URL}/files-with-messages?_t=${timestamp}`,
         {
           withCredentials: true,
           timeout: 10000
@@ -58,47 +58,19 @@ const NotificationDropdown = () => {
       );
 
       // Process file messages
-      const messageNotifications = Array.isArray(messagesRes?.data) ? messagesRes.data : [];
-      
-      // Initialize instruction notifications as empty array
-      let instructionNotifications = [];
-      
-      // Try to get file instructions if the endpoint exists
-      try {
-        const instructionsRes = await axios.get(
-          `${BASE_URL}/file-instructions?status=pending&_t=${timestamp}`, // updated
-          {
-            withCredentials: true,
-            timeout: 5000 // Shorter timeout for this optional request
-          }
-        );
-        
-        // Process file instructions
-        instructionNotifications = Array.isArray(instructionsRes?.data) 
-          ? instructionsRes.data.map(instruction => ({
-              ...instruction,
-              isInstruction: true,
-              messages: [{
-                id: `inst_${instruction.id}`,
-                message: instruction.instructions || instruction.message || 'New instruction',
-                sender: instruction.sender,
-                receiver: instruction.receiver,
-                is_done: instruction.status === 'completed',
-                created_at: instruction.created_at,
-                isInstruction: true
-              }]
-            }))
-          : [];
-      } catch (error) {
-        console.log('Could not fetch file instructions, continuing without them', error.message);
-      }
+      const messageNotifications = Array.isArray(messagesRes?.data) 
+        ? messagesRes.data.map(file => ({
+            ...file,
+            messages: file.messages || [],
+            isInstruction: false
+          }))
+        : [];
 
-      // Combine both types of notifications
-      const allNotifications = [...messageNotifications, ...instructionNotifications];
-      setNotifications(allNotifications);
+      // Set the notifications
+      setNotifications(messageNotifications);
 
-      // Count pending tasks (both messages and instructions)
-      const pendingCount = allNotifications.reduce((count, item) => {
+      // Count pending tasks
+      const pendingCount = messageNotifications.reduce((count, item) => {
         return count + (item.messages || []).filter(msg => !msg.is_done).length;
       }, 0);
 

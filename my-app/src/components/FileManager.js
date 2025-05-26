@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Layout,
   Table,
@@ -170,14 +171,20 @@ const FileManager = () => {
   const [targetUsername, setTargetUsername] = useState('');
   const [selectedFileInfo, setSelectedFileInfo] = useState(null);
   const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   // Add state variables for copy operation
   const [copySelectedMainFolder, setCopySelectedMainFolder] = useState('');
   const [copySelectedSubFolder, setCopySelectedSubFolder] = useState('');
   const [copySubFolders, setCopySubFolders] = useState([]);
   const [copyError, setCopyError] = useState(null);
+  const [navigationHistory, setNavigationHistory] = useState([]);
+  const [breadcrumbItems, setBreadcrumbItems] = useState([]);
+  const [fileToOpenAfterLoad, setFileToOpenAfterLoad] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
   // const [selectedFiles, setSelectedFiles] = useState([]); // Uncomment if needed for future enhancements
 
-  // const navigate = useNavigate(); // Uncomment if navigation is needed
+  const location = useLocation();
+  const navigate = useNavigate();
   const isRoot = currentPath === '';
   // Check if we're inside a subfolder (not just at the root level or main folder level)
   const isInsideMainFolder = currentPath.includes('/');
@@ -334,8 +341,8 @@ const FileManager = () => {
         }
         return walk(tree);
       }
-      setFolderTreeData(dedupeTree(buildTree(data)));
 
+      setFolderTreeData(dedupeTree(buildTree(data)));
     } catch (error) {
       console.error('Error fetching folder tree:', error);
       setFolderTreeData([
@@ -346,10 +353,207 @@ const FileManager = () => {
     }
   };
 
-
   useEffect(() => {
     fetchFolderTree();
-  }, []);
+  }, [currentPath]);
+
+  // Handle navigation from notifications and deep linking
+  useEffect(() => {
+    const handleNavigation = async () => {
+      try {
+        // Check multiple possible sources for navigation state
+        const navState = location.state?.fileToOpen || 
+                       JSON.parse(localStorage.getItem('openFileAfterNavigation') || 'null') ||
+                       (localStorage.getItem('forceOpenFile') && {
+                         name: localStorage.getItem('deepLinkTarget'),
+                         directory: localStorage.getItem('deepLinkPath') || ''
+                       });
+        
+        if (!navState || !navState.name) return;
+        
+        console.log('Processing navigation to file:', navState.name, 'in directory:', navState.directory || 'root');
+        
+        // Set loading state
+        setLoading(true);
+        
+        // Determine the target directory (default to empty string for root)
+        const targetDir = navState.directory || '';
+        
+        // If we have path segments, build the navigation history
+        if (navState.pathSegments?.length > 0) {
+          const history = [];
+          let currentPath = '';
+          
+          navState.pathSegments.forEach((segment) => {
+            currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+            history.push({
+              name: segment,
+              path: currentPath,
+              isDirectory: true
+            });
+          });
+          
+          setNavigationHistory(history);
+          setBreadcrumbItems(history);
+        } else if (targetDir) {
+          // If we don't have path segments but have a directory, create history from it
+          const segments = targetDir.split('/').filter(Boolean);
+          const history = [];
+          let currentPath = '';
+          
+          segments.forEach(segment => {
+            currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+            history.push({
+              name: segment,
+              path: currentPath,
+              isDirectory: true
+            });
+          });
+          
+          setNavigationHistory(history);
+          setBreadcrumbItems(history);
+        } else {
+          // Reset to root
+          setNavigationHistory([]);
+          setBreadcrumbItems([]);
+        }
+        
+        // Update the current path and fetch items
+        setCurrentPath(targetDir);
+        
+        // Force a refresh to load the correct directory
+        await fetchItems(targetDir);
+        
+        // Set the file to open after items are loaded
+        if (navState._forceOpen) {
+          setFileToOpenAfterLoad(navState.name);
+        } else {
+          // If not forcing open, just select the file
+          const file = items.find(item => 
+            item.name === navState.name && 
+            item.directory === targetDir
+          );
+          
+          if (file) {
+            setSelectedFile(file);
+            
+            // Scroll to the file if it exists
+            const element = document.getElementById(`file-${file.id}`);
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              element.classList.add('file-highlight');
+              setTimeout(() => {
+                element.classList.remove('file-highlight');
+              }, 2000);
+            }
+          }
+        }
+        
+        // Clear the navigation state after processing
+        if (location.state?.fileToOpen) {
+          navigate(location.pathname, { replace: true, state: {} });
+        }
+        
+        // Clear all navigation-related localStorage items
+        ['openFileAfterNavigation', 'forceOpenFile', 'notificationNavigation', 
+         'directNavigation', 'highPriorityNavigation', 'deepLinkPath', 
+         'deepLinkTarget', 'deepLinkSegments'].forEach(key => {
+          localStorage.removeItem(key);
+        });
+        
+      } catch (error) {
+        console.error('Error during navigation:', error);
+        message.error('Failed to navigate to the specified file');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    handleNavigation();
+    
+    // Cleanup function to clear any pending navigation states
+    return () => {
+      localStorage.removeItem('openFileAfterNavigation');
+      localStorage.removeItem('forceOpenFile');
+      localStorage.removeItem('notificationNavigation');
+    };
+  }, [location.state, navigate, fetchItems, items]);
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchFolderTree();
+    
+    // Check for navigation state from notifications
+    const checkNavigationState = () => {
+      try {
+        const navState = localStorage.getItem('openFileAfterNavigation');
+        const forceOpen = localStorage.getItem('forceOpenFile') === 'true';
+        
+        if (navState && forceOpen) {
+          const state = JSON.parse(navState);
+          console.log('Found navigation state:', state);
+          
+          if (state.directory && state.directory !== currentPath) {
+            console.log('Navigating to path from notification:', state.directory);
+            setCurrentPath(state.directory);
+            
+            // If there's a target file, ensure it's visible
+            if (state.targetFile) {
+              // This will be handled after items are loaded
+              localStorage.setItem('scrollToFile', state.targetFile);
+            }
+            
+            // Clear the navigation state to prevent re-triggering
+            localStorage.removeItem('forceOpenFile');
+            return true;
+          }
+        }
+      } catch (error) {
+        console.error('Error processing navigation state:', error);
+      }
+      return false;
+    };
+    
+    // Check for navigation state on initial load
+    if (initialLoad) {
+      checkNavigationState();
+      setInitialLoad(false);
+    }
+    
+    // Set up an interval to check for navigation state changes
+    const navCheckInterval = setInterval(() => {
+      if (checkNavigationState()) {
+        // If navigation was handled, clear the interval
+        clearInterval(navCheckInterval);
+      }
+    }, 500);
+    
+    // Clean up interval on unmount
+    return () => clearInterval(navCheckInterval);
+  }, [currentPath, initialLoad]);
+
+  useEffect(() => {
+    fetchItems().then(() => {
+      // After items are loaded, check if we need to scroll to a specific file
+      const scrollToFile = localStorage.getItem('scrollToFile');
+      if (scrollToFile) {
+        console.log('Scrolling to file:', scrollToFile);
+        // Use setTimeout to ensure the DOM is updated with the new items
+        setTimeout(() => {
+          const element = document.querySelector(`[data-file-name="${scrollToFile}"]`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // Highlight the file briefly
+            element.style.backgroundColor = 'rgba(24, 144, 255, 0.1)';
+            setTimeout(() => {
+              element.style.backgroundColor = '';
+            }, 2000);
+          }
+          localStorage.removeItem('scrollToFile');
+        }, 500);
+      }
+    });
+  }, [currentPath]);
 
   useEffect(() => {
     fetchItems();
@@ -1971,19 +2175,27 @@ const FileManager = () => {
     return baseColumns;
   }, [isSearching, currentPath]);
 
+  // Get path segments for breadcrumbs
   const segments = getPathSegments(currentPath);
-  const breadcrumbItems = [
-    <Breadcrumb.Item key="root">
-      {isRoot ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
-    </Breadcrumb.Item>
-  ];
-  segments.forEach((seg, index) => {
-    breadcrumbItems.push(
-      <Breadcrumb.Item key={index}>
-        {index === segments.length - 1 ? seg : <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>}
+
+  // Update breadcrumb items when currentPath changes
+  useEffect(() => {
+    const newBreadcrumbItems = [
+      <Breadcrumb.Item key="root">
+        {isRoot ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
       </Breadcrumb.Item>
-    );
-  });
+    ];
+    
+    segments.forEach((seg, index) => {
+      newBreadcrumbItems.push(
+        <Breadcrumb.Item key={index}>
+          {index === segments.length - 1 ? seg : <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>}
+        </Breadcrumb.Item>
+      );
+    });
+    
+    setBreadcrumbItems(newBreadcrumbItems);
+  }, [currentPath, isRoot]);
 
   return (
     <Layout style={{ minHeight: '91vh', background: '#f0f2f5' }}>
