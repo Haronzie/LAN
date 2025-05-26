@@ -1782,8 +1782,8 @@ const FileManager = () => {
         dataIndex: 'name',
         key: 'name',
         // Use percentage width for better responsiveness
-        width: '30%',
-        minWidth: 200,
+        width: isSearching ? '25%' : '30%',
+        minWidth: 150,
         ellipsis: true, // Add ellipsis for long names
         render: (name, record) => {
           // If searching and it's a file, make the name clickable to go to its folder
@@ -1812,7 +1812,7 @@ const FileManager = () => {
         title: 'Type',
         dataIndex: 'type',
         key: 'type',
-        width: '10%',
+        width: isSearching ? '8%' : '10%',
         minWidth: 80,
         render: (type) => (type === 'directory' ? 'Folder' : 'File')
       },
@@ -1820,7 +1820,7 @@ const FileManager = () => {
         title: 'Size',
         dataIndex: 'formattedSize',
         key: 'size',
-        width: '10%',
+        width: isSearching ? '8%' : '10%',
         minWidth: 80,
         render: (size, record) => {
           if (record.type === 'directory') {
@@ -1834,7 +1834,7 @@ const FileManager = () => {
         dataIndex: 'uploader',
         key: 'uploader',
         align: 'center',
-        width: '15%',
+        width: isSearching ? '12%' : '15%',
         minWidth: 120,
         render: (text, record) => {
           // Always check multiple possible fields for uploader info
@@ -1856,7 +1856,7 @@ const FileManager = () => {
       baseColumns.splice(1, 0, {
         title: 'Location',
         key: 'location',
-        width: '20%',
+        width: '22%',
         minWidth: 150,
         render: (_, record) => {
           const directory = record.directory || '';
