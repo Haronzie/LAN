@@ -321,6 +321,37 @@ func isStrongPassword(pw string) (bool, string) {
 	return true, ""
 }
 
+// CheckCurrentPassword verifies if the provided password matches the user's current password
+type CheckPasswordRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func (ac *AuthController) CheckCurrentPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
+		return
+	}
+
+	var req CheckPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		models.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	user, err := ac.App.GetUserByUsername(req.Username)
+	if err != nil {
+		models.RespondError(w, http.StatusNotFound, "User not found")
+		return
+	}
+
+	isCurrentPassword := models.CheckPasswordHash(req.Password, user.Password)
+
+	models.RespondJSON(w, http.StatusOK, map[string]bool{
+		"isCurrentPassword": isCurrentPassword,
+	})
+}
+
 // GetUserRole returns the role of a given username, e.g. {"role": "admin"} or {"role": "user"}.
 func (ac *AuthController) GetUserRole(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

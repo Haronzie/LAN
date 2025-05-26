@@ -13,6 +13,20 @@ const Settings = () => {
 
   const navigate = useNavigate();
 
+  const checkCurrentPassword = async (username, newPassword) => {
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/check-current-password`,
+        { username, password: newPassword },
+        { withCredentials: true }
+      );
+      return response.data?.isCurrentPassword || false;
+    } catch (error) {
+      console.error('Error checking current password:', error);
+      return false;
+    }
+  };
+
   const onFinish = async (values) => {
     setLoading(true);
     try {
@@ -29,6 +43,12 @@ const Settings = () => {
           }
         }
         throw new Error('User not found in session. Please log in again.');
+      }
+      
+      // Check if new password is the same as current password
+      const isCurrentPassword = await checkCurrentPassword(username, values.newPassword);
+      if (isCurrentPassword) {
+        throw new Error('New password cannot be the same as your current password');
       }
       
       const user = { username };

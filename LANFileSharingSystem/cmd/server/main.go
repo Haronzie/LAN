@@ -327,6 +327,7 @@ func main() {
 	router.HandleFunc("/register", authController.Register).Methods("POST")
 	router.HandleFunc("/login", authController.Login).Methods("POST")
 	router.HandleFunc("/forgot-password", authController.ForgotPassword).Methods("POST")
+	router.HandleFunc("/check-current-password", authController.CheckCurrentPassword).Methods("POST")
 	router.HandleFunc("/logout", authController.Logout).Methods("POST")
 	router.HandleFunc("/upload", fileController.Upload).Methods("POST")
 	router.HandleFunc("/bulk-upload", fileController.BulkUpload).Methods("POST")
