@@ -2753,27 +2753,6 @@ const FileManager = () => {
             required={!!fileUploadMessage.trim()}
           />
         </Form.Item>
-        
-        <Form.Item
-          validateStatus={!fileUploadMessage.trim() && targetUsername ? 'error' : ''}
-          help={!fileUploadMessage.trim() && targetUsername ? 'Please enter a message when sending to a user.' : ''}
-          style={{ marginTop: 16 }}
-        >
-          <Button 
-            type="primary" 
-            onClick={() => {
-              if (targetUsername && fileUploadMessage.trim()) {
-                handleUpload();
-              } else {
-                message.error('Please enter a message and select a user');
-              }
-            }}
-            disabled={!targetUsername || !fileUploadMessage.trim()}
-            style={{ width: '100%' }}
-          >
-            Send to User
-          </Button>
-        </Form.Item>
       </Modal>
     </Content>
   </Layout>
