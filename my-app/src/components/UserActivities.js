@@ -48,9 +48,26 @@ const UserActivities = () => {
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#fff' }}>
-      <Content style={{ padding: '24px', maxWidth: 900, margin: '0 auto' }}>
-        <Title level={3} style={{ marginBottom: 24 }}>User Activities</Title>
+    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Content
+        style={{
+          margin: '24px',
+          padding: '24px',
+          background: '#fff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <Title level={2} style={{ margin: 0 }}>User Activities</Title>
+          <Button 
+            type="primary" 
+            onClick={() => navigate('/admin')}
+            style={{ marginLeft: '16px' }}
+          >
+            Back to Dashboard
+          </Button>
+        </div>
         <Table
           loading={loading}
           columns={columns}
@@ -63,9 +80,6 @@ const UserActivities = () => {
           }}
           style={{ marginBottom: '24px' }}
         />
-        <Space>
-          <Button type="primary" onClick={() => navigate('/admin')}>Back to Dashboard</Button>
-        </Space>
       </Content>
     </Layout>
   );

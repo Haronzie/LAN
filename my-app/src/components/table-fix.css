@@ -80,3 +80,56 @@
   z-index: 2 !important;
   background-color: #fff !important;
 }
+.ant-table-wrapper {
+  width: 100%;
+}
+
+/* Fix for Ant Design v5 */
+.ant-table-wrapper .ant-table-container {
+  overflow-x: auto !important;
+}
+
+/* When in Operation search, let the table expand naturally */
+.operation-search-table .ant-table-container,
+.operation-search-table .ant-table-content {
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+}
+
+/* Ensure table cells don't force width in Operation search */
+.operation-search-table .ant-table-thead > tr > th,
+.operation-search-table .ant-table-tbody > tr > td {
+  white-space: nowrap;
+  max-width: none !important;
+}
+
+/* Ensure the table has enough width */
+.ant-table {
+  min-width: 800px !important;
+}
+
+/* Specific class for our table with action buttons */
+.action-buttons-table .ant-table-tbody > tr > td:last-child {
+  min-width: 300px !important;
+  width: 300px !important;
+  padding-right: 16px !important;
+  text-align: left !important;
+  overflow: visible !important;
+}
+
+/* Make sure the action buttons are visible */
+.action-buttons-table .ant-table-tbody > tr > td:last-child .ant-space {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  flex-wrap: nowrap !important;
+}
+
+/* Force the action column to be visible */
+.action-buttons-table th:last-child,
+.action-buttons-table td:last-child {
+  position: sticky !important;
+  right: 0 !important;
+  z-index: 2 !important;
+  background-color: #fff !important;
+}

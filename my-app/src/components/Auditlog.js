@@ -83,9 +83,16 @@ const AuditLog = () => {
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
         }}
       >
-        <Title level={2} style={{ marginBottom: '24px' }}>
-          Audit Logs
-        </Title>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <Title level={2} style={{ margin: 0 }}>Audit Logs</Title>
+          <Button 
+            type="primary" 
+            onClick={() => navigate('/admin')}
+            style={{ marginLeft: '16px' }}
+          >
+            Back to Dashboard
+          </Button>
+        </div>
         <Table
           loading={loading}
           columns={columns}
@@ -98,11 +105,6 @@ const AuditLog = () => {
           }}
           style={{ marginBottom: '24px' }}
         />
-        <Space>
-          <Button type="primary" onClick={() => navigate('/admin')}>
-            Back to Dashboard
-          </Button>
-        </Space>
       </Content>
     </Layout>
   );

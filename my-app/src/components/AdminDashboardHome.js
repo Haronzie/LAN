@@ -729,7 +729,7 @@ const folderColorsArray = Object.values(folderColors);
                 <Button 
                   type="link" 
                   size="small" 
-                  onClick={() => navigate('activities')}
+                  onClick={() => navigate('user-activities')}
                   style={{ padding: 0, height: 'auto' }}
                 >
                   View All
