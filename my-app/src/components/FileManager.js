@@ -2262,26 +2262,44 @@ const FileManager = () => {
         ) : (
           <div style={{ minHeight: '50vh' }}>
             {sortedItems.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', minHeight: '400px' }}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Table
-                    className="action-buttons-table"
-                    columns={columns}
-                    dataSource={sortedItems.slice(
-                      (currentPage - 1) * pageSize,
-                      currentPage * pageSize
-                    )}
-                    rowKey={(record) => `${record.type}-${record.id || record.name}`}
-                    loading={loading}
-                    pagination={false}
-                    rowSelection={rowSelection}
-                    onRow={(record) => ({
-                      onClick: () => handleRowClick(record),
-                      style: { cursor: record.type === 'directory' ? 'pointer' : 'default' }
-                    })}
-                    tableLayout="fixed"
-                    scroll={{ x: 'max-content' }}
-                  />
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                minHeight: '400px',
+                width: '100%'
+              }}>
+                <div style={{
+                  marginBottom: '16px',
+                  width: '100%',
+                  overflow: 'hidden',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    width: '100%',
+                    overflowX: isSearching && currentPath === 'Operation' ? 'visible' : 'auto'
+                  }}>
+                    <Table
+                      className={`action-buttons-table ${isSearching && currentPath === 'Operation' ? 'operation-search-table' : ''}`}
+                      columns={columns}
+                      dataSource={sortedItems.slice(
+                        (currentPage - 1) * pageSize,
+                        currentPage * pageSize
+                      )}
+                      rowKey={(record) => `${record.type}-${record.id || record.name}`}
+                      loading={loading}
+                      pagination={false}
+                      rowSelection={rowSelection}
+                      onRow={(record) => ({
+                        onClick: () => handleRowClick(record),
+                        style: { cursor: record.type === 'directory' ? 'pointer' : 'default' }
+                      })}
+                      tableLayout={isSearching && currentPath === 'Operation' ? 'auto' : 'fixed'}
+                      style={{
+                        minWidth: isSearching && currentPath === 'Operation' ? 'auto' : '100%',
+                        tableLayout: isSearching && currentPath === 'Operation' ? 'auto' : 'fixed'
+                      }}
+                    />
+                  </div>
                 </div>
                 {sortedItems.length > 5 && (
                   <div style={{ marginTop: 'auto', padding: '8px 0', borderTop: '1px solid #f0f0f0' }}>
