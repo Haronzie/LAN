@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Badge, Dropdown, List, Avatar, Button, Space, Typography, Empty, Tag, Tooltip } from 'antd';
+import { Badge, Dropdown, List, Avatar, Button, Space, Typography, Empty, Tag, Tooltip, message } from 'antd';
 import { 
   BellOutlined, 
   FileOutlined, 
@@ -167,187 +167,232 @@ const NotificationDropdown = () => {
     }
   };
 
-  const navigateToFile = async (file, e = null) => {
-    if (e) {
-      e.stopPropagation();
-      e.preventDefault();
+  const markAsRead = async (fileId) => {
+    try {
+      await axios.patch(
+        `${BASE_URL}/files/notifications/${fileId}/read`,
+        {},
+        { withCredentials: true }
+      );
+      // Update local state to reflect the read status
+      setNotifications(prev => 
+        prev.map(item => ({
+          ...item,
+          messages: item.messages?.map(msg => 
+            msg.id === fileId ? { ...msg, is_read: true } : msg
+          )
+        }))
+      );
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
     }
-    
-    console.log('Navigating to file in dropdown:', file);
-    
-    // Clear any previous navigation state
-    localStorage.removeItem('openFileAfterNavigation');
-    localStorage.removeItem('forceOpenFile');
-    localStorage.removeItem('notificationNavigation');
-    localStorage.removeItem('directNavigation');
-    localStorage.removeItem('highPriorityNavigation');
-    
-    // For instructions, we might not have a file to navigate to
-    if (file.isInstruction && file.file_id) {
-      console.log('This is a file instruction, navigating to file');
-      // If we have a file_id, try to navigate to it
-      return navigateToFile({
-        ...file,
-        id: file.file_id,
-        directory: file.directory || ''
-      }, e);
-    }
-    
-    // Process the directory path to handle nested folders
-    const directory = (file.directory || '').trim();
-    const pathSegments = directory.split('/').filter(Boolean);
-    
-    // Determine the main folder based on the first segment or default to 'operation'
-    const mainFolder = pathSegments[0]?.toLowerCase() || 'operation';
-    
-    // Ensure the path is properly formatted without leading/trailing slashes
-    const cleanPath = pathSegments.join('/');
-    
-    // Build the full path for navigation
-    const fullPath = cleanPath;
-    
-    // Create a navigation history to handle deep linking
-    const navigationHistory = pathSegments.map((segment, index, arr) => {
-      const pathSoFar = arr.slice(0, index + 1).join('/');
-      return {
-        name: segment,
-        path: pathSoFar,
-        isDirectory: true
-      };
-    });
-    
-    // Create a unique ID for this navigation to prevent caching issues
-    const navigationId = `nav-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Build the complete path including the file
-    const completePath = cleanPath ? `${cleanPath}/${file.name}` : file.name;
-    
-    // Store the complete navigation state with all necessary path information
-    const navigationState = {
-      id: file.id,
-      name: file.name,
-      directory: cleanPath, // Use cleaned path
-      type: 'file',
-      timestamp: Date.now(),
-      source: 'notification',
-      pathSegments: pathSegments,
-      exactLocation: true,
-      fullPath: cleanPath, // Use cleaned path
-      navigationId: navigationId,
-      completePath: completePath,
-      isDeepLink: pathSegments.length > 0,
-      targetFile: file.name,
-      targetPath: cleanPath,
-      navigationHistory: navigationHistory,
-      pathHierarchy: navigationHistory,
-      shouldOpenFile: true,
-      // Additional metadata for better path handling
-      originalPath: file.directory || '',
-      normalizedPath: cleanPath,
-      // Add file metadata if available
-      fileMetadata: {
-        size: file.size,
-        type: file.contentType || 'file',
-        lastModified: file.updatedAt || file.createdAt || new Date().toISOString()
-      }
-    };
-    
-    console.log('Navigation state:', {
-      ...navigationState,
-      // Don't log the full navigation history to keep logs clean
-      navigationHistory: navigationHistory.length,
-      pathHierarchy: '...'
-    });
-    
-    console.log('Navigation state:', navigationState);
-    
-    // Prepare navigation state for localStorage
-    const storageState = {
-      ...navigationState,
-      // Add a timestamp to ensure the state is fresh
-      _timestamp: Date.now(),
-      // Add a flag to indicate this is a fresh navigation
-      _isFreshNavigation: true
-    };
-
-    // Store in localStorage for the file manager to pick up
-    localStorage.setItem('openFileAfterNavigation', JSON.stringify(storageState));
-    localStorage.setItem('forceOpenFile', 'true');
-    localStorage.setItem('notificationNavigation', 'true');
-    localStorage.setItem('directNavigation', 'true');
-    localStorage.setItem('highPriorityNavigation', 'true');
-    
-    // Store additional metadata for deep linking
-    localStorage.setItem('deepLinkPath', cleanPath);
-    localStorage.setItem('deepLinkTarget', file.name);
-    localStorage.setItem('deepLinkSegments', JSON.stringify(pathSegments));
-    
-    // Store the full navigation state with additional metadata
-    localStorage.setItem('navigationState', JSON.stringify({
-      currentPath: cleanPath,
-      history: navigationHistory,
-      targetFile: file.name,
-      timestamp: Date.now(),
-      isDeepLink: true,
-      source: 'notification',
-      fileMetadata: storageState.fileMetadata
-    }));
-    
-    // Determine the target route based on the main folder
-    const routeMap = {
-      'research': '/user/research',
-      'training': '/user/training',
-      'inventory': '/user/inventory',
-      'operation': '/user/operation'
-    };
-    
-    // Use the route map or default to operation
-    const targetRoute = routeMap[mainFolder] || '/user/operation';
-    
-    console.log(`Navigating to ${targetRoute} for file in path: ${cleanPath || 'root'}`);
-    
-    // Add a small delay to ensure localStorage is updated before navigation
-    await new Promise(resolve => setTimeout(resolve, 150));
-    
-    // Navigate to the target route with additional state
-    const navigationStateObj = {
-      fromNotification: true,
-      fileToOpen: storageState,
-      timestamp: Date.now(),
-      isDeepLink: pathSegments.length > 0,
-      deepLinkPath: cleanPath,
-      deepLinkTarget: file.name,
-      // Add additional context for the target component
-      navigationContext: {
-        source: 'notification',
-        timestamp: Date.now(),
-        pathSegments: pathSegments,
-        targetFile: file.name,
-        // Add any additional metadata that might be useful
-        metadata: {
-          type: file.type || 'file',
-          size: file.size,
-          lastModified: file.updatedAt || file.createdAt
-        }
-      }
-    };
-
-    console.log('Navigation state:', navigationStateObj);
-    
-    // Use replace: false to maintain browser history
-    navigate(targetRoute, {
-      state: navigationStateObj,
-      replace: false
-    });
   };
 
-  // Filter notifications based on showCompleted state
-  const filteredNotifications = showCompleted 
-    ? notifications
-    : notifications.map(file => ({
-        ...file,
-        messages: (file.messages || []).filter(msg => !msg.is_done)
-      })).filter(file => file.messages.length > 0);
+  const navigateToFile = async (file, e = null) => {
+    try {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      
+      console.log('🔍 [Notification] Preparing to navigate to file:', file);
+      
+      // Mark the notification as read if it's unread
+      if (!file.is_read && file.id) {
+        await markAsRead(file.id);
+      }
+      
+      // Parse the file path to handle nested folders
+      const filePath = file.directory || '';
+      let pathSegments = filePath.split('/').filter(Boolean);
+      
+      // Ensure we have a valid path
+      if (pathSegments.length === 0) {
+        // If no path segments, default to operation
+        pathSegments = ['operation'];
+      }
+      
+      // Ensure the first segment is a valid main folder
+      const validMainFolders = ['operation', 'research', 'training', 'inventory'];
+      const mainFolder = validMainFolders.includes(pathSegments[0].toLowerCase()) 
+        ? pathSegments[0].toLowerCase() 
+        : 'operation';
+      
+      // If the first segment wasn't a valid main folder, prepend 'operation/'
+      if (mainFolder === 'operation' && !validMainFolders.includes(pathSegments[0]?.toLowerCase())) {
+        pathSegments = ['operation', ...pathSegments];
+      }
+      
+      const cleanPath = pathSegments.join('/');
+      const fullPath = cleanPath ? `${cleanPath}/${file.name}` : file.name;
+      
+      // Create a unique ID for this navigation to prevent caching issues
+      const navigationId = `nav-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const timestamp = Date.now();
+      
+      // Create navigation state with all necessary information
+      const navigationState = {
+        id: file.id || navigationId,
+        name: file.name,
+        directory: cleanPath,
+        fullPath: fullPath,
+        type: 'file',
+        timestamp: timestamp,
+        source: 'notification',
+        pathSegments: pathSegments,
+        isDeepLink: true,
+        targetFile: file.name,
+        fileMetadata: {
+          size: file.size,
+          type: file.contentType || 'file',
+          lastModified: file.updatedAt || file.createdAt || new Date().toISOString(),
+          name: file.name,
+          path: cleanPath,
+          id: file.id || navigationId
+        },
+        _forceOpen: true,
+        _highPriority: true,
+        _navigationId: navigationId,
+        _fromNotification: true,
+        _timestamp: timestamp,
+        _scrollTarget: file.name,
+        _filePath: fullPath,
+        _directory: cleanPath
+      };
+      
+      console.log('📁 [Notification] Navigation details:', {
+        path: cleanPath,
+        file: file.name,
+        fullPath: fullPath,
+        navigationId: navigationId,
+        pathSegments: pathSegments
+      });
+      
+      // Clear any previous navigation state
+      const keysToRemove = [
+        'openFileAfterNavigation',
+        'forceOpenFile',
+        'notificationNavigation',
+        'directNavigation',
+        'highPriorityNavigation',
+        'deepLinkPath',
+        'deepLinkTarget',
+        'fileNavigationState',
+        'scrollToFile',
+        'fileNavigationPath',
+        'fileNavigationTarget',
+        'deepLinkSegments'
+      ];
+      
+      keysToRemove.forEach(key => {
+        try {
+          localStorage.removeItem(key);
+        } catch (err) {
+          console.warn(`Failed to remove ${key} from localStorage:`, err);
+        }
+      });
+      
+      // Store the enhanced navigation state
+      const enhancedState = {
+        ...navigationState,
+        _scrollToFile: true,
+        _timestamp: timestamp
+      };
+      
+      // Store navigation state in multiple formats for compatibility
+      localStorage.setItem('openFileAfterNavigation', JSON.stringify(enhancedState));
+      localStorage.setItem('fileNavigationState', JSON.stringify(enhancedState));
+      localStorage.setItem('forceOpenFile', 'true');
+      localStorage.setItem('notificationNavigation', 'true');
+      localStorage.setItem('highPriorityNavigation', 'true');
+      localStorage.setItem('deepLinkPath', cleanPath);
+      localStorage.setItem('deepLinkTarget', file.name);
+      
+      // Store path segments for breadcrumb navigation
+      if (pathSegments.length > 0) {
+        localStorage.setItem('deepLinkSegments', JSON.stringify(pathSegments));
+      }
+      
+      // Store the full file path for the FileManager to use
+      localStorage.setItem('fileNavigationPath', cleanPath);
+      localStorage.setItem('fileNavigationTarget', file.name);
+    
+      // Determine the target route based on the main folder
+      const routeMap = {
+        'research': '/user/research',
+        'training': '/user/training',
+        'inventory': '/user/inventory',
+        'operation': '/user/operation'
+      };
+      
+      const targetRoute = routeMap[mainFolder] || '/user/operation';
+      
+      console.log(`🔄 [Notification] Navigating to ${targetRoute} for file: ${file.name}`);
+      console.log('📂 [Notification] Full path segments:', pathSegments);
+      
+      // Add a small delay to ensure localStorage is updated before navigation
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      try {
+        // Navigate to the target route with complete state
+        navigate(targetRoute, {
+          state: {
+            ...navigationState,
+            fromNotification: true,
+            fileToOpen: file.name,
+            directory: cleanPath,
+            timestamp: timestamp,
+            isDeepLink: true,
+            pathSegments: pathSegments,
+            targetFile: file.name,
+            forceOpen: true,
+            navigationId: navigationId,
+            _fromNotification: true,
+            _highPriority: true,
+            _scrollToFile: true
+          },
+          replace: false
+        });
+        
+        console.log('✅ [Notification] Navigation initiated successfully');
+        
+        // Force a reload if we're already on the same route
+        if (window.location.pathname === targetRoute) {
+          console.log('♻️ [Notification] Already on target route, forcing reload');
+          window.location.reload();
+        }
+      } catch (navError) {
+        console.error('❌ [Notification] Navigation error:', navError);
+        // Fallback to window.location if programmatic navigation fails
+        window.location.href = targetRoute;
+      }
+    } catch (error) {
+      console.error('❌ [Notification] Error in navigateToFile:', error);
+      // Show error message to user
+      message.error('Failed to navigate to file. Please try again.');
+    }
+  };
+
+  // Filter and sort notifications based on showCompleted state and creation date
+  const filteredNotifications = (showCompleted ? notifications : notifications.map(file => ({
+    ...file,
+    messages: (file.messages || []).filter(msg => !msg.is_done)
+  }))).filter(file => file.messages.length > 0)
+  .sort((a, b) => {
+    // Get the latest message timestamp from each file
+    const getLatestTimestamp = (file) => {
+      if (!file.messages || file.messages.length === 0) return 0;
+      return Math.max(...file.messages.map(msg => 
+        msg.created_at ? new Date(msg.created_at).getTime() : 0
+      ));
+    };
+    
+    const timeA = getLatestTimestamp(a);
+    const timeB = getLatestTimestamp(b);
+    
+    // Sort in descending order (newest first)
+    return timeB - timeA;
+  });
 
   // Count pending tasks (messages and instructions that are not marked as done)
   const pendingTasksCount = notifications.reduce((count, file) => {
