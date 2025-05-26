@@ -77,7 +77,7 @@ const NotificationDropdown = () => {
       console.log(`Current user: ${username}, Pending tasks count: ${pendingCount}`);
 
       // If we have no notifications but expected some, log this for debugging
-      if (allNotifications.length === 0) {
+      if (messageNotifications.length === 0) {
         console.log('No notifications found for the current user');
       }
     } catch (error) {
