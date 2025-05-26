@@ -480,6 +480,8 @@ const UserManagement = () => {
                 selectionMode={selectionMode}
                 onToggleSelectionMode={handleToggleSelectionMode}
                 onCancelSelection={handleCancelSelection}
+                itemPlural="users"
+                itemSingular="user"
               />
             </div>
           }
@@ -501,6 +503,8 @@ const UserManagement = () => {
                 showMove={false}
                 showDownload={false}
                 itemType="user"
+                itemPlural="users"
+                itemSingular="user"
                 onCancelSelection={handleCancelSelection}
               />
             </div>

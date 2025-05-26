@@ -8,6 +8,8 @@ import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
 const BatchActionsMenu = ({
   selectedItems = [],
   itemType = "file",
+  itemPlural = "files",
+  itemSingular = "file",
   selectionMode = false,
   onToggleSelectionMode,
   onCancelSelection
@@ -29,7 +31,9 @@ const BatchActionsMenu = ({
         style={{ display: 'flex', alignItems: 'center', gap: 8 }}
         onClick={handleButtonClick}
       >
-        {selectedItems.length > 0 ? `${selectedItems.length} Selected` : 'Cancel'}
+        {selectedItems.length > 0 
+          ? `${selectedItems.length} ${selectedItems.length === 1 ? itemSingular : itemPlural} selected` 
+          : 'Cancel'}
       </Button>
     );
   }
@@ -40,7 +44,7 @@ const BatchActionsMenu = ({
       style={{ display: 'flex', alignItems: 'center', gap: 8 }}
       onClick={handleButtonClick}
     >
-      Select Files
+      Select {itemPlural}
     </Button>
   );
 };

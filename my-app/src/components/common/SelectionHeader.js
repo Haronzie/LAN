@@ -26,7 +26,9 @@ const SelectionHeader = ({
   showMove = true,
   showDownload = true,
   showDelete = true,
-  itemType = "file", // 'file' or 'user'
+  itemType = "file",
+  itemPlural = "files",
+  itemSingular = "file"
 }) => {
   if (!selectedItems || selectedItems.length === 0) {
     return null;
@@ -48,7 +50,7 @@ const SelectionHeader = ({
     menuItems.push({
       key: 'delete',
       icon: <DeleteOutlined />,
-      label: `Delete ${selectedItems.length} ${selectedItems.length === 1 ? itemType : `${itemType}s`}`,
+      label: `Delete ${selectedItems.length} ${selectedItems.length === 1 ? itemSingular : itemPlural}`,
       onClick: onDelete
     });
   }
@@ -92,9 +94,7 @@ const SelectionHeader = ({
         marginBottom: '16px'
       }}
     >
-      <Text strong>
-        {selectedItems.length} {selectedItems.length === 1 ? itemType : `${itemType}s`} selected
-      </Text>
+      <Text strong>{selectedItems.length} {selectedItems.length === 1 ? itemSingular : itemPlural} selected</Text>
       <Dropdown menu={{ items: menuItems }} placement="bottomRight" trigger={['click']}>
         <Button type="text" icon={<MoreOutlined style={{ fontSize: '20px' }} />} />
       </Dropdown>
