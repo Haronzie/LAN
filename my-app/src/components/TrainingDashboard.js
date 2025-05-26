@@ -116,38 +116,61 @@ const TrainingDashboard = () => {
   // Folder navigation functions are defined later in the file
 
   // Format directories for TreeSelect component with all root folders
-  const folderTreeData = React.useMemo(() => {
-    const formatFolders = (folders, parentPath = '') => {
-      if (!Array.isArray(folders)) return [];
+  const formatDirectories = useCallback((dirs, parentPath = '') => {
+    if (!Array.isArray(dirs)) {
+      console.warn('formatDirectories received non-array input:', dirs);
+      return [];
+    }
+    
+    return dirs.flatMap(dir => {
+      if (!dir || typeof dir !== 'object') {
+        console.warn('Skipping invalid directory item:', dir);
+        return [];
+      }
       
-      return folders
-        .filter(folder => folder && typeof folder === 'object' && folder.type === 'directory')
-        .map(folder => {
-          const fullPath = parentPath ? `${parentPath}/${folder.name}` : folder.name;
-          return {
-            title: folder.name,
-            value: fullPath,
-            key: fullPath,
-            isLeaf: !(folder.children && folder.children.length > 0),
-            children: folder.children ? formatFolders(folder.children, fullPath) : []
-          };
-        });
-    };
-
-    // Create root folders structure
-    const rootFolders = ['Operation', 'Training', 'Research'].map(folder => {
-      const folderData = directories.find(d => d.name === folder) || { name: folder, children: [] };
-      return {
-        title: folder,
-        value: folder,
-        key: folder,
-        isLeaf: !(folderData.children && folderData.children.length > 0),
-        children: formatFolders(folderData.children || [], folder)
+      // Handle both directory objects with name and direct string paths
+      const dirName = dir.name || (typeof dir === 'string' ? dir : '');
+      if (!dirName) {
+        console.warn('Directory item has no name:', dir);
+        return [];
+      }
+      
+      // Handle children - can be in dir.children or dir.directories
+      const dirChildren = dir.children || dir.directories || [];
+      const hasChildren = Array.isArray(dirChildren) && dirChildren.length > 0;
+      
+      // Build the full path - handle both root and nested paths
+      let fullPath = dirName;
+      if (parentPath && !dirName.startsWith(parentPath)) {
+        fullPath = parentPath.endsWith('/') 
+          ? `${parentPath}${dirName}` 
+          : `${parentPath}/${dirName}`;
+      }
+      
+      console.log('Processing directory node:', { dirName, parentPath, fullPath, hasChildren });
+      
+      // Recursively process children
+      const children = hasChildren 
+        ? formatDirectories(dirChildren, fullPath)
+        : undefined;
+      
+      // Create the directory node
+      const node = {
+        title: dirName.split('/').pop(), // Just show the last part of the path as title
+        value: fullPath,
+        key: fullPath,
+        isLeaf: !hasChildren || !children || children.length === 0,
+        children
       };
-    });
+      
+      return node;
+    }).filter(Boolean); // Remove any null/undefined entries
+  }, []);
 
-    return rootFolders;
-  }, [directories]);
+  // Format directories for TreeSelect component with all root folders
+  const folderTreeData = React.useMemo(() => {
+    return formatDirectories(directories);
+  }, [directories, formatDirectories]);
 
   // Upload
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
@@ -329,45 +352,6 @@ const TrainingDashboard = () => {
     // eslint-disable-next-line
   }, []);
 
-  // Format directories for TreeSelect component
-  const formatDirectories = (dirs, parentPath = '') => {
-    if (!Array.isArray(dirs)) {
-      console.warn('formatDirectories received non-array input:', dirs);
-      return [];
-    }
-    
-    return dirs.flatMap(dir => {
-      if (!dir || typeof dir !== 'object' || !dir.name) {
-        console.warn('Skipping invalid directory item:', dir);
-        return [];
-      }
-      
-      // Handle both directory objects and string paths
-      const dirName = typeof dir === 'string' ? dir : dir.name;
-      const dirChildren = dir.children || [];
-      const hasChildren = Array.isArray(dirChildren) && dirChildren.length > 0;
-      const fullPath = parentPath ? `${parentPath}/${dirName}` : dirName;
-      
-      console.log('Processing directory:', {
-        name: dirName,
-        fullPath,
-        hasChildren,
-        childrenCount: hasChildren ? dirChildren.length : 0
-      });
-      
-      // Create the directory node
-      const node = {
-        title: dirName,
-        value: fullPath,
-        key: fullPath,
-        isLeaf: !hasChildren,
-        children: hasChildren ? formatDirectories(dirChildren, fullPath) : undefined
-      };
-      
-      return node;
-    }).filter(Boolean); // Remove any null/undefined entries
-  };
-
   // Fetch all root level directories
   const fetchDirectories = useCallback(async (retryCount = 0) => {
     console.log('Fetching root directories... (attempt ' + (retryCount + 1) + ')');
@@ -396,30 +380,31 @@ const TrainingDashboard = () => {
             headers: response.headers
           });
           
+          let containerData = [];
+          
           if (Array.isArray(response.data)) {
             console.log(`Found ${response.data.length} items in ${container}`);
-            if (response.data.length > 0) {
-              console.log(`First item in ${container}:`, response.data[0]);
+            containerData = response.data;
+          } else if (response.data && typeof response.data === 'object') {
+            // Handle different possible response formats
+            if (Array.isArray(response.data.children)) {
+              containerData = response.data.children;
+            } else if (Array.isArray(response.data.directories)) {
+              containerData = response.data.directories;
+            } else if (response.data.name) {
+              // Single directory with children
+              containerData = [response.data];
             }
-            
-            // Add the container as a parent node
+            console.log(`Processed ${container} data, found ${containerData.length} items`);
+          }
+          
+          // Add the container as a parent node with its children
+          if (containerData.length > 0) {
             allDirectories.push({
               name: container,
-              children: response.data,
+              children: containerData,
               isRoot: true
             });
-          } else if (typeof response.data === 'object' && response.data !== null) {
-            // Handle case where response is an object with a 'children' array
-            const children = response.data.children || [];
-            console.log(`Found ${children.length} items in ${container}'s children`);
-            
-            allDirectories.push({
-              name: container,
-              children: children,
-              isRoot: true
-            });
-          } else {
-            console.warn(`Unexpected response format for ${container}:`, typeof response.data);
           }
         } catch (error) {
           console.error(`Error fetching ${container} directory:`, {
@@ -762,6 +747,13 @@ const TrainingDashboard = () => {
     const parentPath = path.dirname(currentPath);
     setCurrentPath(parentPath === '.' ? 'Training' : parentPath);
   };
+
+  // Update the current path and refresh items when it changes
+  useEffect(() => {
+    if (currentPath) {
+      fetchItems();
+    }
+  }, [currentPath]);
 
   const getPathSegments = (p) => {
     // Split the path and filter out empty segments
@@ -1210,28 +1202,24 @@ const TrainingDashboard = () => {
     setCopyModalVisible(true);
   };
 
-  const handleCopyConfirm = async () => {
-    if (!copyNewName.trim()) {
-      message.error('New name cannot be empty');
-      return;
-    }
-    if (!copyItem) {
-      message.error('No item selected to copy');
-      return;
-    }
-    
-    // Determine the destination path based on main folder and subfolder
-    let destinationPath = selectedMainFolder || currentPath;
-    if (selectedSubFolder) {
-      destinationPath = `${selectedMainFolder}/${selectedSubFolder}`;
-    }
-
+  const finalizeCopy = async (overwrite = false) => {
     try {
-      // Check if destination is the same as source for directories
-      if (copyItem.type === 'directory' && destinationPath === currentPath) {
-        message.warning('Cannot copy a folder to itself');
-        return;
+      // Determine the destination path
+      let destinationPath = selectedDestination || currentPath;
+      
+      // If we have both main and subfolder selected, use that combination
+      if (selectedMainFolder && selectedSubFolder) {
+        destinationPath = `${selectedMainFolder}/${selectedSubFolder}`.replace(/\/+/g, '/');
+      } else if (selectedMainFolder) {
+        // If only main folder is selected, use that
+        destinationPath = selectedMainFolder;
+      } else if (selectedSubFolder) {
+        // If only subfolder is selected, use it with current path
+        destinationPath = `${currentPath}/${selectedSubFolder}`.replace(/\/+/g, '/');
       }
+
+      // Clean up the destination path (remove any double slashes and leading/trailing slashes)
+      destinationPath = destinationPath.replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '');
 
       if (copyItem.type === 'directory') {
         await axios.post(
@@ -1241,34 +1229,12 @@ const TrainingDashboard = () => {
             source_parent: currentPath,
             new_name: copyNewName,
             destination_parent: destinationPath,
-            container: 'training'
+            container: 'training',
+            overwrite: overwrite
           },
           { withCredentials: true }
         );
       } else {
-        // For files, check if file already exists at destination
-        try {
-          const res = await axios.get(
-            `${BASE_URL}/files?directory=${encodeURIComponent(destinationPath)}`,
-            { withCredentials: true }
-          );
-          
-          const fileExists = (res.data || []).some(f => 
-            f.name === copyNewName && 
-            (f.directory === destinationPath || f.directory === undefined)
-          );
-          
-          if (fileExists) {
-            throw new Error('File already exists at destination');
-          }
-        } catch (err) {
-          if (err.message === 'File already exists at destination') {
-            message.error('A file with this name already exists at the destination');
-            return;
-          }
-          console.warn('Error checking for existing file at destination:', err);
-        }
-
         await axios.post(
           `${BASE_URL}/copy-file`,
           {
@@ -1276,35 +1242,115 @@ const TrainingDashboard = () => {
             new_file_name: copyNewName,
             destination_folder: destinationPath,
             container: 'training',
-            source_parent: currentPath
+            source_parent: currentPath,
+            overwrite: overwrite
           },
-          { 
-            withCredentials: true,
-            timeout: 30000 // 30 seconds timeout
-          }
+          { withCredentials: true }
         );
       }
       
+      // Refresh both the current directory and the directory tree
+      await Promise.all([
+        fetchItems(),
+        fetchDirectories()
+      ]);
+      
       message.success(`Copied '${copyItem.name}' to '${copyNewName}' successfully`);
       setCopyModalVisible(false);
-      setCopyItem(null);
       setCopyNewName('');
-      setSelectedMainFolder('');
-      setSelectedSubFolder('');
-      setSubFolders([]);
-      fetchItems();
-      fetchAllFilesWithMessages();
+      setCopyItem(null);
+      setSelectedDestination('');
+      
+      // If we copied a directory, also refresh the directory tree to show the new folder
+      if (copyItem.type === 'directory') {
+        // Force a refresh of the parent directory in the tree
+        const parentPath = selectedDestination || currentPath;
+        if (parentPath) {
+          fetchSubFolders(parentPath).catch(console.error);
+        }
+      }
     } catch (error) {
       console.error('Copy error:', error);
+      message.error(error.response?.data?.error || 'Error copying item');
+    }
+  };
+
+  const handleCopyConfirm = async () => {
+    if (!copyNewName.trim()) {
+      message.error('New name cannot be empty');
+      return;
+    }
+    if (!copyItem) {
+      message.error('No item selected to copy');
+      return;
+    }
+
+    try {
+      // Determine the destination path
+      let destinationPath = selectedDestination || currentPath;
       
-      // Handle specific error cases with user-friendly messages
-      if (error.response?.status === 404) {
-        message.error('The source file or destination folder was not found. Please refresh and try again.');
-      } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-        message.error('The operation timed out. Please try again.');
-      } else {
-        message.error(error.response?.data?.error || 'Error copying item. Please try again.');
+      // If we have both main and subfolder selected, use that combination
+      if (selectedMainFolder && selectedSubFolder) {
+        destinationPath = `${selectedMainFolder}/${selectedSubFolder}`.replace(/\/+/g, '/');
+      } else if (selectedMainFolder) {
+        // If only main folder is selected, use that
+        destinationPath = selectedMainFolder;
+      } else if (selectedSubFolder) {
+        // If only subfolder is selected, use it with current path
+        destinationPath = `${currentPath}/${selectedSubFolder}`.replace(/\/+/g, '/');
       }
+
+      // Clean up the destination path (remove any double slashes and leading/trailing slashes)
+      destinationPath = destinationPath.replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '');
+
+      // Check if destination is the same as source for directories
+      if (copyItem.type === 'directory' && destinationPath === currentPath) {
+        message.warning('Cannot copy a folder to itself');
+        return;
+      }
+
+      // For files, check if a file with the same name already exists at the destination
+      if (copyItem.type === 'file') {
+        try {
+          const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(destinationPath)}`, {
+            withCredentials: true
+          });
+
+          const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+          const nameExists = existingNames.includes(copyNewName);
+
+          if (nameExists) {
+            // Import dynamically to avoid circular dependencies
+            const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+
+            FileOperationConflictModal({
+              fileName: copyNewName,
+              destinationPath: destinationPath,
+              operation: 'copy',
+              onOverwrite: async () => {
+                await finalizeCopy(true);
+              },
+              onKeepBoth: async () => {
+                await finalizeCopy(false);
+              },
+              onSkip: () => {
+                message.info(`Skipped copying ${copyItem.name}`);
+                setCopyModalVisible(false);
+              }
+            });
+            return;
+          }
+        } catch (err) {
+          console.error('Error checking for existing files:', err);
+          // Continue with copy operation if we can't check for conflicts
+        }
+      }
+
+      // If no conflict or it's a directory, proceed with copy
+      await finalizeCopy(false);
+    } catch (error) {
+      console.error('Copy error:', error);
+      message.error(error.response?.data?.error || 'Error copying item');
     }
   };
 
@@ -1313,28 +1359,22 @@ const TrainingDashboard = () => {
   // ----------------------------------
   const fetchSubFolders = async (folderPath) => {
     try {
-      // Normalize the path to ensure consistent format
-      const normalizedPath = folderPath.replace(/^\/+|\/+$/g, '');
-      
-      // Make the API call to get subfolders
-      const response = await axios.get(`${BASE_URL}/directories?path=${encodeURIComponent(normalizedPath)}`, {
-        withCredentials: true
-      });
-      
-      // Process the response to get folder names
-      const folders = Array.isArray(response.data) 
-        ? response.data 
-        : (response.data && Array.isArray(response.data.children) 
-          ? response.data.children 
-          : []);
-      
-      // Return folders with full path information
-      return folders
+      console.log(`Fetching subfolders for: ${folderPath}`);
+      const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(folderPath)}`,
+        { withCredentials: true }
+      );
+
+      // Filter to only include directories and sort them alphabetically
+      const folders = (res.data || [])
         .filter(item => item.type === 'directory')
         .map(folder => ({
-          ...folder,
-          path: `${normalizedPath}/${folder.name}`.replace(/\/+/g, '/')
-        }));
+          name: folder.name,
+          path: folderPath ? `${folderPath}/${folder.name}` : folder.name
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      console.log(`Found ${folders.length} subfolders in ${folderPath}:`, folders);
+      return folders;
     } catch (error) {
       console.error('Error fetching subfolders:', error);
       message.error('Failed to load subfolders');
@@ -1357,10 +1397,12 @@ const TrainingDashboard = () => {
   };
 
   const handleSubFolderChange = async (value) => {
-    setSelectedSubFolder(value);
+    console.log('Subfolder selected:', value);
     
     // If value is empty, we're going back to the main folder
     if (!value) {
+      console.log('Returning to main folder');
+      setSelectedSubFolder('');
       setSelectedDestination(selectedMainFolder);
       setMoveDestination(selectedMainFolder);
       return;
@@ -1368,12 +1410,17 @@ const TrainingDashboard = () => {
 
     // If we have a value, it could be a path with multiple segments
     const fullPath = value.startsWith(selectedMainFolder) ? value : `${selectedMainFolder}/${value}`;
+    console.log('Setting subfolder path to:', fullPath);
+    
+    setSelectedSubFolder(fullPath);
     setSelectedDestination(fullPath);
     setMoveDestination(fullPath);
 
     // Load subfolders for the selected path
     try {
+      console.log('Fetching subfolders for path:', fullPath);
       const folders = await fetchSubFolders(fullPath);
+      console.log('Fetched subfolders:', folders);
       setSubFolders(folders);
     } catch (error) {
       console.error('Error loading subfolders:', error);
@@ -1583,7 +1630,14 @@ const TrainingDashboard = () => {
   const handleRowClick = (record) => {
     // Only respond to directory clicks
     if (record.type === 'directory') {
-      handleFolderClick(record.name);
+      // If it's a parent directory navigation
+      if (record.isParent) {
+        setCurrentPath(record.parentPath || 'Training');
+        // Force a refresh after path change
+        setTimeout(() => fetchItems(), 100);
+      } else {
+        handleFolderClick(record.name);
+      }
     }
     // Files are handled by their action buttons, not by row clicks
   };
@@ -1845,6 +1899,11 @@ const TrainingDashboard = () => {
           directoryItems={items}
           currentPath={currentPath}
           folderTreeData={folderTreeData}
+          selectedMainFolder={selectedMainFolder}
+          selectedSubFolder={selectedSubFolder}
+          subFolders={subFolders}
+          handleMainFolderChange={handleMainFolderChange}
+          handleSubFolderChange={handleSubFolderChange}
           onLoadData={async (folderPath) => {
             try {
               const res = await axios.get(
