@@ -479,9 +479,42 @@ const AdminDashboard = () => {
                 letterSpacing: 1,
                 backgroundColor: '#ff4d4f',
                 borderColor: '#ff4d4f',
-                marginRight: '16px'
+                marginRight: '16px',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1.1)',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                position: 'relative',
+                overflow: 'hidden',
+                zIndex: 1
               }}
+              className="logout-button"
             >
+              <style>
+                {`
+                  .logout-button:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+                  }
+                  .logout-button:active {
+                    transform: translateY(0);
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                  }
+                  .logout-button::after {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(255, 255, 255, 0.1);
+                    opacity: 0;
+                    transition: opacity 0.3s ease;
+                    z-index: -1;
+                  }
+                  .logout-button:hover::after {
+                    opacity: 1;
+                  }
+                `}
+              </style>
               Logout
             </Button>
           </Header>
