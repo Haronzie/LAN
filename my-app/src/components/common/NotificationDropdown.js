@@ -158,7 +158,7 @@ const NotificationDropdown = () => {
     }
   };
 
-  const navigateToFile = (file, e = null) => {
+  const navigateToFile = async (file, e = null) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -171,61 +171,85 @@ const NotificationDropdown = () => {
     localStorage.removeItem('forceOpenFile');
     localStorage.removeItem('notificationNavigation');
     localStorage.removeItem('directNavigation');
+    localStorage.removeItem('highPriorityNavigation');
     
     // For instructions, we might not have a file to navigate to
-    if (file.isInstruction) {
-      console.log('This is a file instruction, navigating to file if available');
-      if (file.file_id) {
-        // If we have a file_id, try to navigate to it
-        navigateToFile({
-          ...file,
-          id: file.file_id,
-          directory: file.directory || ''
-        });
-      }
-      return;
+    if (file.isInstruction && file.file_id) {
+      console.log('This is a file instruction, navigating to file');
+      // If we have a file_id, try to navigate to it
+      return navigateToFile({
+        ...file,
+        id: file.file_id,
+        directory: file.directory || ''
+      }, e);
     }
     
-    // Force a reload approach to ensure a clean navigation state
-    // First, let's set up the required information in localStorage
+    // Process the directory path to handle nested folders
+    const directory = (file.directory || '').trim();
+    const pathSegments = directory.split('/').filter(Boolean);
+    const mainFolder = pathSegments[0]?.toLowerCase() || 'operation';
     
-    // Store ALL the details about the file and directory
-    localStorage.setItem('openFileAfterNavigation', JSON.stringify({
+    // Create a unique ID for this navigation to prevent caching issues
+    const navigationId = `nav-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Store the complete navigation state
+    const navigationState = {
       id: file.id,
       name: file.name,
-      directory: file.directory,
+      directory: directory,
       type: 'file',
-      timestamp: new Date().getTime(), // Add timestamp to ensure it's treated as a new request
-      source: 'notification', // Mark that this navigation came from a notification
-      pathSegments: file.directory?.split('/') || [], // Store path segments for step navigation
-      exactLocation: true, // Flag to indicate we want to go to the exact location
-      fullPath: file.directory // Store the complete path for direct navigation
-    }));
+      timestamp: Date.now(),
+      source: 'notification',
+      pathSegments: pathSegments,
+      exactLocation: true,
+      fullPath: directory,
+      navigationId: navigationId,
+      // Store the complete path including the file
+      completePath: pathSegments.length > 0 
+        ? `${directory}/${file.name}`
+        : file.name
+    };
     
-    // Enable force flags with higher priority
+    console.log('Navigation state:', navigationState);
+    
+    // Store in localStorage for the file manager to pick up
+    localStorage.setItem('openFileAfterNavigation', JSON.stringify(navigationState));
     localStorage.setItem('forceOpenFile', 'true');
     localStorage.setItem('notificationNavigation', 'true');
-    localStorage.setItem('directNavigation', 'true'); // New flag for direct navigation
+    localStorage.setItem('directNavigation', 'true');
+    localStorage.setItem('highPriorityNavigation', 'true');
     
-    // Extract the main folder from the directory path
-    const pathParts = (file.directory || '').split('/');
-    const mainFolder = pathParts[0]?.toLowerCase() || 'operation';
-    console.log('Main folder determined as:', mainFolder);
-    console.log('Full directory path:', file.directory);
-    console.log('Path segments:', pathParts);
+    // Determine the target route based on the main folder
+    let targetRoute = '/user/operation'; // Default
     
-    // Navigate to the appropriate dashboard based on the main folder
-    if (mainFolder === 'operation') {
-      navigate('/user/operation');
-    } else if (mainFolder === 'research') {
-      navigate('/user/research');
-    } else if (mainFolder === 'training') {
-      navigate('/user/training');
-    } else {
-      // Default to operation if we can't determine
-      console.log('Could not determine folder, defaulting to operation');
-      navigate('/user/operation');
+    switch(mainFolder) {
+      case 'research':
+        targetRoute = '/user/research';
+        break;
+      case 'training':
+        targetRoute = '/user/training';
+        break;
+      case 'inventory':
+        targetRoute = '/user/inventory';
+        break;
+      case 'operation':
+      default:
+        targetRoute = '/user/operation';
     }
+    
+    console.log(`Navigating to ${targetRoute} for file in ${directory}`);
+    
+    // Add a small delay to ensure localStorage is updated before navigation
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Navigate to the target route
+    navigate(targetRoute, {
+      state: {
+        fromNotification: true,
+        fileToOpen: navigationState,
+        timestamp: Date.now()
+      }
+    });
   };
 
   // Filter notifications based on showCompleted state
