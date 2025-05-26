@@ -74,6 +74,27 @@ const OperationDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loading, setLoading] = useState(false); // For backward compatibility
   const [items, setItems] = useState([]);
+  
+  // Modal state variables
+  const [createFolderModal, setCreateFolderModal] = useState(false);
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [copyModalVisible, setCopyModalVisible] = useState(false);
+  const [moveModalVisible, setMoveModalVisible] = useState(false);
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  
+  // Folder and file operation state
+  const [selectedMainFolder, setSelectedMainFolder] = useState('');
+  const [selectedSubFolder, setSelectedSubFolder] = useState('');
+  const [selectedDestination, setSelectedDestination] = useState('');
+  const [subFolders, setSubFolders] = useState([]);
+  const [folderTreeData, setFolderTreeData] = useState([]);
+  const [copySubFolders, setCopySubFolders] = useState(false);
+  const [moveItem, setMoveItem] = useState(null);
+  const [moveDestination, setMoveDestination] = useState('');
+  const [copyNewName, setCopyNewName] = useState('');
+  const [renameNewName, setRenameNewName] = useState('');
+  const [newFolderName, setNewFolderName] = useState('');
 
   // Search related variables
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,6 +111,12 @@ const OperationDashboard = () => {
   const [selectedItemForMenu, setSelectedItemForMenu] = useState(null);
   const [directories, setDirectories] = useState([]);
   const [isLoadingDirectories, setIsLoadingDirectories] = useState(false);
+  
+  // Get the main folder from the current path (if we're in a folder)
+  const mainFolder = currentPath.split('/')[0] || '';
+  
+  // Check if we're inside a subfolder (not just at the root level or main folder level)
+  const isInsideMainFolder = currentPath.includes('/');
 
   // Format directories for TreeSelect component
   const formatDirectories = (dirs, parentPath = '') => {
@@ -189,6 +216,25 @@ const OperationDashboard = () => {
     }
   }, []);
 
+  // Handle main folder change in copy/move modal - Implementation is kept in the later part of the file
+  
+  // Handle copy button click
+  const handleCopyClick = (item) => {
+    setSelectedItem(item);
+    setCopyNewName(item.name);
+    setSelectedMainFolder('');
+    setSelectedSubFolder('');
+    setCopyModalVisible(true);
+  };
+  
+  // Handle move button click
+  const handleMoveClick = (item) => {
+    setSelectedItem(item);
+    setSelectedMainFolder('');
+    setSelectedSubFolder('');
+    setMoveModalVisible(true);
+  };
+  
   // Fetch all root level directories
   const fetchDirectories = useCallback(async (retryCount = 0) => {
     console.log('Fetching root directories... (attempt ' + (retryCount + 1) + ')');
@@ -303,45 +349,22 @@ const OperationDashboard = () => {
 
   // User related variables
   const [currentUser, setCurrentUser] = useState('');
-
-  // Folder selection related variables
-  const [selectedMainFolder, setSelectedMainFolder] = useState('');
-  const [selectedSubFolder, setSelectedSubFolder] = useState('');
-  const [subFolders, setSubFolders] = useState([]);
-
-  // Move operation variables
-  const [moveItem, setMoveItem] = useState(null);
-  const [moveDestination, setMoveDestination] = useState('');
-
-  // Modal related variables
-  const [moveModalVisible, setMoveModalVisible] = useState(false);
-  const [copyModalVisible, setCopyModalVisible] = useState(false);
-  const [renameModalVisible, setRenameModalVisible] = useState(false);
-  const [createFolderModal, setCreateFolderModal] = useState(false);
-  const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [infoModalVisible, setInfoModalVisible] = useState(false);
-
-  // Selected items and form values
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [selectedDestination, setSelectedDestination] = useState('');
-  const [copyItem, setCopyItem] = useState(null);
-  const [copyNewName, setCopyNewName] = useState('');
-  const [renameNewName, setRenameNewName] = useState('');
-  const [newFolderName, setNewFolderName] = useState('');
-  const [selectedFileInfo, setSelectedFileInfo] = useState(null);
-
-  // Other functionality
-  const [uploadingFiles, setUploadingFiles] = useState([]);
-  const [fileMessages, setFileMessages] = useState({});
-  const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [hideDone, setHideDone] = useState(false);
-  const [ws, setWs] = useState(null);
 
-  // Selection related
+  // File and folder selection state
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedFileInfo, setSelectedFileInfo] = useState(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
+  
+  // File operation state
+  const [copyItem, setCopyItem] = useState(null);
+  const [uploadingFiles, setUploadingFiles] = useState([]);
+  const [fileMessages, setFileMessages] = useState({});
+  const [allFilesWithMessages, setAllFilesWithMessages] = useState([]);
+  const [hideDone, setHideDone] = useState(false);
+  const [ws, setWs] = useState(null);
 
   const fetchItems = useCallback(async () => {
     setIsLoading(true);
@@ -1609,12 +1632,15 @@ const OperationDashboard = () => {
     }
 
     try {
-      // Determine the destination path based on main folder and subfolder
-      let destinationPath = selectedMainFolder;
-      if (selectedSubFolder) {
+      // Determine the destination path
+      let destinationPath = selectedDestination || currentPath;
+      
+      // If we have both main and subfolder selected, use that combination
+      if (selectedMainFolder && selectedSubFolder) {
         destinationPath = `${selectedMainFolder}/${selectedSubFolder}`;
-      } else {
-        destinationPath = selectedDestination || currentPath;
+      } else if (selectedMainFolder) {
+        // If only main folder is selected, use that
+        destinationPath = selectedMainFolder;
       }
 
       // For files, check if a file with the same name already exists at the destination
@@ -1678,10 +1704,15 @@ const OperationDashboard = () => {
 
   const finalizeCopy = async (overwrite) => {
     try {
-      // Determine the destination path based on main folder and subfolder
-      let destinationPath = selectedMainFolder;
-      if (selectedSubFolder) {
+      // Determine the destination path
+      let destinationPath = selectedDestination || currentPath;
+      
+      // If we have both main and subfolder selected, use that combination
+      if (selectedMainFolder && selectedSubFolder) {
         destinationPath = `${selectedMainFolder}/${selectedSubFolder}`;
+      } else if (selectedMainFolder) {
+        // If only main folder is selected, use that
+        destinationPath = selectedMainFolder;
       }
 
       if (copyItem.type === 'directory') {
@@ -1691,7 +1722,7 @@ const OperationDashboard = () => {
             source_name: copyItem.name,
             source_parent: currentPath,
             new_name: copyNewName,
-            destination_parent: selectedDestination || currentPath,
+            destination_parent: destinationPath,
             container: 'operation',
           },
           { withCredentials: true }
@@ -1702,7 +1733,7 @@ const OperationDashboard = () => {
           {
             source_file: copyItem.name,
             new_file_name: copyNewName,
-            destination_folder: selectedDestination || currentPath,
+            destination_folder: destinationPath,
             container: 'operation',
           },
           { withCredentials: true }
@@ -1734,9 +1765,10 @@ const OperationDashboard = () => {
     }
   };
 
-  const fetchSubFolders = async (mainFolder) => {
+  const fetchSubFolders = async (folderPath) => {
     try {
-      const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
+      console.log(`Fetching subfolders for: ${folderPath}`);
+      const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(folderPath)}`,
         { withCredentials: true }
       );
 
@@ -1745,38 +1777,56 @@ const OperationDashboard = () => {
         .filter(item => item.type === 'directory')
         .map(folder => ({
           name: folder.name,
-          path: `${mainFolder}/${folder.name}`
+          path: folderPath ? `${folderPath}/${folder.name}` : folder.name
         }))
-        .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-      setSubFolders(folders);
+      console.log(`Found ${folders.length} subfolders in ${folderPath}:`, folders);
+      return folders;
     } catch (error) {
       console.error('Error fetching subfolders:', error);
       message.error('Failed to load subfolders');
-      setSubFolders([]);
+      return [];
     }
   };
 
-  const handleMainFolderChange = (value) => {
+  const handleMainFolderChange = async (value) => {
     setSelectedMainFolder(value);
     setSelectedSubFolder('');
-    setMoveDestination(value); // Set the destination to the main folder by default
+    setSelectedDestination(value);
+    setMoveDestination(value);
 
     if (value) {
-      fetchSubFolders(value);
+      const folders = await fetchSubFolders(value);
+      setSubFolders(folders);
     } else {
       setSubFolders([]);
     }
   };
 
-  const handleSubFolderChange = (value) => {
+  const handleSubFolderChange = async (value) => {
     setSelectedSubFolder(value);
-    if (value) {
-      // Combine main folder and subfolder for the full path
-      setMoveDestination(`${selectedMainFolder}/${value}`);
-    } else {
-      // If no subfolder is selected, use just the main folder
+    
+    // If value is empty, we're going back to the main folder
+    if (!value) {
+      setSelectedDestination(selectedMainFolder);
       setMoveDestination(selectedMainFolder);
+      return;
+    }
+
+    // If we have a value, it could be a path with multiple segments
+    const fullPath = value.startsWith(selectedMainFolder) ? value : `${selectedMainFolder}/${value}`;
+    setSelectedDestination(fullPath);
+    setMoveDestination(fullPath);
+
+    // Load subfolders for the selected path
+    try {
+      const folders = await fetchSubFolders(fullPath);
+      setSubFolders(folders);
+    } catch (error) {
+      console.error('Error loading subfolders:', error);
+      message.error('Failed to load subfolders');
+      setSubFolders([]);
     }
   };
 
@@ -2152,9 +2202,55 @@ const OperationDashboard = () => {
     }
   ];
 
+  const commonModals = (
+    <CommonModals
+      // Create Folder Modal props
+      createFolderModal={createFolderModal}
+      setCreateFolderModal={setCreateFolderModal}
+      newFolderName={newFolderName}
+      setNewFolderName={setNewFolderName}
+      handleCreateFolder={handleCreateFolder}
+      
+      // Rename Modal props
+      renameModalVisible={renameModalVisible}
+      setRenameModalVisible={setRenameModalVisible}
+      renameNewName={renameNewName}
+      setRenameNewName={setRenameNewName}
+      handleRenameConfirm={handleRenameConfirm}
+      
+      // Copy Modal props
+      copyModalVisible={copyModalVisible}
+      setCopyModalVisible={setCopyModalVisible}
+      copyNewName={copyNewName}
+      setCopyNewName={setCopyNewName}
+      selectedDestination={selectedDestination}
+      setSelectedDestination={setSelectedDestination}
+      handleCopyConfirm={handleCopyConfirm}
+      directoryItems={directories}
+      currentPath={currentPath}
+      onLoadData={loadSubfolders}
+      
+      // Move Modal props
+      moveModalVisible={moveModalVisible}
+      setMoveModalVisible={setMoveModalVisible}
+      moveDestination={selectedDestination}
+      setMoveDestination={setSelectedDestination}
+      handleMoveConfirm={handleMoveConfirm}
+      selectedMainFolder={selectedMainFolder}
+      selectedSubFolder={selectedSubFolder}
+      subFolders={subFolders}
+      handleMainFolderChange={handleMainFolderChange}
+      handleSubFolderChange={handleSubFolderChange}
+      folderTreeData={folderTreeData}
+      forCopy={false}
+      copySubFolders={copySubFolders}
+    />
+  );
+
   return (
-    <Layout style={{ minHeight: '84vh', background: '#f0f2f5' }}>
-      <Content style={{ margin: '5px', padding: '10px', background: '#fff' }}>
+    <Layout style={{ minHeight: '100vh' }}>
+      {commonModals}
+      <Content style={{ padding: '24px' }}>
         {/* Dashboard Header */}
         <Row justify="space-between" align="middle" style={{ marginBottom: 20, padding: '0 4px' }}>
           <Col>
