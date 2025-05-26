@@ -196,89 +196,148 @@ const NotificationDropdown = () => {
     // Process the directory path to handle nested folders
     const directory = (file.directory || '').trim();
     const pathSegments = directory.split('/').filter(Boolean);
+    
+    // Determine the main folder based on the first segment or default to 'operation'
     const mainFolder = pathSegments[0]?.toLowerCase() || 'operation';
+    
+    // Ensure the path is properly formatted without leading/trailing slashes
+    const cleanPath = pathSegments.join('/');
+    
+    // Build the full path for navigation
+    const fullPath = cleanPath;
+    
+    // Create a navigation history to handle deep linking
+    const navigationHistory = pathSegments.map((segment, index, arr) => {
+      const pathSoFar = arr.slice(0, index + 1).join('/');
+      return {
+        name: segment,
+        path: pathSoFar,
+        isDirectory: true
+      };
+    });
     
     // Create a unique ID for this navigation to prevent caching issues
     const navigationId = `nav-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     // Build the complete path including the file
-    const completePath = pathSegments.length > 0 
-      ? `${directory}/${file.name}`
-      : file.name;
+    const completePath = cleanPath ? `${cleanPath}/${file.name}` : file.name;
     
     // Store the complete navigation state with all necessary path information
     const navigationState = {
       id: file.id,
       name: file.name,
-      directory: directory,
+      directory: cleanPath, // Use cleaned path
       type: 'file',
       timestamp: Date.now(),
       source: 'notification',
       pathSegments: pathSegments,
       exactLocation: true,
-      fullPath: directory,
+      fullPath: cleanPath, // Use cleaned path
       navigationId: navigationId,
       completePath: completePath,
-      // Add additional metadata for deep linking
-      isDeepLink: pathSegments.length > 1, // True if this is a deep link
+      isDeepLink: pathSegments.length > 0,
       targetFile: file.name,
-      targetPath: directory,
-      // Store the full path hierarchy for navigation
-      pathHierarchy: pathSegments.reduce((acc, segment, index) => {
-        const path = index === 0 ? segment : `${acc[index-1].path}/${segment}`;
-        return [...acc, { name: segment, path }];
-      }, [])
+      targetPath: cleanPath,
+      navigationHistory: navigationHistory,
+      pathHierarchy: navigationHistory,
+      shouldOpenFile: true,
+      // Additional metadata for better path handling
+      originalPath: file.directory || '',
+      normalizedPath: cleanPath,
+      // Add file metadata if available
+      fileMetadata: {
+        size: file.size,
+        type: file.contentType || 'file',
+        lastModified: file.updatedAt || file.createdAt || new Date().toISOString()
+      }
     };
+    
+    console.log('Navigation state:', {
+      ...navigationState,
+      // Don't log the full navigation history to keep logs clean
+      navigationHistory: navigationHistory.length,
+      pathHierarchy: '...'
+    });
     
     console.log('Navigation state:', navigationState);
     
+    // Prepare navigation state for localStorage
+    const storageState = {
+      ...navigationState,
+      // Add a timestamp to ensure the state is fresh
+      _timestamp: Date.now(),
+      // Add a flag to indicate this is a fresh navigation
+      _isFreshNavigation: true
+    };
+
     // Store in localStorage for the file manager to pick up
-    localStorage.setItem('openFileAfterNavigation', JSON.stringify(navigationState));
+    localStorage.setItem('openFileAfterNavigation', JSON.stringify(storageState));
     localStorage.setItem('forceOpenFile', 'true');
     localStorage.setItem('notificationNavigation', 'true');
     localStorage.setItem('directNavigation', 'true');
     localStorage.setItem('highPriorityNavigation', 'true');
     
     // Store additional metadata for deep linking
-    localStorage.setItem('deepLinkPath', directory);
+    localStorage.setItem('deepLinkPath', cleanPath);
     localStorage.setItem('deepLinkTarget', file.name);
     localStorage.setItem('deepLinkSegments', JSON.stringify(pathSegments));
     
+    // Store the full navigation state with additional metadata
+    localStorage.setItem('navigationState', JSON.stringify({
+      currentPath: cleanPath,
+      history: navigationHistory,
+      targetFile: file.name,
+      timestamp: Date.now(),
+      isDeepLink: true,
+      source: 'notification',
+      fileMetadata: storageState.fileMetadata
+    }));
+    
     // Determine the target route based on the main folder
-    let targetRoute = '/user/operation'; // Default
+    const routeMap = {
+      'research': '/user/research',
+      'training': '/user/training',
+      'inventory': '/user/inventory',
+      'operation': '/user/operation'
+    };
     
-    switch(mainFolder) {
-      case 'research':
-        targetRoute = '/user/research';
-        break;
-      case 'training':
-        targetRoute = '/user/training';
-        break;
-      case 'inventory':
-        targetRoute = '/user/inventory';
-        break;
-      case 'operation':
-      default:
-        targetRoute = '/user/operation';
-    }
+    // Use the route map or default to operation
+    const targetRoute = routeMap[mainFolder] || '/user/operation';
     
-    console.log(`Navigating to ${targetRoute} for file in ${directory}`);
+    console.log(`Navigating to ${targetRoute} for file in path: ${cleanPath || 'root'}`);
     
     // Add a small delay to ensure localStorage is updated before navigation
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 150));
     
     // Navigate to the target route with additional state
-    navigate(targetRoute, {
-      state: {
-        fromNotification: true,
-        fileToOpen: navigationState,
+    const navigationStateObj = {
+      fromNotification: true,
+      fileToOpen: storageState,
+      timestamp: Date.now(),
+      isDeepLink: pathSegments.length > 0,
+      deepLinkPath: cleanPath,
+      deepLinkTarget: file.name,
+      // Add additional context for the target component
+      navigationContext: {
+        source: 'notification',
         timestamp: Date.now(),
-        isDeepLink: pathSegments.length > 1,
-        deepLinkPath: directory,
-        deepLinkTarget: file.name
-      },
-      // Force a full page reload to ensure clean state
-      replace: true
+        pathSegments: pathSegments,
+        targetFile: file.name,
+        // Add any additional metadata that might be useful
+        metadata: {
+          type: file.type || 'file',
+          size: file.size,
+          lastModified: file.updatedAt || file.createdAt
+        }
+      }
+    };
+
+    console.log('Navigation state:', navigationStateObj);
+    
+    // Use replace: false to maintain browser history
+    navigate(targetRoute, {
+      state: navigationStateObj,
+      replace: false
     });
   };
 
