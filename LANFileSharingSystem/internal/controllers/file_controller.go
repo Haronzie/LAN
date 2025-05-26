@@ -2113,34 +2113,36 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		folderPattern := mainFolder + "%"
 
 		rows, err = fc.App.DB.Query(
-			`SELECT id, file_name, directory, content_type, size, file_path
-             FROM files
+			`SELECT f.id, f.file_name, f.directory, f.content_type, f.size, f.file_path, u.username as uploader
+             FROM files f
+             LEFT JOIN users u ON f.uploaded_by = u.id
              WHERE (
                  -- Match the directory exactly or any subdirectory
-                 directory = $1 OR
-                 directory LIKE $2 OR
-                 file_path LIKE $2
+                 f.directory = $1 OR
+                 f.directory LIKE $2 OR
+                 f.file_path LIKE $2
              ) AND (
                  -- Match the search term in filename or path (both lowercase and raw for numbers)
-                 LOWER(file_name) LIKE $3 OR
-                 LOWER(file_path) LIKE $3 OR
-                 file_name LIKE $4 OR
-                 file_path LIKE $4
+                 LOWER(f.file_name) LIKE $3 OR
+                 LOWER(f.file_path) LIKE $3 OR
+                 f.file_name LIKE $4 OR
+                 f.file_path LIKE $4
              )
-             ORDER BY directory, file_name`,
+             ORDER BY f.directory, f.file_name`,
 			mainFolder, folderPattern, pattern, rawPattern,
 		)
 	} else {
 		// Search everywhere
 		log.Printf("🔍 Searching for '%s' across all folders", q)
 		rows, err = fc.App.DB.Query(
-			`SELECT id, file_name, directory, content_type, size, file_path
-             FROM files
-             WHERE LOWER(file_name) LIKE $1 OR
-                   LOWER(file_path) LIKE $1 OR
-                   file_name LIKE $2 OR
-                   file_path LIKE $2
-             ORDER BY directory, file_name`,
+			`SELECT f.id, f.file_name, f.directory, f.content_type, f.size, f.file_path, u.username as uploader
+             FROM files f
+             LEFT JOIN users u ON f.uploaded_by = u.id
+             WHERE LOWER(f.file_name) LIKE $1 OR
+                   LOWER(f.file_path) LIKE $1 OR
+                   f.file_name LIKE $2 OR
+                   f.file_path LIKE $2
+             ORDER BY f.directory, f.file_name`,
 			pattern, rawPattern,
 		)
 
@@ -2162,8 +2164,9 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 			name, d, ct string
 			size        int64
 			path        string
+			uploader    *string // Use pointer to handle NULL values
 		)
-		if err := rows.Scan(&id, &name, &d, &ct, &size, &path); err != nil {
+		if err := rows.Scan(&id, &name, &d, &ct, &size, &path, &uploader); err != nil {
 			continue
 		}
 
@@ -2186,6 +2189,7 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 			"size":         size,
 			"path":         path,
 			"type":         "file", // Add type to distinguish from directories in frontend
+			"uploader":     uploader,
 		})
 	}
 

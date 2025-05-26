@@ -1824,7 +1824,6 @@ const FileManager = () => {
         minWidth: 80,
         render: (size, record) => {
           if (record.type === 'directory') {
-            // Show formatted folder size
             return formatFileSize(record.size) || '0 B';
           }
           return size || formatFileSize(record.size) || 'Unknown';
@@ -1837,14 +1836,33 @@ const FileManager = () => {
         align: 'center',
         width: '15%',
         minWidth: 100,
-        render: (text, record) => (
-          <span>{record.type === 'directory' ? (record.created_by || '-') : (record.uploader || '-')}</span>
-        ),
-      },
+        render: (text, record) => {
+          // For search results, check multiple possible fields for uploader info
+          if (isSearching) {
+            return (
+              <span>{
+                record.uploader || 
+                record.created_by || 
+                record.uploaded_by || 
+                record.uploader_name || 
+                record.creator || 
+                record.owner || 
+                '-'
+              }</span>
+            );
+          }
+          // For regular view
+          return (
+            <span>{
+              record.type === 'directory' ? 
+                (record.created_by || record.uploader || '-') : 
+                (record.uploader || record.created_by || '-')
+            }</span>
+          );
+        },
+      }
     ];
 
-    // If we're showing search results, add a Location column
-    // Remove the 'Go to folder' button from Location column
     if (isSearching) {
       baseColumns.splice(1, 0, {
         title: 'Location',
