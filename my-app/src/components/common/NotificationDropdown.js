@@ -1,15 +1,117 @@
-import React, { useState, useEffect } from 'react';
-import { Badge, Dropdown, List, Avatar, Button, Space, Typography, Empty } from 'antd';
-import { BellOutlined, FileOutlined, CheckOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Badge, Dropdown, List, Avatar, Button, Space, Typography, Empty, Tag } from 'antd';
+import { 
+  BellOutlined, 
+  FileOutlined, 
+  CheckOutlined, 
+  ClockCircleOutlined, 
+  MessageOutlined,
+  InfoCircleOutlined 
+} from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const { Text } = Typography;
 
+// Helper function to format date
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  try {
+    return new Date(dateString).toLocaleString();
+  } catch (e) {
+    return '';
+  }
+};
+
 const NotificationDropdown = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const fetchNotifications = useCallback(async () => {
+    console.log('Fetching notifications...');
+    setLoading(true);
+    try {
+      // Get the current username for debugging
+      const username = localStorage.getItem('username');
+      if (!username) {
+        console.error('No username found in localStorage');
+        return;
+      }
+
+      console.log(`Fetching notifications for user: ${username}...`);
+
+      // Add a timestamp to prevent caching
+      const timestamp = new Date().getTime();
+      
+      // First, try to get file messages
+      const messagesRes = await axios.get(`/files-with-messages?_t=${timestamp}`, {
+        withCredentials: true,
+        timeout: 10000
+      });
+
+      // Process file messages
+      const messageNotifications = Array.isArray(messagesRes?.data) ? messagesRes.data : [];
+      
+      // Initialize instruction notifications as empty array
+      let instructionNotifications = [];
+      
+      // Try to get file instructions if the endpoint exists
+      try {
+        const instructionsRes = await axios.get(`/file-instructions?status=pending&_t=${timestamp}`, {
+          withCredentials: true,
+          timeout: 5000 // Shorter timeout for this optional request
+        });
+        
+        // Process file instructions
+        instructionNotifications = Array.isArray(instructionsRes?.data) 
+          ? instructionsRes.data.map(instruction => ({
+              ...instruction,
+              isInstruction: true,
+              messages: [{
+                id: `inst_${instruction.id}`,
+                message: instruction.instructions || instruction.message || 'New instruction',
+                sender: instruction.sender,
+                receiver: instruction.receiver,
+                is_done: instruction.status === 'completed',
+                created_at: instruction.created_at,
+                isInstruction: true
+              }]
+            }))
+          : [];
+      } catch (error) {
+        console.log('Could not fetch file instructions, continuing without them', error.message);
+      }
+
+      // Combine both types of notifications
+      const allNotifications = [...messageNotifications, ...instructionNotifications];
+      setNotifications(allNotifications);
+
+      // Count pending tasks (both messages and instructions)
+      const pendingCount = allNotifications.reduce((count, item) => {
+        return count + (item.messages || []).filter(msg => !msg.is_done).length;
+      }, 0);
+
+      console.log(`Current user: ${username}, Pending tasks count: ${pendingCount}`);
+
+      // If we have no notifications but expected some, log this for debugging
+      if (allNotifications.length === 0) {
+        console.log('No notifications found for the current user');
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      if (error.response) {
+        console.error('Response data:', error.response.data);
+        console.error('Response status:', error.response.status);
+      } else if (error.request) {
+        console.error('No response received:', error.request);
+      } else {
+        console.error('Error setting up request:', error.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchNotifications();
@@ -30,71 +132,25 @@ const NotificationDropdown = () => {
       clearInterval(interval);
       window.removeEventListener('refreshNotifications', handleRefreshEvent);
     };
-  }, []);
+  }, [fetchNotifications]);
 
-  const fetchNotifications = async () => {
-    setLoading(true);
+  const markTaskAsDone = async (messageId, isInstruction = false) => {
     try {
-      // Get the current username for debugging
-      const username = localStorage.getItem('username');
-      if (!username) {
-        console.error('No username found in localStorage');
-        return;
-      }
-
-      console.log(`Fetching notifications for user: ${username}...`);
-
-      // Add a timestamp to prevent caching
-      const timestamp = new Date().getTime();
-      const res = await axios.get(`/files-with-messages?_t=${timestamp}`, {
-        withCredentials: true,
-        // Add a timeout to prevent hanging requests
-        timeout: 10000
-      });
-
-      console.log('Notifications response:', res.data);
-
-      // Ensure we have an array, even if empty
-      const notificationData = Array.isArray(res.data) ? res.data : [];
-      setNotifications(notificationData);
-
-      // Count pending tasks
-      const pendingCount = notificationData.reduce((count, file) => {
-        return count + (file.messages || []).filter(msg => !msg.is_done).length;
-      }, 0);
-
-      console.log(`Current user: ${username}, Pending tasks count: ${pendingCount}`);
-
-      // If we have no notifications but expected some, log this for debugging
-      if (notificationData.length === 0) {
-        console.log('No notifications found for the current user');
-      }
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.error('Response data:', error.response.data);
-        console.error('Response status:', error.response.status);
-      } else if (error.request) {
-        // The request was made but no response was received
-        console.error('No response received:', error.request);
+      if (isInstruction) {
+        // Handle marking instruction as completed
+        await axios.patch(
+          `/file-instructions/${messageId.replace('inst_', '')}/complete`,
+          {},
+          { withCredentials: true }
+        );
       } else {
-        // Something happened in setting up the request that triggered an Error
-        console.error('Error setting up request:', error.message);
+        // Handle regular message
+        await axios.patch(
+          `/file/message/${messageId}/done`,
+          {},
+          { withCredentials: true }
+        );
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const markTaskAsDone = async (messageId) => {
-    try {
-      await axios.patch(
-        `/file/message/${messageId}/done`,
-        {},
-        { withCredentials: true }
-      );
       fetchNotifications(); // Refresh notifications after marking as done
     } catch (err) {
       console.error('Error marking task as done:', err);
@@ -103,6 +159,13 @@ const NotificationDropdown = () => {
 
   const navigateToFile = (file) => {
     console.log('Navigating to file in dropdown:', file);
+    
+    // For instructions, we might not have a file to navigate to
+    if (file.isInstruction) {
+      // Handle navigation for instructions (if needed)
+      console.log('This is a file instruction');
+      return;
+    }
     
     // Force a reload approach to ensure a clean navigation state
     // First, let's set up the required information in localStorage
@@ -115,7 +178,7 @@ const NotificationDropdown = () => {
       type: 'file',
       timestamp: new Date().getTime(), // Add timestamp to ensure it's treated as a new request
       source: 'notification', // Mark that this navigation came from a notification
-      pathSegments: file.directory.split('/'), // Store path segments for step navigation
+      pathSegments: file.directory?.split('/') || [], // Store path segments for step navigation
       exactLocation: true, // Flag to indicate we want to go to the exact location
       fullPath: file.directory // Store the complete path for direct navigation
     }));
@@ -126,8 +189,8 @@ const NotificationDropdown = () => {
     localStorage.setItem('directNavigation', 'true'); // New flag for direct navigation
     
     // Extract the main folder from the directory path
-    const pathParts = file.directory.split('/');
-    const mainFolder = pathParts[0].toLowerCase();
+    const pathParts = (file.directory || '').split('/');
+    const mainFolder = pathParts[0]?.toLowerCase() || 'operation';
     console.log('Main folder determined as:', mainFolder);
     console.log('Full directory path:', file.directory);
     console.log('Path segments:', pathParts);
@@ -146,9 +209,9 @@ const NotificationDropdown = () => {
     }
   };
 
-  // Count pending tasks (messages that are not marked as done)
+  // Count pending tasks (messages and instructions that are not marked as done)
   const pendingTasksCount = notifications.reduce((count, file) => {
-    return count + file.messages.filter(msg => !msg.is_done).length;
+    return count + (file.messages || []).filter(msg => !msg.is_done).length;
   }, 0);
 
   const items = [
@@ -175,33 +238,64 @@ const NotificationDropdown = () => {
                 <List.Item>
                   <List.Item.Meta
                     avatar={<Avatar icon={<FileOutlined />} style={{ backgroundColor: '#1890ff' }} />}
-                    title={<a onClick={() => navigateToFile(file)}>{file.name}</a>}
+                    title={
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <a onClick={() => navigateToFile(file)}>
+                          {file.name || 'File Instruction'}
+                        </a>
+                        {file.isInstruction && (
+                          <Tag color="blue" icon={<InfoCircleOutlined />}>
+                            Instruction
+                          </Tag>
+                        )}
+                      </div>
+                    }
                     description={
                       <div>
-                        {file.messages.map(msg => (
-                          <div key={msg.id} style={{
-                            marginBottom: 8,
-                            padding: 8,
-                            background: msg.is_done ? '#f6ffed' : '#f0f5ff',
-                            borderRadius: 4,
-                            borderLeft: `3px solid ${msg.is_done ? '#52c41a' : '#1890ff'}`
-                          }}>
+                        {file.messages?.map(msg => (
+                          <div 
+                            key={msg.id} 
+                            style={{
+                              marginBottom: 8,
+                              padding: 8,
+                              background: msg.is_done ? '#f6ffed' : (msg.isInstruction ? '#fff7e6' : '#f0f5ff'),
+                              borderRadius: 4,
+                              borderLeft: `3px solid ${
+                                msg.is_done ? '#52c41a' : 
+                                msg.isInstruction ? '#faad14' : '#1890ff'
+                              }`
+                            }}
+                          >
                             <div>
-                              <a 
+                              <div 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  console.log('Notification message clicked, navigating to:', file.name, 'in', file.directory);
-                                  // Ensure we navigate with high priority
-                                  localStorage.setItem('highPriorityNavigation', 'true');
-                                  navigateToFile(file);
+                                  if (!msg.isInstruction) {
+                                    console.log('Notification message clicked, navigating to:', file.name, 'in', file.directory);
+                                    localStorage.setItem('highPriorityNavigation', 'true');
+                                    navigateToFile(file);
+                                  }
                                 }}
-                                style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 'bold' }}
+                                style={{ 
+                                  cursor: msg.isInstruction ? 'default' : 'pointer', 
+                                  textDecoration: msg.isInstruction ? 'none' : 'underline', 
+                                  fontWeight: 'bold',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8
+                                }}
                               >
+                                {msg.isInstruction ? (
+                                  <MessageOutlined style={{ color: '#faad14' }} />
+                                ) : (
+                                  <FileOutlined style={{ color: '#1890ff' }} />
+                                )}
                                 {msg.message}
-                              </a>
+                              </div>
                             </div>
                             <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-                              From: {msg.sender} · {new Date(msg.created_at).toLocaleString()}
+                              {msg.sender && `From: ${msg.sender} · `}
+                              {msg.created_at && new Date(msg.created_at).toLocaleString()}
                             </div>
                             <div style={{ marginTop: 8 }}>
                               {msg.is_done ? (
@@ -211,18 +305,24 @@ const NotificationDropdown = () => {
                                 </Space>
                               ) : (
                                 <Space>
-                                  <ClockCircleOutlined style={{ color: '#1890ff' }} />
-                                  <Text type="secondary">Pending</Text>
-                                  <Button
-                                    type="primary"
-                                    size="small"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      markTaskAsDone(msg.id);
-                                    }}
-                                  >
-                                    Mark as Done
-                                  </Button>
+                                  <ClockCircleOutlined style={{ 
+                                    color: msg.isInstruction ? '#faad14' : '#1890ff' 
+                                  }} />
+                                  <Text type={msg.isInstruction ? 'warning' : 'secondary'}>
+                                    {msg.isInstruction ? 'Instruction Pending' : 'Pending'}
+                                  </Text>
+                                  {!msg.isInstruction && (
+                                    <Button
+                                      type="primary"
+                                      size="small"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        markTaskAsDone(msg.id, msg.isInstruction);
+                                      }}
+                                    >
+                                      Mark as Done
+                                    </Button>
+                                  )}
                                 </Space>
                               )}
                             </div>

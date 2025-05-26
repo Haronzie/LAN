@@ -1,25 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Row, Col, Card, Typography, Badge, Button, Space, Spin, message } from 'antd';
+import { Row, Col, Card, Typography, Space } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import {
   FireOutlined,
   SearchOutlined,
   BookOutlined,
   ContainerOutlined,
-  FileOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined
 } from '@ant-design/icons';
-
-const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
 const { Title } = Typography;
 
 const UserDashboardHome = () => {
   const [username, setUsername] = useState('');
-  const [filesWithTasks, setFilesWithTasks] = useState([]);
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -27,56 +19,7 @@ const UserDashboardHome = () => {
     if (storedUsername) {
       setUsername(storedUsername);
     }
-    fetchFilesWithTasks();
-
-    // Set up polling to check for new tasks every 30 seconds
-    const interval = setInterval(fetchFilesWithTasks, 30000);
-    return () => clearInterval(interval);
   }, []);
-
-  const fetchFilesWithTasks = async () => {
-    setLoading(true);
-    try {
-      // Get the current username from state or localStorage
-      const currentUsername = username || localStorage.getItem('username');
-      if (!currentUsername) {
-        console.error('UserDashboardHome: No username found');
-        return;
-      }
-
-      console.log(`UserDashboardHome: Fetching files with tasks for user: ${currentUsername}...`);
-
-      // Add a timestamp to prevent caching
-      const timestamp = new Date().getTime();
-      const res = await axios.get(`${BASE_URL}/files-with-messages?_t=${timestamp}`, {
-        withCredentials: true,
-        // Add a timeout to prevent hanging requests
-        timeout: 10000
-      });
-
-      console.log('UserDashboardHome: Files with tasks response:', res.data);
-
-      // Ensure we have an array, even if empty
-      const tasksData = Array.isArray(res.data) ? res.data : [];
-      setFilesWithTasks(tasksData);
-
-      // If we expected tasks but didn't find any, log additional debug info
-      if (tasksData.length === 0) {
-        // Make a separate request to check if the user has any messages in the database
-        try {
-          const checkRes = await axios.get(`${BASE_URL}/user-role`, { withCredentials: true });
-          console.log('UserDashboardHome: User role check:', checkRes.data);
-        } catch (checkErr) {
-          console.error('UserDashboardHome: Error checking user role:', checkErr);
-        }
-      }
-    } catch (error) {
-      console.error('UserDashboardHome: Error fetching files with tasks:', error);
-      message.error('Failed to load your assigned tasks');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const dashboards = [
     {
@@ -105,144 +48,28 @@ const UserDashboardHome = () => {
     },
   ];
 
-  // Function to navigate to the file's directory
-  const navigateToFile = (directory) => {
-    // Extract the main folder from the directory path
-    const mainFolder = directory.split('/')[0].toLowerCase();
-
-    // Navigate to the appropriate dashboard based on the main folder
-    if (mainFolder === 'operation') {
-      navigate('/user/operation');
-    } else if (mainFolder === 'research') {
-      navigate('/user/research');
-    } else if (mainFolder === 'training') {
-      navigate('/user/training');
-    } else {
-      // Default to operation if we can't determine
-      navigate('/user/operation');
-    }
-  };
-
-  // Function to mark a task as done
-  const markTaskAsDone = async (messageId) => {
-    try {
-      await axios.patch(
-        `${BASE_URL}/file/message/${messageId}/done`,
-        {},
-        { withCredentials: true }
-      );
-      message.success('Task marked as done');
-      fetchFilesWithTasks(); // Refresh the list
-    } catch (err) {
-      console.error('Error marking task as done:', err);
-      message.error('Failed to mark task as done');
-    }
-  };
-
   return (
     <div style={{
       height: 'calc(100vh - 112px)',
       padding: '24px',
       background: '#f0f2f5',
       overflow: 'auto',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center'
     }}>
       <div style={{
         maxWidth: '1200px',
+        width: '100%',
         margin: '0 auto',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column'
       }}>
-        {/* Assigned Tasks Section */}
-        {filesWithTasks.length > 0 && (
-          <div style={{ marginBottom: '30px' }}>
-            <Title level={3} style={{ marginBottom: '16px' }}>
-              Your Assigned Tasks
-            </Title>
-            <Row gutter={[16, 16]}>
-              {loading ? (
-                <Col span={24} style={{ textAlign: 'center', padding: '20px' }}>
-                  <Spin size="large" />
-                </Col>
-              ) : (
-                filesWithTasks.map(file => (
-                  <Col xs={24} sm={24} md={12} lg={8} key={file.id}>
-                    <Card
-                      title={
-                        <Space>
-                          <FileOutlined />
-                          <span>{file.name}</span>
-                          <Badge
-                            count={file.messages.filter(msg => !msg.is_done).length}
-                            style={{ backgroundColor: '#1890ff' }}
-                          />
-                        </Space>
-                      }
-                      extra={
-                        <Button
-                          type="link"
-                          onClick={() => navigateToFile(file.directory)}
-                        >
-                          View
-                        </Button>
-                      }
-                      style={{ marginBottom: 16 }}
-                    >
-                      {file.messages.map(msg => (
-                        <div
-                          key={msg.id}
-                          style={{
-                            padding: '8px',
-                            marginBottom: '8px',
-                            background: msg.is_done ? '#f6ffed' : '#f0f5ff',
-                            borderLeft: `3px solid ${msg.is_done ? '#52c41a' : '#1890ff'}`,
-                            borderRadius: '4px'
-                          }}
-                        >
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Task:</strong> {msg.message}
-                          </div>
-                          <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>
-                            From: {msg.sender} · {new Date(msg.created_at).toLocaleString()}
-                          </div>
-                          <div>
-                            {msg.is_done ? (
-                              <span style={{ color: '#52c41a' }}>
-                                <CheckCircleOutlined /> Completed
-                              </span>
-                            ) : (
-                              <Space>
-                                <span style={{ color: '#1890ff' }}>
-                                  <ClockCircleOutlined /> Pending
-                                </span>
-                                <Button
-                                  type="primary"
-                                  size="small"
-                                  onClick={() => markTaskAsDone(msg.id)}
-                                >
-                                  Mark as Done
-                                </Button>
-                              </Space>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </Card>
-                  </Col>
-                ))
-              )}
-            </Row>
-          </div>
-        )}
-
         {/* Dashboard Cards */}
         <div style={{
-          flex: 1,
           display: 'flex',
           justifyContent: 'center',
-          alignItems: 'flex-start',
-          paddingTop: filesWithTasks.length > 0 ? '20px' : '50px',
+          alignItems: 'center',
+          paddingTop: '50px',
         }}>
           <Row
             gutter={[32, 32]}
