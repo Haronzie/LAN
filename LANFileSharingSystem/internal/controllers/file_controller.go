@@ -2113,9 +2113,8 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		folderPattern := mainFolder + "%"
 
 		rows, err = fc.App.DB.Query(
-			`SELECT f.id, f.file_name, f.directory, f.content_type, f.size, f.file_path, u.username as uploader
+			`SELECT f.id, f.file_name, f.directory, f.content_type, f.size, f.file_path, f.uploader
              FROM files f
-             LEFT JOIN users u ON f.uploaded_by = u.id
              WHERE (
                  -- Match the directory exactly or any subdirectory
                  f.directory = $1 OR
@@ -2135,9 +2134,8 @@ func (fc *FileController) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		// Search everywhere
 		log.Printf("🔍 Searching for '%s' across all folders", q)
 		rows, err = fc.App.DB.Query(
-			`SELECT f.id, f.file_name, f.directory, f.content_type, f.size, f.file_path, u.username as uploader
+			`SELECT f.id, f.file_name, f.directory, f.content_type, f.size, f.file_path, f.uploader
              FROM files f
-             LEFT JOIN users u ON f.uploaded_by = u.id
              WHERE LOWER(f.file_name) LIKE $1 OR
                    LOWER(f.file_path) LIKE $1 OR
                    f.file_name LIKE $2 OR

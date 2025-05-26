@@ -1933,49 +1933,45 @@ const FileManager = () => {
               </Tooltip>
             )}
 
-            {/* Show action buttons regardless of search state, except for root directories */}
-            {!isRoot && !(record.type === 'directory' && isRoot) && (
+            {/* Show action buttons for all items except root directories */}
+            {!(record.type === 'directory' && (record.name === 'Research' || record.name === 'Training' || record.name === 'Operation')) && (
               <>
-                {!(record.type === 'directory' && (record.name === 'Research' || record.name === 'Training' || record.name === 'Operation')) && (
-                  <>
-                    <Tooltip title="Rename">
-                      <Button
-                        icon={<EditOutlined />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedItem(record);
-                          // Set only the filename without extension in the input field
-                          const name = record.name;
-                          const lastDotIndex = name.lastIndexOf('.');
-                          const displayName = lastDotIndex > 0 ? name.substring(0, lastDotIndex) : name;
-                          setRenameNewName(displayName);
-                          setRenameModalVisible(true);
-                        }}
-                      />
-                    </Tooltip>
+                <Tooltip title="Rename">
+                  <Button
+                    icon={<EditOutlined />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedItem(record);
+                      // Set only the filename without extension in the input field
+                      const name = record.name;
+                      const lastDotIndex = name.lastIndexOf('.');
+                      const displayName = lastDotIndex > 0 ? name.substring(0, lastDotIndex) : name;
+                      setRenameNewName(displayName);
+                      setRenameModalVisible(true);
+                    }}
+                  />
+                </Tooltip>
 
-                    <Tooltip title="Copy">
-                      <Button icon={<CopyOutlined />} onClick={(e) => {
-                        e.stopPropagation();
-                        handleCopy(record);
-                      }} />
-                    </Tooltip>
+                <Tooltip title="Copy">
+                  <Button icon={<CopyOutlined />} onClick={(e) => {
+                    e.stopPropagation();
+                    handleCopy(record);
+                  }} />
+                </Tooltip>
 
-                    <Tooltip title="Move">
-                      <Button icon={<SwapOutlined />} onClick={(e) => {
-                        e.stopPropagation();
-                        handleMove(record);
-                      }} />
-                    </Tooltip>
+                <Tooltip title="Move">
+                  <Button icon={<SwapOutlined />} onClick={(e) => {
+                    e.stopPropagation();
+                    handleMove(record);
+                  }} />
+                </Tooltip>
 
-                    <Tooltip title="Delete">
-                      <Button danger icon={<DeleteOutlined />} onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(record);
-                      }} />
-                    </Tooltip>
-                  </>
-                )}
+                <Tooltip title="Delete">
+                  <Button danger icon={<DeleteOutlined />} onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(record);
+                  }} />
+                </Tooltip>
               </>
             )}
           </Space>
