@@ -25,6 +25,7 @@ const formatDate = (dateString) => {
 
 const NotificationDropdown = () => {
   const [notifications, setNotifications] = useState([]);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -227,6 +228,14 @@ const NotificationDropdown = () => {
     }
   };
 
+  // Filter notifications based on showCompleted state
+  const filteredNotifications = showCompleted 
+    ? notifications
+    : notifications.map(file => ({
+        ...file,
+        messages: (file.messages || []).filter(msg => !msg.is_done)
+      })).filter(file => file.messages.length > 0);
+
   // Count pending tasks (messages and instructions that are not marked as done)
   const pendingTasksCount = notifications.reduce((count, file) => {
     return count + (file.messages || []).filter(msg => !msg.is_done).length;
@@ -236,13 +245,30 @@ const NotificationDropdown = () => {
     {
       key: '1',
       label: (
-        <div style={{ width: 350, maxHeight: 400, overflow: 'auto' }}>
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid #f0f0f0' }}>
+        <div style={{ width: 350, maxHeight: 500, overflow: 'auto' }}>
+          <div style={{ 
+            padding: '8px 12px', 
+            borderBottom: '1px solid #f0f0f0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
             <Text strong>Task Notifications</Text>
+            <Button 
+              type="text" 
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCompleted(!showCompleted);
+              }}
+              style={{ fontSize: '12px' }}
+            >
+              {showCompleted ? 'Hide Completed' : 'Show Completed'}
+            </Button>
           </div>
           {loading ? (
             <div style={{ padding: 20, textAlign: 'center' }}>Loading notifications...</div>
-          ) : notifications.length === 0 ? (
+          ) : filteredNotifications.length === 0 ? (
             <Empty
               description="No pending tasks"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -251,7 +277,7 @@ const NotificationDropdown = () => {
           ) : (
             <List
               itemLayout="horizontal"
-              dataSource={notifications}
+              dataSource={filteredNotifications}
               renderItem={file => (
                 <List.Item>
                   <List.Item.Meta
