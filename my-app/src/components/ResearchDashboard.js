@@ -226,48 +226,69 @@ const ResearchDashboard = () => {
 
 
 
-  const fetchSubFolders = async (mainFolder) => {
+  const fetchSubFolders = async (folderPath) => {
     try {
-      const res = await axios.get(`${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
+      console.log(`Fetching subfolders for: ${folderPath}`);
+      const res = await axios.get(
+        `${BASE_URL}/directory/list?directory=${encodeURIComponent(folderPath)}`,
         { withCredentials: true }
       );
 
-      // Filter to only include directories
+      // Filter to only include directories and sort them alphabetically
       const folders = (res.data || [])
         .filter(item => item.type === 'directory')
         .map(folder => ({
           name: folder.name,
-          path: `${mainFolder}/${folder.name}`
-        }));
+          path: folderPath ? `${folderPath}/${folder.name}` : folder.name
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-      setSubFolders(folders);
+      console.log(`Found ${folders.length} subfolders in ${folderPath}:`, folders);
+      return folders;
     } catch (error) {
       console.error('Error fetching subfolders:', error);
       message.error('Failed to load subfolders');
-      setSubFolders([]);
+      return [];
     }
   };
 
-  const handleMainFolderChange = (value) => {
+  const handleMainFolderChange = async (value) => {
     setSelectedMainFolder(value);
     setSelectedSubFolder('');
-    setMoveDestination(value); // Set the destination to the main folder by default
+    setSelectedDestination(value);
+    setMoveDestination(value);
 
     if (value) {
-      fetchSubFolders(value);
+      const folders = await fetchSubFolders(value);
+      setSubFolders(folders);
     } else {
       setSubFolders([]);
     }
   };
 
-  const handleSubFolderChange = (value) => {
+  const handleSubFolderChange = async (value) => {
     setSelectedSubFolder(value);
-    if (value) {
-      // Combine main folder and subfolder for the full path
-      setMoveDestination(`${selectedMainFolder}/${value}`);
-    } else {
-      // If no subfolder is selected, use just the main folder
+    
+    // If value is empty, we're going back to the main folder
+    if (!value) {
+      setSelectedDestination(selectedMainFolder);
       setMoveDestination(selectedMainFolder);
+      return;
+    }
+
+    // If we have a value, it could be a path with multiple segments
+    const fullPath = value.startsWith(selectedMainFolder) ? value : `${selectedMainFolder}/${value}`;
+    setSelectedDestination(fullPath);
+    setMoveDestination(fullPath);
+
+    // Load subfolders for the selected path
+    try {
+      const folders = await fetchSubFolders(fullPath);
+      setSubFolders(folders);
+    } catch (error) {
+      console.error('Error loading subfolders:', error);
+      message.error('Failed to load subfolders');
+      setSubFolders([]);
     }
   };
 
