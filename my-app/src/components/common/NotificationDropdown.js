@@ -13,6 +13,8 @@ import { useNavigate } from 'react-router-dom';
 
 const { Text } = Typography;
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 // Helper function to format date
 const formatDate = (dateString) => {
   if (!dateString) return '';
@@ -46,10 +48,13 @@ const NotificationDropdown = () => {
       const timestamp = new Date().getTime();
       
       // First, try to get file messages
-      const messagesRes = await axios.get(`/files-with-messages?_t=${timestamp}`, {
-        withCredentials: true,
-        timeout: 10000
-      });
+      const messagesRes = await axios.get(
+        `${BASE_URL}/files-with-messages?_t=${timestamp}`, // updated
+        {
+          withCredentials: true,
+          timeout: 10000
+        }
+      );
 
       // Process file messages
       const messageNotifications = Array.isArray(messagesRes?.data) ? messagesRes.data : [];
@@ -59,10 +64,13 @@ const NotificationDropdown = () => {
       
       // Try to get file instructions if the endpoint exists
       try {
-        const instructionsRes = await axios.get(`/file-instructions?status=pending&_t=${timestamp}`, {
-          withCredentials: true,
-          timeout: 5000 // Shorter timeout for this optional request
-        });
+        const instructionsRes = await axios.get(
+          `${BASE_URL}/file-instructions?status=pending&_t=${timestamp}`, // updated
+          {
+            withCredentials: true,
+            timeout: 5000 // Shorter timeout for this optional request
+          }
+        );
         
         // Process file instructions
         instructionNotifications = Array.isArray(instructionsRes?.data) 
@@ -140,14 +148,14 @@ const NotificationDropdown = () => {
       if (isInstruction) {
         // Handle marking instruction as completed
         await axios.patch(
-          `/file-instructions/${messageId.replace('inst_', '')}/complete`,
+          `${BASE_URL}/file-instructions/${messageId.replace('inst_', '')}/complete`, // updated
           {},
           { withCredentials: true }
         );
       } else {
         // Handle regular message
         await axios.patch(
-          `/file/message/${messageId}/done`,
+          `${BASE_URL}/file/message/${messageId}/done`, // updated
           {},
           { withCredentials: true }
         );
