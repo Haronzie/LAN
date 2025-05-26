@@ -540,7 +540,7 @@ const TrainingDashboard = () => {
         : null;
         
       const itemsToSet = [
-        ...(parentPath ? [{
+        ...(parentPath && parentPath !== 'Training' ? [{
           name: '..',
           type: 'directory',
           isParent: true,
