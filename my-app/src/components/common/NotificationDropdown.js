@@ -157,13 +157,31 @@ const NotificationDropdown = () => {
     }
   };
 
-  const navigateToFile = (file) => {
+  const navigateToFile = (file, e = null) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
     console.log('Navigating to file in dropdown:', file);
+    
+    // Clear any previous navigation state
+    localStorage.removeItem('openFileAfterNavigation');
+    localStorage.removeItem('forceOpenFile');
+    localStorage.removeItem('notificationNavigation');
+    localStorage.removeItem('directNavigation');
     
     // For instructions, we might not have a file to navigate to
     if (file.isInstruction) {
-      // Handle navigation for instructions (if needed)
-      console.log('This is a file instruction');
+      console.log('This is a file instruction, navigating to file if available');
+      if (file.file_id) {
+        // If we have a file_id, try to navigate to it
+        navigateToFile({
+          ...file,
+          id: file.file_id,
+          directory: file.directory || ''
+        });
+      }
       return;
     }
     
@@ -240,7 +258,20 @@ const NotificationDropdown = () => {
                     avatar={<Avatar icon={<FileOutlined />} style={{ backgroundColor: '#1890ff' }} />}
                     title={
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <a onClick={() => navigateToFile(file)}>
+                        <a 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            navigateToFile(file, e);
+                          }}
+                          style={{
+                            color: '#1890ff',
+                            cursor: 'pointer',
+                            ':hover': {
+                              textDecoration: 'underline'
+                            }
+                          }}
+                        >
                           {file.name || 'File Instruction'}
                         </a>
                         {file.isInstruction && (
@@ -273,16 +304,26 @@ const NotificationDropdown = () => {
                                   if (!msg.isInstruction) {
                                     console.log('Notification message clicked, navigating to:', file.name, 'in', file.directory);
                                     localStorage.setItem('highPriorityNavigation', 'true');
-                                    navigateToFile(file);
+                                    navigateToFile(file, e);
+                                  } else if (file.file_id) {
+                                    // For instructions with file_id, navigate to the file
+                                    navigateToFile({
+                                      ...file,
+                                      id: file.file_id,
+                                      directory: file.directory || ''
+                                    }, e);
                                   }
                                 }}
                                 style={{ 
-                                  cursor: msg.isInstruction ? 'default' : 'pointer', 
-                                  textDecoration: msg.isInstruction ? 'none' : 'underline', 
+                                  cursor: 'pointer',
+                                  textDecoration: 'none',
                                   fontWeight: 'bold',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: 8
+                                  gap: 8,
+                                  ':hover': {
+                                    textDecoration: 'underline'
+                                  }
                                 }}
                               >
                                 {msg.isInstruction ? (
@@ -290,7 +331,9 @@ const NotificationDropdown = () => {
                                 ) : (
                                   <FileOutlined style={{ color: '#1890ff' }} />
                                 )}
-                                {msg.message}
+                                <span style={{ color: msg.isInstruction ? '#faad14' : '#1890ff' }}>
+                                  {msg.message}
+                                </span>
                               </div>
                             </div>
                             <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
