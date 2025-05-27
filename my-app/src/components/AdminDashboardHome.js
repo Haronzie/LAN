@@ -54,7 +54,31 @@ const AdminDashboardHome = () => {
   const getRole = (user) => user.role || user.userRole || user.type || '';
 
   const totalUsers = users.length;
-  const totalFiles = files.length;
+  
+  // Count files in the three main folders and their subdirectories
+  const countFilesInFolders = () => {
+    const validFolders = ['operation', 'training', 'research'];
+    let count = 0;
+    
+    files.forEach(file => {
+      if (!file.directory) return;
+      
+      // Get the first part of the path (main folder)
+      const firstSlash = file.directory.indexOf('/');
+      const mainFolder = firstSlash === -1 
+        ? file.directory.toLowerCase() 
+        : file.directory.substring(0, firstSlash).toLowerCase();
+      
+      // Check if the file is in one of the main folders or their subdirectories
+      if (validFolders.includes(mainFolder)) {
+        count++;
+      }
+    });
+    
+    return count;
+  };
+  
+  const totalFiles = countFilesInFolders();
   const adminCount = users.filter((u) => getRole(u) === 'admin').length;
   const regularCount = users.filter((u) => getRole(u) === 'user').length;
 
@@ -70,15 +94,23 @@ const getMonthYear = (dateString) => {
 const validFolders = ['operation', 'training', 'research'];
 const uploadsPerFolderMonth = {};
 files.forEach(file => {
-  let folder = (file.directory || '').toLowerCase();
-  if (!validFolders.includes(folder)) return;
+  if (!file.directory) return;
+  
+  // Get the first part of the path (main folder)
+  const firstSlash = file.directory.indexOf('/');
+  const mainFolder = firstSlash === -1 
+    ? file.directory.toLowerCase() 
+    : file.directory.substring(0, firstSlash).toLowerCase();
+  
+  if (!validFolders.includes(mainFolder)) return;
+  
   const dateField = file.created_at; // or file.uploaded_at if available
   if (!dateField) return;
   const monthYear = getMonthYear(dateField);
 
   if (!uploadsPerFolderMonth[monthYear]) uploadsPerFolderMonth[monthYear] = {};
-  if (!uploadsPerFolderMonth[monthYear][folder]) uploadsPerFolderMonth[monthYear][folder] = 0;
-  uploadsPerFolderMonth[monthYear][folder] += 1;
+  if (!uploadsPerFolderMonth[monthYear][mainFolder]) uploadsPerFolderMonth[monthYear][mainFolder] = 0;
+  uploadsPerFolderMonth[monthYear][mainFolder] += 1;
 });
 
 // Transform data for Chart.js format - we need each month to have all folder values
