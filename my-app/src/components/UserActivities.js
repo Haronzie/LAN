@@ -112,7 +112,24 @@ const UserActivities = () => {
   const filteredActivities = useMemo(() => {
     return activities.filter(activity => {
       if (!activity.event) return false;
+      
       const event = activity.event.toLowerCase();
+      const details = activity.details ? activity.details.toLowerCase() : '';
+      
+      // Skip file/folder related activities
+      if (
+        event.includes('file') || 
+        event.includes('folder') || 
+        event.includes('upload') ||
+        event.includes('download') ||
+        details.includes('file') ||
+        details.includes('folder') ||
+        details.includes('upload') ||
+        details.includes('download')
+      ) {
+        return false;
+      }
+      
       // Only include user management related events
       return (
         event.includes('user') ||
@@ -123,7 +140,18 @@ const UserActivities = () => {
         event.includes('register') ||
         event.includes('permission') ||
         event.includes('role') ||
-        event.includes('profile')
+        event.includes('profile') ||
+        event.includes('account') ||
+        details.includes('user') ||
+        details.includes('login') ||
+        details.includes('logout') ||
+        details.includes('sign') ||
+        details.includes('auth') ||
+        details.includes('register') ||
+        details.includes('permission') ||
+        details.includes('role') ||
+        details.includes('profile') ||
+        details.includes('account')
       );
     });
   }, [activities]);
