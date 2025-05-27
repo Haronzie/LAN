@@ -761,38 +761,113 @@ const folderColorsArray = Object.values(folderColors);
               <List
                 size="small"
                 dataSource={auditLogs.slice(0, 10)}
-                renderItem={(item) => (
-                  <List.Item 
-                    style={{ 
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #edf2f7',
-                      transition: 'background-color 0.2s'
-                    }}
-                    className="hover:bg-gray-50"
-                  >
-                    <div style={{ width: '100%' }}>
-                      <div style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between',
-                        marginBottom: 4
-                      }}>
-                        <Text strong style={{ fontSize: 12, color: '#4a5568' }}>
-                          {new Date(item.created_at).toLocaleString()}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {item.user_name || 'System'}
-                        </Text>
+                renderItem={(item) => {
+                  // Parse the action and details to create a more user-friendly message
+                  const getActionIcon = (action) => {
+                    switch(action?.toLowerCase()) {
+                      case 'login':
+                        return <CheckCircleOutlined style={{ color: '#10b981', marginRight: 8 }} />;
+                      case 'upload':
+                        return <FileOutlined style={{ color: '#3b82f6', marginRight: 8 }} />;
+                      case 'delete':
+                        return <FileOutlined style={{ color: '#ef4444', marginRight: 8 }} />;
+                      case 'update':
+                        return <FileOutlined style={{ color: '#f59e0b', marginRight: 8 }} />;
+                      default:
+                        return <MessageOutlined style={{ color: '#8b5cf6', marginRight: 8 }} />;
+                    }
+                  };
+
+                  // Format the timestamp to be more readable
+                  const formatTimeAgo = (dateString) => {
+                    const date = new Date(dateString);
+                    const now = new Date();
+                    const diffInHours = Math.floor((now - date) / (1000 * 60 * 60));
+                    
+                    if (diffInHours < 1) {
+                      const diffInMinutes = Math.floor((now - date) / (1000 * 60));
+                      return `${diffInMinutes} ${diffInMinutes === 1 ? 'minute' : 'minutes'} ago`;
+                    } else if (diffInHours < 24) {
+                      return `${diffInHours} ${diffInHours === 1 ? 'hour' : 'hours'} ago`;
+                    } else {
+                      return date.toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      });
+                    }
+                  };
+
+                  // Parse the details to extract relevant information
+                  const parseDetails = (details) => {
+                    try {
+                      // If details is a string that looks like JSON, parse it
+                      if (typeof details === 'string' && (details.startsWith('{') || details.startsWith('['))) {
+                        const parsed = JSON.parse(details);
+                        if (parsed.message) return parsed.message;
+                      }
+                      return details;
+                    } catch (e) {
+                      return details;
+                    }
+                  };
+
+                  return (
+                    <List.Item 
+                      style={{ 
+                        padding: '12px 16px',
+                        borderBottom: '1px solid #edf2f7',
+                        transition: 'background-color 0.2s',
+                        display: 'flex',
+                        alignItems: 'flex-start'
+                      }}
+                      className="hover:bg-gray-50"
+                    >
+                      <div style={{ marginRight: 12, marginTop: 2 }}>
+                        {getActionIcon(item.action)}
                       </div>
-                      <Text style={{ 
-                        display: 'block',
-                        fontSize: 13,
-                        lineHeight: 1.4
-                      }}>
-                        {item.details}
-                      </Text>
-                    </div>
-                  </List.Item>
-                )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          marginBottom: 4,
+                          alignItems: 'center'
+                        }}>
+                          <Text strong style={{ fontSize: 13, color: '#2d3748' }}>
+                            {item.user_name || 'System'}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
+                            {formatTimeAgo(item.created_at)}
+                          </Text>
+                        </div>
+                        <div style={{ 
+                          fontSize: 13,
+                          lineHeight: 1.4,
+                          color: '#4a5568',
+                          wordBreak: 'break-word'
+                        }}>
+                          {parseDetails(item.details)}
+                        </div>
+                        {item.action && (
+                          <div style={{ 
+                            marginTop: 4,
+                            display: 'inline-block',
+                            padding: '2px 6px',
+                            backgroundColor: '#f7fafc',
+                            borderRadius: 4,
+                            border: '1px solid #e2e8f0',
+                            fontSize: 11,
+                            color: '#4a5568',
+                            textTransform: 'capitalize'
+                          }}>
+                            {item.action}
+                          </div>
+                        )}
+                      </div>
+                    </List.Item>
+                  );
+                }}
               />
             ) : (
               <div style={{ 
