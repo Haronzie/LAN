@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Layout, 
   Table, 
@@ -21,7 +21,9 @@ import {
   LoginOutlined, 
   LogoutOutlined,
   ReloadOutlined,
-  TeamOutlined
+  TeamOutlined,
+  LeftOutlined,
+  RightOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
@@ -106,18 +108,22 @@ const UserActivities = () => {
     deletions: 0
   });
   
-  // Filter activities to show only admin-related actions and login/logout
+  // Filter to show only user management related activities
   const filteredActivities = useMemo(() => {
     return activities.filter(activity => {
       if (!activity.event) return false;
       const event = activity.event.toLowerCase();
+      // Only include user management related events
       return (
-        event.includes('admin') ||
-        event.includes('revoke') ||
-        event.includes('edit') ||
-        event.includes('delete') ||
+        event.includes('user') ||
         event.includes('login') ||
-        event.includes('logout')
+        event.includes('logout') ||
+        event.includes('sign') ||
+        event.includes('auth') ||
+        event.includes('register') ||
+        event.includes('permission') ||
+        event.includes('role') ||
+        event.includes('profile')
       );
     });
   }, [activities]);
@@ -152,25 +158,66 @@ const UserActivities = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      if (!isAdmin) return;
-      setUserLoading(true);
-      try {
-        const res = await axios.get(`${BASE_URL}/api/users`, { withCredentials: true });
-        setUsers(Array.isArray(res.data) ? res.data : []);
-      } catch (error) {
-        console.error('Error fetching users:', error);
-        message.error('Failed to load users');
-        setUsers([]);
-      } finally {
-        setUserLoading(false);
-      }
-    };
+  // Function to fetch activities and update stats
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/activities`, { withCredentials: true });
+      const activitiesData = Array.isArray(res.data) ? res.data : [];
+      setActivities(activitiesData);
+      
+      // Calculate and update stats
+      const stats = activitiesData.reduce((acc, activity) => {
+        if (!activity.event) return acc;
+        const event = activity.event.toLowerCase();
+        if (event.includes('login')) acc.logins++;
+        else if (event.includes('logout')) acc.logouts++;
+        else if (event.includes('revoke')) acc.revoked++;
+        else if (event.includes('edit')) acc.edits++;
+        else if (event.includes('delete')) acc.deletions++;
+        return acc;
+      }, { logins: 0, logouts: 0, revoked: 0, edits: 0, deletions: 0 });
+      
+      setActivityStats(stats);
+    } catch (error) {
+      console.error('Error fetching activities:', error);
+      message.error('Failed to load activities');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    fetchActivities();
-    fetchUsers();
+  // Fetch users (admin only)
+  const fetchUsers = useCallback(async () => {
+    if (!isAdmin) return;
+    setUserLoading(true);
+    try {
+      const res = await axios.get(`${BASE_URL}/api/users`, { withCredentials: true });
+      setUsers(Array.isArray(res.data) ? res.data : []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      message.error('Failed to load users');
+    } finally {
+      setUserLoading(false);
+    }
   }, [isAdmin]);
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchData();
+    fetchUsers();
+  }, [fetchData, fetchUsers]);
+
+  // Set up polling for real-time updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchData();
+      if (isAdmin) {
+        fetchUsers();
+      }
+    }, 10000); // Refresh every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [fetchData, fetchUsers, isAdmin]);
 
   const handleLogoutUser = async (userId) => {
     try {
@@ -382,78 +429,22 @@ const UserActivities = () => {
             columns={columns}
             dataSource={filteredActivities}
             rowKey={(record, idx) => record.id || record.timestamp + idx}
-            scroll={{ x: 'max-content', y: 'calc(100vh - 400px)' }}
+            scroll={{ x: 'max-content', y: 'calc(100vh - 500px)' }}
             pagination={{
               pageSize: 10,
               showSizeChanger: true,
-              showQuickJumper: { goButton: <Button size="small">Go</Button> },
-              showTotal: (total, range) => (
-                <span style={{ marginRight: 16, lineHeight: '32px' }}>
-                  {`${range[0]}-${range[1]} of ${total} items`}
-                </span>
-              ),
+              showQuickJumper: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
               pageSizeOptions: ['10', '20', '50', '100'],
               style: { 
-                margin: 0,
-                padding: '12px 16px',
+                margin: '16px 0 0',
+                padding: '16px',
                 backgroundColor: '#fafafa',
-                borderTop: '1px solid #f0f0f0',
-                position: 'sticky',
-                bottom: 0,
-                zIndex: 1,
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '10px',
-                alignItems: 'center',
                 borderRadius: '0 0 8px 8px'
-              },
-              itemRender: (_, type, originalElement) => {
-                if (type === 'prev') {
-                  return <Button size="small" icon={<LeftOutlined />}>Previous</Button>;
-                }
-                if (type === 'next') {
-                  return <Button size="small">Next<RightOutlined /></Button>;
-                }
-                if (type === 'jump-prev' || type === 'jump-next') {
-                  return <span style={{ padding: '0 8px' }}>•••</span>;
-                }
-                return originalElement;
-              },
-              showLessItems: true
-            }}
-            components={{
-              body: {
-                wrapper: (props) => (
-                  <div style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
-                    <div style={{ flex: 1, overflow: 'auto' }}>
-                      {props.children}
-                    </div>
-                  </div>
-                ),
-              },
-              pagination: (props) => {
-                const { className, style, ...restProps } = props;
-                return (
-                  <div style={{ 
-                    ...style, 
-                    position: 'sticky',
-                    bottom: 0,
-                    background: '#fff',
-                    zIndex: 1,
-                    borderTop: '1px solid #f0f0f0',
-                    padding: '12px 16px',
-                    margin: 0
-                  }}>
-                    {React.cloneElement(props.defaultNode, {
-                      style: { ...props.defaultNode.props.style, margin: 0 }
-                    })}
-                  </div>
-                );
               }
             }}
             style={{ 
               width: '100%',
-              overflow: 'auto',
               borderRadius: '8px',
               boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)'
             }}
