@@ -197,13 +197,29 @@ const UserActivities = () => {
       const stats = activitiesData.reduce((acc, activity) => {
         if (!activity.event) return acc;
         const event = activity.event.toLowerCase();
-        if (event.includes('login')) acc.logins++;
-        else if (event.includes('logout')) acc.logouts++;
-        else if (event.includes('revoke')) acc.revoked++;
-        else if (event.includes('edit')) acc.edits++;
-        else if (event.includes('delete')) acc.deletions++;
+        
+        // Check for login/logout events first
+        if (event.includes('logged in')) {
+          acc.logins++;
+        } else if (event.includes('logged out')) {
+          acc.logouts++;
+        } 
+        // Then check for other admin actions
+        else if (event.includes('revoke')) {
+          acc.revoked++;
+        } else if (event.includes('edit')) {
+          acc.edits++;
+        } else if (event.includes('delete')) {
+          acc.deletions++;
+        }
         return acc;
-      }, { logins: 0, logouts: 0, revoked: 0, edits: 0, deletions: 0 });
+      }, { 
+        logins: 0, 
+        logouts: 0, 
+        revoked: 0, 
+        edits: 0, 
+        deletions: 0 
+      });
       
       setActivityStats(stats);
     } catch (error) {
