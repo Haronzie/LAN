@@ -872,20 +872,27 @@ const folderColorsArray = Object.values(folderColors);
                         if (parsed.message) message = parsed.message;
                       }
                       
-                      // If this is a file/folder operation, include the username with highlighting
+                      // Get the current username from the item
+                      const currentUsername = item.user_name || 'System';
+                      
+                      // If this is a file/folder operation, format the message
                       const action = (item.action || '').toLowerCase();
                       if (['upload', 'delete', 'update', 'create', 'modify', 'rename', 'move', 'copy'].includes(action)) {
-                        const userName = item.user_name || 'System';
+                        // Remove the username from the message if it's already shown in the header
+                        let cleanMessage = message;
+                        if (message.startsWith(`${currentUsername} `)) {
+                          cleanMessage = message.substring(currentUsername.length).trim();
+                        }
+                        
                         const actionText = action.endsWith('e') ? `${action}d` : `${action}ed`;
                         return (
                           <span>
-                            <Text strong style={{ color: '#4f46e5' }}>{userName}</Text>
-                            {` ${actionText} `}
-                            {message}
+                            {cleanMessage}
                           </span>
                         );
                       }
                       
+                      // For other types of messages, just return as is
                       return <span>{message}</span>;
                     } catch (e) {
                       return details;
@@ -913,9 +920,12 @@ const folderColorsArray = Object.values(folderColors);
                           marginBottom: 4,
                           alignItems: 'center'
                         }}>
-                          <Text strong style={{ fontSize: 13, color: '#2d3748' }}>
-                            {item.user_name || 'System'}
-                          </Text>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <UserOutlined style={{ color: '#718096', marginRight: 6, fontSize: 12 }} />
+                            <Text strong style={{ fontSize: 13, color: '#2d3748' }}>
+                              {item.user_name || 'System'}
+                            </Text>
+                          </div>
                           <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
                             {formatTimeAgo(item.created_at)}
                           </Text>

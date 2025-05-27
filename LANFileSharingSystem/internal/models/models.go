@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -1211,21 +1212,32 @@ func (app *App) LogAudit(username string, fileID int, action, details string) {
 		nullableFileID = sql.NullInt64{Valid: false}
 	}
 
+	// Check if the action is being performed by admin on behalf of another user
+	usernameAtAction := username
+	if username == "admin" {
+		// Try to extract the target username from the details if available
+		// This is a simple pattern match - adjust based on your actual details format
+		if matches := regexp.MustCompile(`user '([^']+)'`).FindStringSubmatch(details); len(matches) > 1 {
+			usernameAtAction = matches[1]
+		}
+	}
+
 	_, err := app.DB.Exec(`
 		INSERT INTO audit_logs (user_username, username_at_action, file_id, action, details)
 		VALUES ($1, $2, $3, $4, $5)
 	`,
-		username,       // user_username
-		username,       // username_at_action (the snapshot)
-		nullableFileID, // file_id
+		username,          // user_username (who performed the action)
+		usernameAtAction,  // username_at_action (who the action was performed on/for)
+		nullableFileID,    // file_id
 		action,
 		details,
 	)
 
+
 	if err != nil {
 		log.Printf("SQL Error in LogAudit: %v", err)
 	} else {
-		log.Println("Audit log inserted successfully!")
+		log.Printf("Audit log inserted successfully! User: %s, Action: %s, Target: %s", username, action, usernameAtAction)
 	}
 }
 
