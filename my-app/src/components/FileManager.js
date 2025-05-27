@@ -139,6 +139,7 @@ function formatFileSize(size) {
 const FileManager = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showLoading, setShowLoading] = useState(false);
   const [currentPath, setCurrentPath] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -555,9 +556,35 @@ const FileManager = () => {
     });
   }, [currentPath]);
 
-  useEffect(() => {
-    fetchItems();
-  }, [currentPath]);
+  // Handle folder click with loading state management
+  const handleFolderClick = async (folderName) => {
+    try {
+      setLoading(true);
+      setShowLoading(false);
+      
+      // Set a timer to show loading indicator if the operation takes more than 100ms
+      const loadingTimer = setTimeout(() => {
+        setShowLoading(true);
+      }, 100);
+      
+      const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+      setCurrentPath(newPath);
+      setCurrentPage(1);
+      
+      // Wait for items to load
+      await fetchItems();
+      
+      // Clear the loading timer and hide the loading indicator
+      clearTimeout(loadingTimer);
+      setShowLoading(false);
+    } catch (error) {
+      console.error('Error navigating to folder:', error);
+      message.error('Failed to load folder contents');
+    } finally {
+      setLoading(false);
+      setShowLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Refresh the file list every 10 seconds
@@ -713,13 +740,6 @@ const FileManager = () => {
       console.error('Create folder error:', error);
       message.error(error.response?.data?.error || 'Error creating folder');
     }
-  };
-
-  const handleFolderClick = (folderName) => {
-    // Set loading immediately to prevent table flash
-    setLoading(true);
-    const newPath = isRoot ? folderName : path.join(currentPath, folderName);
-    setCurrentPath(newPath);
   };
 
   // This function is currently not used but might be useful for future enhancements
@@ -1841,19 +1861,19 @@ const FileManager = () => {
         console.log('Moving file with:', {
           id: fileId,
           filename: moveItem.name,
-          old_parent: currentPath,
-          new_parent: moveDestination,
+          old_directory: currentPath,
+          new_directory: moveDestination,
           overwrite
         });
 
         await axios.post(
-          `${BASE_URL}/files/move`,
+          `${BASE_URL}/move-file`,
           {
             id: fileId,
-            name: moveItem.name,
+            filename: moveItem.name,
             old_parent: currentPath,
             new_parent: moveDestination,
-            overwrite,
+            overwrite: overwrite
           },
           { withCredentials: true }
         );
