@@ -40,7 +40,7 @@ const BatchActionsMenu = ({
       style={{ display: 'flex', alignItems: 'center', gap: 8 }}
       onClick={handleButtonClick}
     >
-      Select Files
+      Select {itemType === 'user' ? 'Users' : 'Items'}
     </Button>
   );
 };
