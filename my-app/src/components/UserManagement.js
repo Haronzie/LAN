@@ -462,7 +462,7 @@ const UserManagement = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   prefix={<SearchOutlined />}
                   style={{ width: 300, borderRadius: token.borderRadiusSM }}
-                  allowClear
+                  allowClear={!!searchTerm}
                 />
                 {filteredUsers.length > 0 && (
                   <Text type="secondary" style={{ fontSize: 14 }}>
