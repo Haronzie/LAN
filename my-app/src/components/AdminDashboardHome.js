@@ -299,6 +299,45 @@ const folderColorsArray = Object.values(folderColors);
     }
   };
 
+  // Format activity description based on action type
+  const getActivityDescription = (action, actionType) => {
+    const actionText = action || '';
+    const type = (actionType || '').toLowerCase();
+    
+    const actionMap = {
+      'upload': 'uploaded a file',
+      'delete': 'deleted a file',
+      'update': 'updated a file',
+      'login': 'logged in',
+      'logout': 'logged out',
+      'create': 'created a new',
+      'modify': 'modified',
+      'move': 'moved',
+      'rename': 'renamed',
+      'share': 'shared',
+      'download': 'downloaded'
+    };
+
+    const typeMap = {
+      'file': 'file',
+      'folder': 'folder',
+      'user': 'user',
+      'permission': 'permission',
+      'settings': 'settings'
+    };
+
+    const actionTextFormatted = actionMap[type] || actionText.toLowerCase();
+    const typeText = typeMap[type] || '';
+
+    return (
+      <>
+        <span style={{ color: '#2d3748', fontWeight: 500 }}>{actionTextFormatted}</span>
+        {typeText && <span> {typeText}</span>}
+        {actionText && !actionMap[type] && <span>: {actionText}</span>}
+      </>
+    );
+  };
+
   const fetchActivities = async () => {
     try {
       const res = await axios.get(`${BASE_URL}/activities`, { withCredentials: true });
@@ -930,22 +969,43 @@ const folderColorsArray = Object.values(folderColors);
                       <div style={{ 
                         display: 'flex', 
                         justifyContent: 'space-between',
-                        marginBottom: 4
+                        marginBottom: 4,
+                        alignItems: 'center'
                       }}>
-                        <Text strong style={{ fontSize: 12, color: '#4a5568' }}>
-                          {new Date(item.timestamp || item.created_at).toLocaleString()}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {item.user_name || 'System'}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            backgroundColor: '#4f46e5',
+                            flexShrink: 0
+                          }} />
+                          <Text strong style={{ fontSize: 13, color: '#2d3748' }}>
+                            {item.user_name || 'System'}
+                          </Text>
+                        </div>
+                        <Text type="secondary" style={{ fontSize: 11, color: '#718096' }}>
+                          {new Date(item.timestamp || item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </Text>
                       </div>
-                      <Text style={{ 
-                        display: 'block',
+                      <div style={{ 
                         fontSize: 13,
-                        lineHeight: 1.4
+                        lineHeight: 1.4,
+                        color: '#4a5568',
+                        marginLeft: '16px',
+                        marginTop: 2
                       }}>
-                        {item.action || item.details}
-                      </Text>
+                        <div style={{ marginBottom: 4 }}>
+                          {getActivityDescription(item.action || item.details, item.action_type)}
+                        </div>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {new Date(item.timestamp || item.created_at).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </Text>
+                      </div>
                     </div>
                   </List.Item>
                 )}
