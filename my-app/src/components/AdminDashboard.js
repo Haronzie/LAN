@@ -13,15 +13,13 @@ import {
   UserOutlined,
   SettingOutlined,
   FileOutlined,
-  MenuOutlined,
-  BellOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined
+  MenuOutlined
 } from '@ant-design/icons';
 import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import NotificationDropdown from './common/NotificationDropdown';
 import UserActivities from './UserActivities';
+import AdminInstructionDropdown from './admin/AdminInstructionDropdown';
 import './dashboard-fix.css'; // Import dashboard CSS fixes
 
 // Welcome Message Component
@@ -159,67 +157,12 @@ const AdminDashboard = () => {
 
   // Show welcome message only on initial load
   const [showWelcome, setShowWelcome] = useState(true);
-  const [taskNotifications, setTaskNotifications] = useState([]);
-  const [loadingTasks, setLoadingTasks] = useState(false);
-  const [taskDropdownVisible, setTaskDropdownVisible] = useState(false);
-  const dropdownRef = useRef(null);
   
   useEffect(() => {
     // Hide welcome message after 5 seconds
     const timer = setTimeout(() => setShowWelcome(false), 5000);
     return () => clearTimeout(timer);
   }, []);
-
-  const fetchTaskNotifications = async () => {
-    try {
-      setLoadingTasks(true);
-      const baseUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
-      const response = await axios.get(`${baseUrl}/file/messages`, { 
-        withCredentials: true 
-      });
-      setTaskNotifications(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error('Error fetching task notifications:', error);
-      message.error('Failed to load task notifications');
-    } finally {
-      setLoadingTasks(false);
-    }
-  };
-
-  const handleMarkTaskDone = async (messageId) => {
-    try {
-      const baseUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
-      await axios.patch(
-        `${baseUrl}/file/message/${messageId}/done`,
-        {},
-        { withCredentials: true }
-      );
-      fetchTaskNotifications();
-      message.success('Task marked as completed');
-    } catch (error) {
-      console.error('Error updating task status:', error);
-      message.error('Failed to update task status');
-    }
-  };
-
-  useEffect(() => {
-    fetchTaskNotifications();
-    
-    // Close dropdown when clicking outside
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setTaskDropdownVisible(false);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const pendingTasks = taskNotifications.filter(task => !task.is_done);
-  const completedTasks = taskNotifications.filter(task => task.is_done);
 
   return (
     <ConfigProvider warning={{ strict: false }}>
@@ -289,186 +232,8 @@ const AdminDashboard = () => {
             )}
             <div style={{ flex: 1 }} />
             
-            {/* Task Notifications Dropdown */}
-            <div ref={dropdownRef} style={{ position: 'relative', marginRight: 16 }}>
-              <Button 
-                type="text"
-                icon={
-                  <Badge 
-                    count={pendingTasks.length} 
-                    size="small"
-                    style={{ 
-                      backgroundColor: pendingTasks.length > 0 ? '#ff4d4f' : '#d9d9d9',
-                      boxShadow: 'none',
-                      fontSize: '10px',
-                      lineHeight: '16px',
-                      height: '16px',
-                      minWidth: '16px',
-                      padding: '0 4px',
-                      top: '-2px',
-                      right: '-2px'
-                    }}
-                  >
-                    <BellOutlined style={{ fontSize: '20px', color: '#595959' }} />
-                  </Badge>
-                }
-                onClick={() => {
-                  setTaskDropdownVisible(!taskDropdownVisible);
-                  if (!taskDropdownVisible) {
-                    fetchTaskNotifications();
-                  }
-                }}
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '50%',
-                  marginRight: '8px'
-                }}
-              />
-              
-              {taskDropdownVisible && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  width: '350px',
-                  backgroundColor: '#fff',
-                  borderRadius: '8px',
-                  boxShadow: '0 3px 10px rgba(0, 0, 0, 0.15)',
-                  zIndex: 1000,
-                  maxHeight: '500px',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column'
-                }}>
-                  <div style={{
-                    padding: '12px 16px',
-                    borderBottom: '1px solid #f0f0f0',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <strong>Task Notifications</strong>
-                    <Button 
-                      type="text" 
-                      size="small" 
-                      loading={loadingTasks}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        fetchTaskNotifications();
-                      }}
-                    >
-                      Refresh
-                    </Button>
-                  </div>
-                  
-                  <div style={{ overflowY: 'auto', flex: 1 }}>
-                    {loadingTasks ? (
-                      <div style={{ padding: '16px', textAlign: 'center' }}>Loading tasks...</div>
-                    ) : taskNotifications.length === 0 ? (
-                      <div style={{ padding: '24px', textAlign: 'center', color: '#8c8c8c' }}>
-                        No tasks found
-                      </div>
-                    ) : (
-                      <>
-                        {pendingTasks.length > 0 && (
-                          <div style={{ padding: '8px 0' }}>
-                            <div style={{ padding: '0 16px 8px', color: '#8c8c8c', fontSize: '12px' }}>
-                              PENDING
-                            </div>
-                            {pendingTasks.map(task => (
-                              <div 
-                                key={task.id}
-                                style={{
-                                  padding: '12px 16px',
-                                  borderBottom: '1px solid #f0f0f0',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'flex-start',
-                                  gap: '12px',
-                                  backgroundColor: '#fff'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9f9f9'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-                              >
-                                <ClockCircleOutlined style={{ color: '#faad14', marginTop: '2px' }} />
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ fontWeight: 500, marginBottom: '4px' }}>
-                                    {task.message}
-                                  </div>
-                                  <div style={{ fontSize: '12px', color: '#8c8c8c' }}>
-                                    File: {task.file_name || 'N/A'}
-                                  </div>
-                                </div>
-                                <Button 
-                                  type="link" 
-                                  size="small" 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleMarkTaskDone(task.id);
-                                  }}
-                                  style={{ padding: '0 8px', height: '24px', fontSize: '12px' }}
-                                >
-                                  Mark Done
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        
-                        {completedTasks.length > 0 && (
-                          <div style={{ padding: '8px 0' }}>
-                            <div style={{ padding: '8px 16px', color: '#8c8c8c', fontSize: '12px' }}>
-                              COMPLETED
-                            </div>
-                            {completedTasks.map(task => (
-                              <div 
-                                key={task.id}
-                                style={{
-                                  padding: '12px 16px',
-                                  borderBottom: '1px solid #f0f0f0',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'flex-start',
-                                  gap: '12px',
-                                  backgroundColor: '#f9f9f9',
-                                  opacity: 0.8
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
-                              >
-                                <CheckCircleOutlined style={{ color: '#52c41a', marginTop: '2px' }} />
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ textDecoration: 'line-through', color: '#8c8c8c', marginBottom: '4px' }}>
-                                    {task.message}
-                                  </div>
-                                  <div style={{ fontSize: '12px', color: '#bfbfbf' }}>
-                                    File: {task.file_name || 'N/A'}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  
-                  <div style={{ 
-                    padding: '12px 16px', 
-                    borderTop: '1px solid #f0f0f0',
-                    textAlign: 'center',
-                    fontSize: '12px',
-                    color: '#8c8c8c'
-                  }}>
-                    {pendingTasks.length} pending • {completedTasks.length} completed
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Admin Instructions Dropdown */}
+            <AdminInstructionDropdown />
             
             <Button 
               type="primary" 
