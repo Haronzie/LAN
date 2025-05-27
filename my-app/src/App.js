@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
+import { AuthProvider } from './context/AuthContext';
 import Home from './components/Home';
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
@@ -46,66 +47,68 @@ function App() {
 
   return (
     <ConfigProvider warning={{ strict: false }}>
-      <Router>
-        <ToastContainer />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<LoginForm />} />
-          {!adminExists && <Route path="/register" element={<RegisterForm />} />}
+      <AuthProvider>
+        <Router>
+          <ToastContainer />
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<LoginForm />} />
+            {!adminExists && <Route path="/register" element={<RegisterForm />} />}
 
-          {/* API endpoint routes */}
-          <Route path="/upload" element={<div>Upload Page</div>} />
-          <Route path="/copy-file" element={<div>Copy File Page</div>} />
-          <Route path="/move-file" element={<div>Move File Page</div>} />
-          <Route path="/download" element={<div>Download Page</div>} />
-          <Route path="/files" element={<div>Files Listing</div>} />
-          <Route path="/share" element={<div>Share File Page</div>} />
-          <Route path="/file/rename" element={<div>Rename File Page</div>} />
-          <Route path="/download-share" element={<div>Download Shared File Page</div>} />
-          <Route path="/get-user-role" element={<div>Get User Role Page</div>} />
-          <Route path="/user-role" element={<div>User Role Info Page</div>} />
-          <Route path="/files/all" element={<div>All Files Listing</div>} />
+            {/* API endpoint routes */}
+            <Route path="/upload" element={<div>Upload Page</div>} />
+            <Route path="/copy-file" element={<div>Copy File Page</div>} />
+            <Route path="/move-file" element={<div>Move File Page</div>} />
+            <Route path="/download" element={<div>Download Page</div>} />
+            <Route path="/files" element={<div>Files Listing</div>} />
+            <Route path="/share" element={<div>Share File Page</div>} />
+            <Route path="/file/rename" element={<div>Rename File Page</div>} />
+            <Route path="/download-share" element={<div>Download Shared File Page</div>} />
+            <Route path="/get-user-role" element={<div>Get User Role Page</div>} />
+            <Route path="/user-role" element={<div>User Role Info Page</div>} />
+            <Route path="/files/all" element={<div>All Files Listing</div>} />
 
-          <Route path="/directory/create" element={<div>Create Directory</div>} />
-          <Route path="/directory/delete" element={<div>Delete Directory</div>} />
-          <Route path="/directory/rename" element={<div>Rename Directory</div>} />
-          <Route path="/directory/list" element={<div>List Directory</div>} />
-          <Route path="/directory/copy" element={<div>Copy Directory</div>} />
-          <Route path="/directory/tree" element={<div>Directory Tree</div>} />
-          <Route path="/directory/move" element={<div>Move Directory</div>} />
-          <Route path="/download-folder" element={<div>Download Folder</div>} />
+            <Route path="/directory/create" element={<div>Create Directory</div>} />
+            <Route path="/directory/delete" element={<div>Delete Directory</div>} />
+            <Route path="/directory/rename" element={<div>Rename Directory</div>} />
+            <Route path="/directory/list" element={<div>List Directory</div>} />
+            <Route path="/directory/copy" element={<div>Copy Directory</div>} />
+            <Route path="/directory/tree" element={<div>Directory Tree</div>} />
+            <Route path="/directory/move" element={<div>Move Directory</div>} />
+            <Route path="/download-folder" element={<div>Download Folder</div>} />
 
-          <Route path="/inventory" element={<div>Inventory Listing</div>} />
-          <Route path="/inventory/:id" element={<div>Inventory Detail</div>} />
+            <Route path="/inventory" element={<div>Inventory Listing</div>} />
+            <Route path="/inventory/:id" element={<div>Inventory Detail</div>} />
 
-          <Route path="/auditlogs" element={<AuditLog />} />
-          <Route path="/ws" element={<div>WebSocket Connection</div>} />
+            <Route path="/auditlogs" element={<AuditLog />} />
+            <Route path="/ws" element={<div>WebSocket Connection</div>} />
 
-          {/* Admin Dashboard with nested routes */}
-          <Route path="/admin" element={<AdminDashboard />}>
-            <Route index element={<AdminDashboardHome />} />
-            <Route path="users" element={<UserManagement />} />
-            <Route path="files" element={<FileManager />} />
-            <Route path="audit-logs" element={<AuditLog />} />
-            <Route path="user-activities" element={<UserActivities />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="instructions" element={<InstructionsPage />} />
-          </Route>
+            {/* Admin Dashboard with nested routes */}
+            <Route path="/admin" element={<AdminDashboard />}>
+              <Route index element={<AdminDashboardHome />} />
+              <Route path="users" element={<UserManagement />} />
+              <Route path="files" element={<FileManager />} />
+              <Route path="audit-logs" element={<AuditLog />} />
+              <Route path="user-activities" element={<UserActivities />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="instructions" element={<InstructionsPage />} />
+            </Route>
 
-          {/* User Dashboard */}
-          <Route path="/user" element={<UserDashboard />}>
-            <Route index element={<UserDashboardHome />} />
-            <Route path="home" element={<UserDashboardHome />} />
-            <Route path="operation" element={<OperationDashboard />} />
-            <Route path="training" element={<TrainingDashboard />} />
-            <Route path="research" element={<ResearchDashboard />} />
-            <Route path="inventory/*" element={<InventoryDashboard />} />
-            <Route path="settings" element={<UserSettings />} />
-          </Route>
+            {/* User Dashboard */}
+            <Route path="/user" element={<UserDashboard />}>
+              <Route index element={<UserDashboardHome />} />
+              <Route path="home" element={<UserDashboardHome />} />
+              <Route path="operation" element={<OperationDashboard />} />
+              <Route path="training" element={<TrainingDashboard />} />
+              <Route path="research" element={<ResearchDashboard />} />
+              <Route path="inventory/*" element={<InventoryDashboard />} />
+              <Route path="settings" element={<UserSettings />} />
+            </Route>
 
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </Router>
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Router>
+      </AuthProvider>
     </ConfigProvider>
   );
 }
