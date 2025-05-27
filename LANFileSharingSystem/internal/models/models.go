@@ -730,7 +730,7 @@ func (app *App) EnsureDirectoryInDB(name, parent string) error {
 func (app *App) RenameFileRecord(fileID int, newFilename, newFilePath string) error {
 	// Get the directory from the new file path
 	newDir := filepath.Dir(newFilePath)
-	
+
 	// Log the update for debugging
 	log.Printf("🔄 Updating database record for file ID %d:\n  New filename: %s\n  New path: %s\n  Directory: %s",
 		fileID, newFilename, newFilePath, newDir)
@@ -741,27 +741,27 @@ func (app *App) RenameFileRecord(fileID int, newFilename, newFilePath string) er
             file_path = $2,
             directory = $3
         WHERE id = $4
-    `, 
-		newFilename, 
+    `,
+		newFilename,
 		newFilePath,
 		newDir,
 		fileID)
-		
+
 	if err != nil {
 		log.Printf("❌ Database update error: %v", err)
 		return fmt.Errorf("database error: %v", err)
 	}
-	
+
 	// Check if any rows were affected
 	rowsAffected, _ := result.RowsAffected()
 	log.Printf("✅ Updated %d rows in database", rowsAffected)
-	
+
 	if rowsAffected == 0 {
 		errMsg := fmt.Sprintf("no file found with ID: %d", fileID)
 		log.Printf("❌ %s", errMsg)
 		return fmt.Errorf("no file found with ID: %d", fileID)
 	}
-	
+
 	return nil
 }
 
