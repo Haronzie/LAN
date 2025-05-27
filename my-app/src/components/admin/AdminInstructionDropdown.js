@@ -5,12 +5,42 @@ import {
   CheckOutlined, 
   ClockCircleOutlined, 
   UserOutlined,
-  FileOutlined
+  FileOutlined,
+  BellOutlined,
+  BellFilled
 } from '@ant-design/icons';
+import styled, { keyframes, css } from 'styled-components';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const { Text } = Typography;
+
+// Animation for the bell icon
+const ring = keyframes`
+  0% { transform: rotate(0); }
+  25% { transform: rotate(15deg); }
+  50% { transform: rotate(-15deg); }
+  75% { transform: rotate(10deg); }
+  100% { transform: rotate(0); }
+`;
+
+const BellIconWrapper = styled.span`
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.3s;
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+  
+  ${props => props.$hasNotification && css`
+    animation: ${ring} 0.5s ease-in-out;
+    color: #1890ff;
+  `}
+`;
 
 const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
@@ -250,27 +280,21 @@ const AdminInstructionDropdown = () => {
   );
 
   return (
-    <Dropdown 
-      overlay={menu} 
+    <Dropdown
+      overlay={menu}
       trigger={['click']}
-      overlayStyle={{ boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
       placement="bottomRight"
+      overlayStyle={{ zIndex: 1050 }}
     >
-      <Button 
-        type="text" 
-        icon={
-          <Badge 
-            count={instructionCount} 
-            size="small"
-            offset={[5, -5]}
-          >
-            <MessageOutlined style={{ fontSize: 18 }} />
-          </Badge>
-        }
-        style={{ marginLeft: 8 }}
-      >
-        Instructions
-      </Button>
+      <BellIconWrapper $hasNotification={instructionCount > 0}>
+        <Badge count={instructionCount} size="small" offset={[-5, 5]}>
+          {instructionCount > 0 ? (
+            <BellFilled style={{ fontSize: '20px', color: '#ff4d4f' }} />
+          ) : (
+            <BellOutlined style={{ fontSize: '20px' }} />
+          )}
+        </Badge>
+      </BellIconWrapper>
     </Dropdown>
   );
 };

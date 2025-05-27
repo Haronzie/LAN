@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Badge, Dropdown, List, Avatar, Button, Space, Typography, Empty, Tag, Tooltip, message } from 'antd';
 import { 
   BellOutlined, 
+  BellFilled,
   FileOutlined, 
   CheckOutlined, 
   ClockCircleOutlined, 
@@ -9,10 +10,37 @@ import {
   InfoCircleOutlined,
   FolderOpenOutlined
 } from '@ant-design/icons';
+import styled, { keyframes, css } from 'styled-components';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const { Text } = Typography;
+
+// Animation for the bell icon
+const ring = keyframes`
+  0% { transform: rotate(0); }
+  25% { transform: rotate(15deg); }
+  50% { transform: rotate(-15deg); }
+  75% { transform: rotate(10deg); }
+  100% { transform: rotate(0); }
+`;
+
+const BellIconWrapper = styled.span`
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.3s;
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+  
+  ${props => props.$hasNotification && css`
+    animation: ${ring} 0.5s ease-in-out;
+  `}
+`;
 
 const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
 
@@ -610,6 +638,9 @@ const NotificationDropdown = () => {
     },
   ];
 
+  // Use the existing pendingTasksCount that's already calculated above
+  const hasNotifications = pendingTasksCount > 0;
+
   return (
     <Dropdown
       menu={{ items }}
@@ -617,15 +648,18 @@ const NotificationDropdown = () => {
       arrow
       trigger={['click']}
     >
-      <Badge count={pendingTasksCount} overflowCount={99}>
-        <Button
-          type="text"
-          icon={<BellOutlined style={{ fontSize: '20px' }} />}
-          style={{ marginRight: 8 }}
-        />
-      </Badge>
+      <BellIconWrapper $hasNotification={hasNotifications}>
+        <Badge count={pendingTasksCount} overflowCount={99}>
+          {hasNotifications ? (
+            <BellFilled style={{ fontSize: '20px', color: '#ff4d4f' }} />
+          ) : (
+            <BellOutlined style={{ fontSize: '20px' }} />
+          )}
+        </Badge>
+      </BellIconWrapper>
     </Dropdown>
   );
+
 };
 
 export default NotificationDropdown;
