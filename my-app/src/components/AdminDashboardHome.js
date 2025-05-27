@@ -858,15 +858,21 @@ const folderColorsArray = Object.values(folderColors);
                         if (parsed.message) message = parsed.message;
                       }
                       
-                      // If this is a file/folder operation, include the username
+                      // If this is a file/folder operation, include the username with highlighting
                       const action = (item.action || '').toLowerCase();
-                      if (['upload', 'delete', 'update', 'create', 'modify', 'rename'].includes(action)) {
+                      if (['upload', 'delete', 'update', 'create', 'modify', 'rename', 'move', 'copy'].includes(action)) {
                         const userName = item.user_name || 'a user';
                         const actionText = action.endsWith('e') ? `${action}d` : `${action}ed`;
-                        return `${userName} ${actionText} ${message}`;
+                        return (
+                          <span>
+                            <Text strong style={{ color: '#4f46e5' }}>{userName}</Text>
+                            {` ${actionText} `}
+                            {message}
+                          </span>
+                        );
                       }
                       
-                      return message;
+                      return <span>{message}</span>;
                     } catch (e) {
                       return details;
                     }
