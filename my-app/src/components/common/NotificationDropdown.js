@@ -651,7 +651,7 @@ const NotificationDropdown = () => {
       <BellIconWrapper $hasNotification={hasNotifications}>
         <Badge count={pendingTasksCount} overflowCount={99}>
           {hasNotifications ? (
-            <BellFilled style={{ fontSize: '20px', color: '#ff4d4f' }} />
+            <BellFilled style={{ fontSize: '20px', color: '#1890ff' }} />
           ) : (
             <BellOutlined style={{ fontSize: '20px' }} />
           )}
