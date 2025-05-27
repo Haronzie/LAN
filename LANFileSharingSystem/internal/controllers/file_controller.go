@@ -227,12 +227,27 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 
 	existingFR, getErr = fc.App.GetFileRecordByPath(relativePath)
 	if getErr == nil && overwrite {
+		// First, save the new file with a temporary name
+		tempFinalPath := finalDiskPath + ".new"
+		if err := os.Rename(finalDiskPath, tempFinalPath); err != nil {
+			os.Remove(tempFinalPath)
+			models.RespondError(w, http.StatusInternalServerError, "Error preparing file update")
+			return
+		}
+
+		// Try to update the database record
 		fileID := existingFR.ID
 		updateErr := fc.App.UpdateFileMetadata(fileID, handler.Size, handler.Header.Get("Content-Type"))
+		
 		if updateErr != nil {
+			// If update fails, restore the original file
+			os.Rename(tempFinalPath, finalDiskPath)
 			models.RespondError(w, http.StatusInternalServerError, "Error updating file record")
 			return
 		}
+
+		// If we got here, the update was successful, remove the old file
+		os.Remove(tempFinalPath)
 
 		fc.App.LogActivity(user.Username, fmt.Sprintf("Re-uploaded file '%s'", rawFileName))
 		fc.App.LogAudit(user.Username, fileID, "REUPLOAD", fmt.Sprintf("File '%s' re-uploaded", rawFileName))
@@ -928,29 +943,37 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[MoveFile] Checking for existing file at new location: %s", newRelativePath)
 	existingFR, err := fc.App.GetFileRecordByPath(newRelativePath)
 	if err == nil {
-		if req.Overwrite {
-			log.Printf("[MoveFile] Overwriting existing file: %s", existingFR.FilePath)
-			_ = os.Remove(filepath.Join("Cdrrmo", existingFR.FilePath))
+		if !req.Overwrite {
+			// If we're not overwriting and file exists, return a conflict status
+			log.Printf("[MoveFile] File already exists at destination and overwrite is false")
+			models.RespondJSON(w, http.StatusConflict, map[string]interface{}{
+				"error":       "File already exists at destination",
+				"file_exists": true,
+			})
+			return
+		}
 
-			_, deleteErr := fc.App.DeleteFileRecordByPath(existingFR.FilePath)
-			if deleteErr != nil {
-				log.Printf("[MoveFile] Warning: failed to delete existing file record: %v", deleteErr)
-			}
-		} else {
-			attempt := 1
-			for {
-				tempName := fmt.Sprintf("%s (%d)%s", base, attempt, ext)
-				tempRelPath := filepath.Join(req.NewParent, tempName)
-				full := filepath.Join("Cdrrmo", tempRelPath)
-				if _, err := os.Stat(full); os.IsNotExist(err) {
+		// If we reach here, we're overwriting
+		log.Printf("[MoveFile] Overwriting existing file: %s", existingFR.FilePath)
+		// Don't delete the file yet - wait until we're sure the move will succeed
+	} else {
+		// If file doesn't exist at destination, check if we need to handle name conflicts
+		attempt := 1
+		for {
+			tempName := fmt.Sprintf("%s (%d)%s", base, attempt, ext)
+			tempRelPath := filepath.Join(req.NewParent, tempName)
+			full := filepath.Join("Cdrrmo", tempRelPath)
+			if _, err := os.Stat(full); os.IsNotExist(err) {
+				// Only use the new name if we're not overwriting
+				if !req.Overwrite {
 					finalName = tempName
 					newRelativePath = tempRelPath
 					newFullPath = full
 					log.Printf("[MoveFile] Using new filename to avoid conflict: %s", finalName)
-					break
 				}
-				attempt++
+				break
 			}
+			attempt++
 		}
 	}
 
