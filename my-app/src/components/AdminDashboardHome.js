@@ -698,8 +698,8 @@ const folderColorsArray = Object.values(folderColors);
                         x: { 
                           grid: { display: false },
                           ticks: {
-                            maxRotation: 45,
-                            minRotation: 45,
+                            maxRotation: 0,
+                            minRotation: 0,
                             padding: 8,
                             autoSkip: false,
                             font: {
