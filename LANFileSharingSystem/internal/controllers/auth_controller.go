@@ -110,7 +110,7 @@ func (ac *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ac.App.LogActivity(fmt.Sprintf("User '%s' registered with role '%s'", newUser.Username, newUser.Role))
+	ac.App.LogActivity(newUser.Username, fmt.Sprintf("User registered with role '%s'", newUser.Role))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("%s registered successfully", newUser.Username),
@@ -156,7 +156,7 @@ func (ac *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ac.App.LogActivity(fmt.Sprintf("User '%s' logged in", user.Username))
+	ac.App.LogActivity(user.Username, "User logged in")
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message":  "Login successful",
@@ -189,7 +189,7 @@ func (ac *AuthController) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ac.App.LogActivity(fmt.Sprintf("User '%s' logged out.", user.Username))
+	ac.App.LogActivity(user.Username, "User logged out")
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Logout successful"})
 }
 
@@ -268,7 +268,7 @@ func (ac *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request)
 	}
 
 	ac.App.LogAudit(user.Username, 0, "PASSWORD_RESET", "Admin reset their password")
-	ac.App.LogActivity(fmt.Sprintf("Admin '%s' reset their password", user.Username))
+	ac.App.LogActivity(user.Username, "Reset their password")
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Password updated for user '%s'.", user.Username),

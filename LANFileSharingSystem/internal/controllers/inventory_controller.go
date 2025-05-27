@@ -69,7 +69,8 @@ func (ic *InventoryController) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log activity if needed
-	ic.App.LogActivity(fmt.Sprintf("New inventory item '%s' created.", req.ItemName))
+	user, _ := ic.App.GetUserFromSession(r)
+	ic.App.LogActivity(user.Username, fmt.Sprintf("Created inventory item '%s'", req.ItemName))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Item '%s' created successfully", req.ItemName),
 	})
@@ -142,7 +143,8 @@ func (ic *InventoryController) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ic.App.LogActivity(fmt.Sprintf("Inventory item '%d' updated.", id))
+	user, _ := ic.App.GetUserFromSession(r)
+	ic.App.LogActivity(user.Username, fmt.Sprintf("Updated inventory item '%d'", id))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Item '%d' updated successfully", id),
 	})
@@ -172,7 +174,8 @@ func (ic *InventoryController) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ic.App.LogActivity(fmt.Sprintf("Inventory item '%d' deleted.", id))
+	user, _ := ic.App.GetUserFromSession(r)
+	ic.App.LogActivity(user.Username, fmt.Sprintf("Deleted inventory item '%d'", id))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Item '%d' deleted successfully", id),
 	})

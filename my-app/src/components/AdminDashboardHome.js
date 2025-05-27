@@ -351,7 +351,14 @@ const folderColorsArray = Object.values(folderColors);
   const fetchActivities = async () => {
     try {
       const res = await axios.get(`${BASE_URL}/activities`, { withCredentials: true });
-      setActivities(Array.isArray(res.data) ? res.data : []);
+      // Ensure each activity has a user_name field, defaulting to 'System' if not available
+      const activitiesWithUsernames = Array.isArray(res.data) 
+        ? res.data.map(activity => ({
+            ...activity,
+            user_name: activity.user_name || activity.username || 'System'
+          }))
+        : [];
+      setActivities(activitiesWithUsernames);
     } catch (error) {
       console.error('Error fetching activities:', error);
       message.error('Failed to fetch activities: ' + (error.message || 'Unknown error'));
@@ -861,7 +868,7 @@ const folderColorsArray = Object.values(folderColors);
                       // If this is a file/folder operation, include the username with highlighting
                       const action = (item.action || '').toLowerCase();
                       if (['upload', 'delete', 'update', 'create', 'modify', 'rename', 'move', 'copy'].includes(action)) {
-                        const userName = item.user_name || 'a user';
+                        const userName = item.user_name || 'System';
                         const actionText = action.endsWith('e') ? `${action}d` : `${action}ed`;
                         return (
                           <span>
@@ -1009,6 +1016,26 @@ const folderColorsArray = Object.values(folderColors);
                     year: 'numeric'
                   });
                   
+                  // Format the activity message with highlighted username
+                  const formatActivityMessage = (event, currentUserName) => {
+                    // Don't modify system messages
+                    if (currentUserName.toLowerCase() === 'system') {
+                      return event;
+                    }
+                    
+                    // Format similar to audit log
+                    const action = event;
+                    let actionText = action;
+                    
+                    // Simple formatting that matches audit log style
+                    return (
+                      <span>
+                        <span style={{ color: '#4f46e5', fontWeight: 'bold' }}>{currentUserName}</span>
+                        {` ${actionText}`}
+                      </span>
+                    );
+                  };
+                  
                   // Determine icon and color based on event type
                   let icon = <MessageOutlined />;
                   let iconColor = '#4f46e5';
@@ -1060,16 +1087,12 @@ const folderColorsArray = Object.values(folderColors);
                           marginBottom: 4,
                           alignItems: 'center'
                         }}>
-                          <Text strong style={{ 
-                            fontSize: 13, 
-                            color: '#2d3748',
+                          <div style={{ 
+                            width: '70%',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: '70%'
-                          }}>
-                            {userName}
-                          </Text>
+                            textOverflow: 'ellipsis'
+                          }} />
                           <Text type="secondary" style={{ 
                             fontSize: 11, 
                             color: '#718096',
@@ -1083,9 +1106,41 @@ const folderColorsArray = Object.values(folderColors);
                           fontSize: 13,
                           lineHeight: 1.4,
                           color: '#4a5568',
-                          wordBreak: 'break-word'
+                          wordBreak: 'break-word',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px'
                         }}>
-                          {event}
+                          {userName && userName.toLowerCase() !== 'system' ? (
+                            <div style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              backgroundColor: '#f0f5ff',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              width: 'fit-content',
+                              marginBottom: '2px'
+                            }}>
+                              <UserOutlined style={{ fontSize: '12px', color: '#4f46e5' }} />
+                              <span style={{
+                                color: '#4f46e5',
+                                fontWeight: '600',
+                                fontSize: '13px',
+                                letterSpacing: '0.3px'
+                              }}>
+                                {userName}
+                              </span>
+                            </div>
+                          ) : null}
+                          {event && (
+                            <div style={{
+                              marginTop: userName && userName.toLowerCase() !== 'system' ? '0' : '4px',
+                              lineHeight: '1.5'
+                            }}>
+                              {event}
+                            </div>
+                          )}
                         </div>
                         <div style={{ marginTop: 4 }}>
                           <Text type="secondary" style={{ fontSize: 11 }}>

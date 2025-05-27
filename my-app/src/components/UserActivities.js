@@ -160,7 +160,17 @@ const UserActivities = () => {
     setLoading(true);
     try {
       const res = await axios.get(`${BASE_URL}/activities`, { withCredentials: true });
-      const activitiesData = Array.isArray(res.data) ? res.data : [];
+      // Ensure each activity has a user_name field
+      const activitiesData = Array.isArray(res.data) 
+        ? res.data.map(activity => ({
+            ...activity,
+            // If user_name is not present, try to extract it from the event text
+            user_name: activity.user_name || (() => {
+              const match = activity.event?.match(/^(\w+)/);
+              return match ? match[1] : 'System';
+            })()
+          })) 
+        : [];
       setActivities(activitiesData);
       
       // Calculate activity stats
@@ -347,11 +357,25 @@ const UserActivities = () => {
       title: 'Details',
       dataIndex: 'event',
       key: 'event',
-      render: (text) => (
-        <Text style={{ fontSize: '14px' }}>
-          {text || 'No details available'}
-        </Text>
-      ),
+      render: (text, record) => {
+        if (!text) return 'No details available';
+        
+        // Get the username from the record, fallback to 'System' if not available
+        const username = record.user_name || 'System';
+        
+        // If it's a system message, just return the text as is
+        if (username.toLowerCase() === 'system') {
+          return <span style={{ fontSize: '14px' }}>{text}</span>;
+        }
+        
+        // For user activities, highlight the username
+        return (
+          <span style={{ fontSize: '14px' }}>
+            <span style={{ color: '#4f46e5', fontWeight: 'bold' }}>{username}</span>
+            {` ${text.replace(username, '').trim()}`}
+          </span>
+        );
+      },
     },
   ];
 

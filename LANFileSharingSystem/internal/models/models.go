@@ -320,11 +320,11 @@ func (app *App) AssignAdmin(username string) error {
 //  Activity Logging
 // -------------------------------------
 
-func (app *App) LogActivity(event string) {
+func (app *App) LogActivity(username, event string) {
 	_, err := app.DB.Exec(`
-        INSERT INTO activity_log(event, timestamp)
-        VALUES($1, CURRENT_TIMESTAMP)
-    `, event)
+        INSERT INTO activity_log(username, event, timestamp)
+        VALUES($1, $2, CURRENT_TIMESTAMP)
+    `, username, event)
 	if err != nil {
 		log.Println("Error logging activity:", err)
 	}
@@ -332,7 +332,7 @@ func (app *App) LogActivity(event string) {
 
 func (app *App) ListActivities() ([]map[string]interface{}, error) {
 	rows, err := app.DB.Query(`
-        SELECT id, timestamp, event
+        SELECT id, timestamp, COALESCE(username, 'System') as username, event
         FROM activity_log
         ORDER BY timestamp DESC
         LIMIT 50
@@ -347,14 +347,16 @@ func (app *App) ListActivities() ([]map[string]interface{}, error) {
 		var (
 			id        int
 			timestamp time.Time
+			username  string
 			event     string
 		)
-		if err := rows.Scan(&id, &timestamp, &event); err != nil {
+		if err := rows.Scan(&id, &timestamp, &username, &event); err != nil {
 			continue
 		}
 		activities = append(activities, map[string]interface{}{
 			"id":        id,
 			"timestamp": timestamp,
+			"username":  username,
 			"event":     event,
 		})
 	}

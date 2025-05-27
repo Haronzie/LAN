@@ -99,7 +99,7 @@ func (uc *UserController) AddUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uc.App.LogActivity(fmt.Sprintf("Admin '%s' added user '%s'.", user.Username, req.Username))
+	uc.App.LogActivity(user.Username, fmt.Sprintf("Added new user '%s'", req.Username))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("User '%s' has been added successfully", req.Username),
 	})
@@ -156,7 +156,7 @@ func (uc *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uc.App.LogActivity(fmt.Sprintf("Admin '%s' updated user '%s' to '%s'.", user.Username, req.OldUsername, req.NewUsername))
+	uc.App.LogActivity(user.Username, fmt.Sprintf("Updated user from '%s' to '%s'", req.OldUsername, req.NewUsername))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("User '%s' updated successfully", req.OldUsername),
 	})
@@ -190,7 +190,7 @@ func (uc *UserController) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uc.App.LogActivity(fmt.Sprintf("Admin '%s' deleted user '%s'.", user.Username, req.Username))
+	uc.App.LogActivity(user.Username, fmt.Sprintf("Deleted user '%s'", req.Username))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("User '%s' has been deleted successfully", req.Username),
 	})
@@ -224,7 +224,7 @@ func (uc *UserController) AssignAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uc.App.LogActivity(fmt.Sprintf("Admin '%s' assigned admin role to user '%s'.", user.Username, req.Username))
+	uc.App.LogActivity(user.Username, fmt.Sprintf("Assigned admin role to user '%s'", req.Username))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("User '%s' is now an admin", req.Username),
 	})
@@ -336,7 +336,7 @@ func (uc *UserController) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uc.App.LogActivity(fmt.Sprintf("First admin '%s' revoked admin role from user '%s'.", currentUser.Username, targetUsername))
+	uc.App.LogActivity(currentUser.Username, fmt.Sprintf("Revoked admin role from user '%s'", targetUsername))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Admin privileges revoked from '%s'", targetUsername),
 	})
@@ -417,7 +417,7 @@ func (uc *UserController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uc.App.LogActivity(fmt.Sprintf("First admin '%s' registered.", req.Username))
+	uc.App.LogActivity(req.Username, "First admin registered")
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Admin '%s' has been registered successfully", req.Username),
 	})

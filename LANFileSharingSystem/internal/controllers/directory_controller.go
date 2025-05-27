@@ -78,8 +78,7 @@ func (dc *DirectoryController) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' created directory '%s' (parent: '%s').",
-		user.Username, req.Name, req.Parent))
+	dc.App.LogActivity(user.Username, fmt.Sprintf("Created directory '%s' (parent: '%s')", req.Name, req.Parent))
 
 	dc.App.LogAudit(user.Username, 0, "CREATE_FOLDER", fmt.Sprintf("User '%s' created folder '%s' under parent '%s'.", user.Username, req.Name, req.Parent))
 
@@ -154,9 +153,7 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf(
-		"User '%s' deleted directory '%s' (parent: '%s') and all its contents.",
-		user.Username, req.Name, req.Parent))
+	dc.App.LogActivity(user.Username, fmt.Sprintf("Deleted directory '%s' (parent: '%s') and all its contents", req.Name, req.Parent))
 	dc.App.LogAudit(user.Username, 0, "DELETE_FOLDER", fmt.Sprintf("User '%s' deleted folder '%s' under parent '%s'.", user.Username, req.Name, req.Parent))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
@@ -232,9 +229,8 @@ func (dc *DirectoryController) Rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf(
-		"User '%s' renamed directory from '%s' to '%s' (parent: '%s').",
-		user.Username, req.OldName, req.NewName, req.Parent))
+	dc.App.LogActivity(user.Username, fmt.Sprintf("Renamed directory from '%s' to '%s' (parent: '%s')",
+		req.OldName, req.NewName, req.Parent))
 	dc.App.LogAudit(user.Username, 0, "RENAME_FOLDER", fmt.Sprintf("User '%s' renamed folder from '%s' to '%s' under parent '%s'.", user.Username, req.OldName, req.NewName, req.Parent))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
@@ -363,8 +359,8 @@ func (dc *DirectoryController) Copy(w http.ResponseWriter, r *http.Request) {
 		// optionally remove the folder or partially inserted records
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' copied folder from '%s' to '%s'.",
-		user.Username, sourceRelPath, destRelPath))
+	dc.App.LogActivity(user.Username, fmt.Sprintf("Copied folder from '%s' to '%s'",
+		sourceRelPath, destRelPath))
 	dc.App.LogAudit(user.Username, 0, "COPY_FOLDER", fmt.Sprintf("User '%s' copied folder from '%s' to '%s'.", user.Username, sourceRelPath, destRelPath))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
@@ -709,7 +705,8 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 			}
 			// Remove the now-empty source folder
 			_ = os.RemoveAll(oldPath)
-			dc.App.LogActivity(fmt.Sprintf("User '%s' merged directory '%s' from '%s' to '%s'.", user.Username, req.Name, req.OldParent, req.NewParent))
+			dc.App.LogActivity(user.Username, fmt.Sprintf("Merged directory '%s' from '%s' to '%s'",
+		req.Name, req.OldParent, req.NewParent))
 			dc.App.LogAudit(user.Username, 0, "MERGE_FOLDER", fmt.Sprintf("User '%s' merged folder '%s' from '%s' to '%s'.", user.Username, req.Name, req.OldParent, req.NewParent))
 			models.RespondJSON(w, http.StatusOK, map[string]string{
 				"message": fmt.Sprintf("Directory '%s' merged successfully", req.Name),
@@ -758,8 +755,8 @@ func (dc *DirectoryController) Move(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dc.App.LogActivity(fmt.Sprintf("User '%s' moved directory '%s' from '%s' to '%s'.",
-		user.Username, req.Name, req.OldParent, req.NewParent))
+	dc.App.LogActivity(user.Username, fmt.Sprintf("Moved directory '%s' from '%s' to '%s'",
+		req.Name, req.OldParent, req.NewParent))
 	dc.App.LogAudit(user.Username, 0, "MOVE_FOLDER", fmt.Sprintf("User '%s' moved folder '%s' from '%s' to '%s'.", user.Username, req.Name, req.OldParent, req.NewParent))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{

@@ -240,7 +240,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 			log.Println("Warning: failed to create file version record:", verr)
 		}
 
-		fc.App.LogActivity(fmt.Sprintf("User '%s' re-uploaded file '%s' (version %d).", user.Username, rawFileName, newVer))
+		fc.App.LogActivity(user.Username, fmt.Sprintf("Re-uploaded file '%s' (version %d)", rawFileName, newVer))
 		fc.App.LogAudit(user.Username, fileID, "REUPLOAD", fmt.Sprintf("File '%s' re-uploaded as version %d", rawFileName, newVer))
 
 		if fc.App.NotificationHub != nil {
@@ -280,7 +280,7 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fc.App.LogAudit(user.Username, fileID, "UPLOAD", fmt.Sprintf("File '%s' uploaded (version 1)", rawFileName))
-	fc.App.LogActivity(fmt.Sprintf("User '%s' uploaded new file '%s' (version 1).", user.Username, rawFileName))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Uploaded new file '%s' (version 1)", rawFileName))
 
 	if fc.App.NotificationHub != nil {
 		notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": 1}`, rawFileName))
@@ -448,13 +448,11 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 		action := "RENAME"
 		details := fmt.Sprintf("File renamed from '%s' to '%s'", req.OldFilename, req.NewFilename)
 		fc.App.LogAudit(user.Username, fileID, action, details)
-		log.Println("Audit log added:", details)
-	} else {
-		log.Println("Error: File ID not found for path", newRelativePath)
 	}
 
-	// Log activity and respond
-	fc.App.LogActivity(fmt.Sprintf("User '%s' renamed file from '%s' to '%s'.", user.Username, req.OldFilename, req.NewFilename))
+	// Log the activity
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Renamed file from '%s' to '%s'", req.OldFilename, req.NewFilename))
+
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("File renamed from '%s' to '%s' successfully", req.OldFilename, req.NewFilename),
 	})
@@ -552,7 +550,7 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Warning: could not delete file versions for ID %d: %v\n", fileID, delVerErr)
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file '%s'.", user.Username, fr.FileName))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Deleted file '%s'", fr.FileName))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("File '%s' deleted successfully", fr.FileName),
 	})
@@ -649,7 +647,7 @@ func (fc *FileController) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' downloaded file '%s' (ID: %d)", user.Username, fr.FileName, fr.ID))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Downloaded file '%s' (ID: %d)", fr.FileName, fr.ID))
 }
 
 // CopyFile creates a copy of an existing file in the storage and inserts a new record in the database.
@@ -793,7 +791,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		fc.App.LogAudit(user.Username, newFileID, "COPY", fmt.Sprintf("File copied from '%s' to '%s'", req.SourceFile, newRelativePath))
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' copied file from '%s' to '%s'", user.Username, req.SourceFile, newRelativePath))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Copied file from '%s' to '%s'", req.SourceFile, newRelativePath))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message":    fmt.Sprintf("File copied to '%s' successfully", newRelativePath),
@@ -1035,7 +1033,7 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	newID, _ := fc.App.GetFileIDByPath(newRelativePath)
 	fc.App.CreateFileVersion(newID, 1, newRelativePath)
 	fc.App.LogAudit(user.Username, newID, "MOVE", fmt.Sprintf("Moved file from '%s' to '%s'", oldRelativePath, newRelativePath))
-	fc.App.LogActivity(fmt.Sprintf("User '%s' moved file from '%s' to '%s'", user.Username, oldRelativePath, newRelativePath))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Moved file from '%s' to '%s'", oldRelativePath, newRelativePath))
 
 	log.Printf("[MoveFile] Successfully moved '%s' to folder '%s' (final name: %s)", fr.FileName, req.NewParent, finalName)
 	models.RespondJSON(w, http.StatusOK, map[string]string{
@@ -1288,7 +1286,7 @@ func (fc *FileController) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' previewed file '%s' (ID: %d)", user.Username, fr.FileName, fr.ID))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Previewed file '%s' (ID: %d)", fr.FileName, fr.ID))
 }
 
 // Note: copyFile is already defined in directory_controller.go
@@ -1537,7 +1535,7 @@ func (fc *FileController) GetFileVersions(w http.ResponseWriter, r *http.Request
 	}
 
 	// Optional: log the access
-	fc.App.LogActivity(fmt.Sprintf("User '%s' viewed version history for file ID %d.", user.Username, fileID))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Viewed version history for file ID %d", fileID))
 
 	models.RespondJSON(w, http.StatusOK, versions)
 }
@@ -1591,7 +1589,7 @@ func (fc *FileController) MarkFileMessageAsDone(w http.ResponseWriter, r *http.R
 	}
 
 	log.Printf("✅ User '%s' successfully marked message %d as done", user.Username, messageID)
-	fc.App.LogActivity(fmt.Sprintf("User '%s' marked message %d as done.", user.Username, messageID))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Marked message %d as done", messageID))
 
 	models.RespondJSON(w, http.StatusOK, map[string]string{"message": "Marked as done"})
 }
@@ -2106,8 +2104,7 @@ func (fc *FileController) DeleteFileMessages(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Log the successful deletion and message cleanup
-	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted file ID %s and cleaned up %d associated messages",
-		user.Username, fileID, msgRowsAffected))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Deleted file ID %s and cleaned up %d associated messages", fileID, msgRowsAffected))
 
 	// Send success response
 	models.RespondJSON(w, http.StatusOK, map[string]interface{}{
@@ -2276,7 +2273,7 @@ func (fc *FileController) DeleteFolder(w http.ResponseWriter, r *http.Request) {
 
 	// Optionally: Remove folder records from your DB if you track folders
 
-	fc.App.LogActivity(fmt.Sprintf("User '%s' deleted folder '%s'", user.Username, folderPath))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Deleted folder '%s'", folderPath))
 	models.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": fmt.Sprintf("Folder '%s' deleted successfully", folderPath),
 	})
