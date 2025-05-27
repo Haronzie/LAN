@@ -1885,17 +1885,92 @@ const FileManager = () => {
           overwrite
         });
 
-        await axios.post(
-          `${BASE_URL}/move-file`,
-          {
-            id: fileId,
-            filename: moveItem.name,
-            old_parent: currentPath,
-            new_parent: moveDestination,
-            overwrite: overwrite
-          },
-          { withCredentials: true }
-        );
+        try {
+          // First, check if the destination file already exists
+          const checkUrl = `${BASE_URL}/files?directory=${encodeURIComponent(moveDestination || '')}`;
+          const checkRes = await axios.get(checkUrl, { withCredentials: true });
+          
+          const fileExists = (checkRes.data || []).some(
+            f => f.name === moveItem.name && (!f.directory || f.directory === moveDestination)
+          );
+
+          if (fileExists && !overwrite) {
+            // Show conflict resolution modal
+            const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+            
+            return new Promise((resolve) => {
+              FileOperationConflictModal({
+                fileName: moveItem.name,
+                destinationPath: moveDestination || 'root',
+                operation: 'move',
+                onOverwrite: async () => {
+                  try {
+                    await axios.post(
+                      `${BASE_URL}/move-file`,
+                      {
+                        id: fileId,
+                        filename: moveItem.name,
+                        old_parent: currentPath,
+                        new_parent: moveDestination,
+                        overwrite: true
+                      },
+                      { withCredentials: true }
+                    );
+                    message.success(`Moved '${moveItem.name}' to ${moveDestination || 'root'}`);
+                    resolve(true);
+                  } catch (err) {
+                    console.error('Error moving file with overwrite:', err);
+                    message.error(err.response?.data?.error || 'Failed to move file');
+                    resolve(false);
+                  }
+                },
+                onKeepBoth: async () => {
+                  try {
+                    // Let the server handle the renaming by not setting overwrite
+                    await axios.post(
+                      `${BASE_URL}/move-file`,
+                      {
+                        id: fileId,
+                        filename: moveItem.name,
+                        old_parent: currentPath,
+                        new_parent: moveDestination,
+                        overwrite: false
+                      },
+                      { withCredentials: true }
+                    );
+                    message.success(`Moved '${moveItem.name}' to ${moveDestination || 'root'}`);
+                    resolve(true);
+                  } catch (err) {
+                    console.error('Error moving file with keep both:', err);
+                    message.error(err.response?.data?.error || 'Failed to move file');
+                    resolve(false);
+                  }
+                },
+                onSkip: () => {
+                  message.info('Skipped moving the file');
+                  resolve(false);
+                }
+              });
+            });
+          } else {
+            // No conflict or overwrite is true, proceed with move
+            await axios.post(
+              `${BASE_URL}/move-file`,
+              {
+                id: fileId,
+                filename: moveItem.name,
+                old_parent: currentPath,
+                new_parent: moveDestination,
+                overwrite: overwrite
+              },
+              { withCredentials: true }
+            );
+          }
+        } catch (err) {
+          console.error('Error moving file:', err);
+          message.error(err.response?.data?.error || 'Failed to move file');
+          throw err;
+        }
       }
 
       message.success(`Moved '${moveItem.name}' to ${moveDestination}`);
