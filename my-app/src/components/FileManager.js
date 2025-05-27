@@ -2388,9 +2388,11 @@ const FileManager = () => {
             <h2 style={{ margin: 0 }}></h2>
           </Col>
           <Col>
-            <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
-              Upload File
-            </Button>
+            {!isRoot && (
+              <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenUploadModal}>
+                Upload File
+              </Button>
+            )}
           </Col>
         </Row>
 
