@@ -965,7 +965,22 @@ const folderColorsArray = Object.values(folderColors);
             {activities.length > 0 ? (
               <List
                 size="small"
-                dataSource={activities.slice(0, 10)}
+                dataSource={activities
+                  .filter(item => {
+                    const event = (item.event || '').toLowerCase();
+                    // Exclude file and folder related activities
+                    return !(
+                      event.includes('file') ||
+                      event.includes('folder') ||
+                      event.includes('upload') ||
+                      event.includes('download') ||
+                      event.includes('delete file') ||
+                      event.includes('create file') ||
+                      event.includes('modify file') ||
+                      event.includes('rename file')
+                    );
+                  })
+                  .slice(0, 10)}
                 renderItem={(item) => {
                   // Parse the event message to extract relevant information
                   const event = item.event || '';
