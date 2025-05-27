@@ -1802,17 +1802,36 @@ const FileManager = () => {
         }
         
         // Regular folder move (when no conflicts)
-        await axios.post(
-
-
-          `${BASE_URL}/directory/move`,
-          {
-            name: moveItem.name,
-            old_parent: currentPath,
-            new_parent: moveDestination
-          },
-          { withCredentials: true }
-        );
+        console.log('Moving folder with:', {
+          name: moveItem.name,
+          old_parent: currentPath,
+          new_parent: moveDestination
+        });
+        
+        try {
+          const response = await axios.post(
+            `${BASE_URL}/directory/move`,
+            {
+              name: moveItem.name,
+              old_parent: currentPath || '',
+              new_parent: moveDestination || '',
+              merge: false
+            },
+            { 
+              withCredentials: true,
+              headers: { 'Content-Type': 'application/json' }
+            }
+          );
+          console.log('Move folder response:', response.data);
+        } catch (moveErr) {
+          console.error('Folder move error:', moveErr);
+          if (moveErr.response) {
+            console.error('Error response data:', moveErr.response.data);
+            console.error('Error status:', moveErr.response.status);
+            throw new Error(moveErr.response.data.error || 'Failed to move folder');
+          }
+          throw moveErr;
+        }
       } else {
         // First, verify the file exists by trying to get its metadata
         try {
