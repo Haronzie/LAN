@@ -85,9 +85,7 @@ const AdminDashboardHome = () => {
   // Prepare chart data: uploads per folder per month (robust)
 const getMonthYear = (dateString) => {
   const date = new Date(dateString);
-  const month = date.toLocaleString('default', { month: 'long' });
-  const year = date.getFullYear();
-  return `${month} ${year}`;
+  return date.toLocaleString('default', { month: 'long' });
 };
 
 // Only consider these folders, normalize to lowercase
@@ -116,7 +114,7 @@ files.forEach(file => {
 // Transform data for Chart.js format - we need each month to have all folder values
 const transformedChartData = [];
 
-// For sorting months
+// For sorting months - ensure we're only working with month names now
 const monthOrder = [
   'January','February','March','April','May','June','July','August','September','October','November','December'
 ];
@@ -129,11 +127,11 @@ const getFileDate = (file) => {
   return new Date(file.created_at || file.uploaded_at || file.modified_at || new Date());
 };
 
-// Parse month and year to Date object for filtering
-const parseMonthYear = (monthYear) => {
-  const [month, year] = monthYear.split(' ');
+// Parse month to Date object for filtering (using current year since we're only showing months)
+const parseMonthYear = (month) => {
   const monthIndex = monthOrder.indexOf(month);
-  return new Date(parseInt(year), monthIndex, 1);
+  // Use current year since we're only showing months
+  return new Date(new Date().getFullYear(), monthIndex, 1);
 };
 
 uniqueMonthYears.sort((a, b) => {
