@@ -382,13 +382,52 @@ const UserActivities = () => {
             columns={columns}
             dataSource={filteredActivities}
             rowKey={(record, idx) => record.id || record.timestamp + idx}
+            scroll={{ x: 'max-content', y: 'calc(100vh - 400px)' }}
             pagination={{
               pageSize: 10,
               showSizeChanger: true,
-              pageSizeOptions: ['10', '20', '50', '100'],
+              showQuickJumper: true,
               showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} activities`,
+              pageSizeOptions: ['10', '20', '50', '100'],
+              style: { 
+                margin: '16px 0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px',
+                padding: '12px 16px',
+                backgroundColor: '#fafafa',
+                borderRadius: '0 0 8px 8px',
+                borderTop: '1px solid #f0f0f0'
+              },
+              itemRender: (_, type, originalElement) => {
+                if (type === 'prev') {
+                  return <Button size="small">Previous</Button>;
+                }
+                if (type === 'next') {
+                  return <Button size="small">Next</Button>;
+                }
+                if (type === 'jump-prev' || type === 'jump-next') {
+                  return <span style={{ padding: '0 8px' }}>•••</span>;
+                }
+                return originalElement;
+              },
+              showLessItems: false
             }}
-            scroll={{ x: 'max-content' }}
+            components={{
+              pagination: props => 
+                <div style={{ position: 'sticky', bottom: 0, background: '#fff', zIndex: 1 }}>
+                  {React.cloneElement(props.defaultNode, {
+                    style: { ...props.defaultNode.props.style, margin: 0 }
+                  })}
+                </div>
+            }}
+            style={{ 
+              width: '100%',
+              overflow: 'auto',
+              borderRadius: '8px',
+              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)'
+            }}
           />
         </Card>
       </Content>
