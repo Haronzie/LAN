@@ -849,14 +849,24 @@ const folderColorsArray = Object.values(folderColors);
                   };
 
                   // Parse the details to extract relevant information
-                  const parseDetails = (details) => {
+                  const parseDetails = (details, item) => {
                     try {
                       // If details is a string that looks like JSON, parse it
+                      let message = details;
                       if (typeof details === 'string' && (details.startsWith('{') || details.startsWith('['))) {
                         const parsed = JSON.parse(details);
-                        if (parsed.message) return parsed.message;
+                        if (parsed.message) message = parsed.message;
                       }
-                      return details;
+                      
+                      // If this is a file/folder operation, include the username
+                      const action = (item.action || '').toLowerCase();
+                      if (['upload', 'delete', 'update', 'create', 'modify', 'rename'].includes(action)) {
+                        const userName = item.user_name || 'a user';
+                        const actionText = action.endsWith('e') ? `${action}d` : `${action}ed`;
+                        return `${userName} ${actionText} ${message}`;
+                      }
+                      
+                      return message;
                     } catch (e) {
                       return details;
                     }
@@ -896,7 +906,7 @@ const folderColorsArray = Object.values(folderColors);
                           color: '#4a5568',
                           wordBreak: 'break-word'
                         }}>
-                          {parseDetails(item.details)}
+                          {parseDetails(item.details, item)}
                         </div>
                         {item.action && (
                           <div style={{ 
