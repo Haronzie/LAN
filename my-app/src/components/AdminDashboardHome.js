@@ -1,7 +1,19 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Row, Col, Card as AntdCard, Statistic, List, Button, Typography, message, DatePicker, Space } from 'antd';
-import { UserOutlined, FileOutlined, TeamOutlined, CalendarOutlined, FilterOutlined, CheckCircleOutlined, ClockCircleOutlined, MessageOutlined } from '@ant-design/icons';
+import { 
+  UserOutlined, 
+  FileOutlined, 
+  TeamOutlined, 
+  CalendarOutlined, 
+  FilterOutlined, 
+  CheckCircleOutlined, 
+  ClockCircleOutlined, 
+  MessageOutlined,
+  LoginOutlined,
+  LogoutOutlined,
+  DeleteOutlined
+} from '@ant-design/icons';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title as ChartTitle, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import axios from 'axios';
@@ -954,59 +966,104 @@ const folderColorsArray = Object.values(folderColors);
               <List
                 size="small"
                 dataSource={activities.slice(0, 10)}
-                renderItem={(item) => (
-                  <List.Item 
-                    style={{ 
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #edf2f7',
-                      transition: 'background-color 0.2s'
-                    }}
-                    className="hover:bg-gray-50"
-                  >
-                    <div style={{ width: '100%' }}>
-                      <div style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between',
-                        marginBottom: 4,
-                        alignItems: 'center'
+                renderItem={(item) => {
+                  // Parse the event message to extract relevant information
+                  const event = item.event || '';
+                  const userName = item.user_name || 'System';
+                  const timestamp = new Date(item.timestamp || item.created_at);
+                  const timeString = timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                  const dateString = timestamp.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  });
+                  
+                  // Determine icon and color based on event type
+                  let icon = <MessageOutlined />;
+                  let iconColor = '#4f46e5';
+                  
+                  if (event.toLowerCase().includes('login')) {
+                    icon = <LoginOutlined />;
+                    iconColor = '#10b981'; // Green
+                  } else if (event.toLowerCase().includes('logout')) {
+                    icon = <LogoutOutlined />;
+                    iconColor = '#ef4444'; // Red
+                  } else if (event.toLowerCase().includes('upload')) {
+                    icon = <FileOutlined />;
+                    iconColor = '#3b82f6'; // Blue
+                  } else if (event.toLowerCase().includes('delete')) {
+                    icon = <DeleteOutlined />;
+                    iconColor = '#ef4444'; // Red
+                  }
+                  
+                  return (
+                    <List.Item 
+                      style={{ 
+                        padding: '12px 16px',
+                        borderBottom: '1px solid #edf2f7',
+                        transition: 'background-color 0.2s',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px'
+                      }}
+                      className="hover:bg-gray-50"
+                    >
+                      <div style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        backgroundColor: `${iconColor}15`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            backgroundColor: '#4f46e5',
-                            flexShrink: 0
-                          }} />
-                          <Text strong style={{ fontSize: 13, color: '#2d3748' }}>
-                            {item.user_name || 'System'}
+                        {React.cloneElement(icon, { 
+                          style: { color: iconColor, fontSize: 14 } 
+                        })}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          marginBottom: 4,
+                          alignItems: 'center'
+                        }}>
+                          <Text strong style={{ 
+                            fontSize: 13, 
+                            color: '#2d3748',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '70%'
+                          }}>
+                            {userName}
+                          </Text>
+                          <Text type="secondary" style={{ 
+                            fontSize: 11, 
+                            color: '#718096',
+                            whiteSpace: 'nowrap',
+                            marginLeft: 8
+                          }}>
+                            {timeString}
                           </Text>
                         </div>
-                        <Text type="secondary" style={{ fontSize: 11, color: '#718096' }}>
-                          {new Date(item.timestamp || item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </Text>
-                      </div>
-                      <div style={{ 
-                        fontSize: 13,
-                        lineHeight: 1.4,
-                        color: '#4a5568',
-                        marginLeft: '16px',
-                        marginTop: 2
-                      }}>
-                        <div style={{ marginBottom: 4 }}>
-                          {getActivityDescription(item.action || item.details, item.action_type)}
+                        <div style={{ 
+                          fontSize: 13,
+                          lineHeight: 1.4,
+                          color: '#4a5568',
+                          wordBreak: 'break-word'
+                        }}>
+                          {event}
                         </div>
-                        <Text type="secondary" style={{ fontSize: 11 }}>
-                          {new Date(item.timestamp || item.created_at).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </Text>
+                        <div style={{ marginTop: 4 }}>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {dateString}
+                          </Text>
+                        </div>
                       </div>
-                    </div>
-                  </List.Item>
-                )}
+                    </List.Item>
+                )}}
               />
             ) : (
               <div style={{ 
