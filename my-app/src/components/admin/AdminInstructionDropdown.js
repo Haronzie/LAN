@@ -289,7 +289,7 @@ const AdminInstructionDropdown = () => {
       <BellIconWrapper $hasNotification={instructionCount > 0}>
         <Badge count={instructionCount} size="small" offset={[-5, 5]}>
           {instructionCount > 0 ? (
-            <BellFilled style={{ fontSize: '20px', color: '#ff4d4f' }} />
+            <BellFilled style={{ fontSize: '20px', color: '#1890ff' }} />
           ) : (
             <BellOutlined style={{ fontSize: '20px' }} />
           )}
