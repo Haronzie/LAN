@@ -386,41 +386,70 @@ const UserActivities = () => {
             pagination={{
               pageSize: 10,
               showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} activities`,
+              showQuickJumper: { goButton: <Button size="small">Go</Button> },
+              showTotal: (total, range) => (
+                <span style={{ marginRight: 16, lineHeight: '32px' }}>
+                  {`${range[0]}-${range[1]} of ${total} items`}
+                </span>
+              ),
               pageSizeOptions: ['10', '20', '50', '100'],
               style: { 
-                margin: '16px 0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '10px',
+                margin: 0,
                 padding: '12px 16px',
                 backgroundColor: '#fafafa',
-                borderRadius: '0 0 8px 8px',
-                borderTop: '1px solid #f0f0f0'
+                borderTop: '1px solid #f0f0f0',
+                position: 'sticky',
+                bottom: 0,
+                zIndex: 1,
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '10px',
+                alignItems: 'center',
+                borderRadius: '0 0 8px 8px'
               },
               itemRender: (_, type, originalElement) => {
                 if (type === 'prev') {
-                  return <Button size="small">Previous</Button>;
+                  return <Button size="small" icon={<LeftOutlined />}>Previous</Button>;
                 }
                 if (type === 'next') {
-                  return <Button size="small">Next</Button>;
+                  return <Button size="small">Next<RightOutlined /></Button>;
                 }
                 if (type === 'jump-prev' || type === 'jump-next') {
                   return <span style={{ padding: '0 8px' }}>•••</span>;
                 }
                 return originalElement;
               },
-              showLessItems: false
+              showLessItems: true
             }}
             components={{
-              pagination: props => 
-                <div style={{ position: 'sticky', bottom: 0, background: '#fff', zIndex: 1 }}>
-                  {React.cloneElement(props.defaultNode, {
-                    style: { ...props.defaultNode.props.style, margin: 0 }
-                  })}
-                </div>
+              body: {
+                wrapper: (props) => (
+                  <div style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
+                    <div style={{ flex: 1, overflow: 'auto' }}>
+                      {props.children}
+                    </div>
+                  </div>
+                ),
+              },
+              pagination: (props) => {
+                const { className, style, ...restProps } = props;
+                return (
+                  <div style={{ 
+                    ...style, 
+                    position: 'sticky',
+                    bottom: 0,
+                    background: '#fff',
+                    zIndex: 1,
+                    borderTop: '1px solid #f0f0f0',
+                    padding: '12px 16px',
+                    margin: 0
+                  }}>
+                    {React.cloneElement(props.defaultNode, {
+                      style: { ...props.defaultNode.props.style, margin: 0 }
+                    })}
+                  </div>
+                );
+              }
             }}
             style={{ 
               width: '100%',
