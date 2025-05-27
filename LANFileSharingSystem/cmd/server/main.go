@@ -355,7 +355,6 @@ func main() {
 	router.HandleFunc("/file/message", fileController.SendFileMessage).Methods("POST")
 	router.HandleFunc("/file/message/{id}/done", fileController.MarkFileMessageAsDone).Methods("PATCH")
 	router.HandleFunc("/file/messages", fileController.GetFileMessages).Methods("GET")
-	router.HandleFunc("/file/versions", fileController.GetFileVersions).Methods("GET")
 	router.HandleFunc("/files-with-messages", fileController.GetFilesWithMessagesForUser).Methods("GET")
 	router.HandleFunc("/search", fileController.SearchFiles).Methods("GET")
 
