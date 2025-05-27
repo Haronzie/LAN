@@ -38,26 +38,27 @@ const AdminInstructionDropdown = () => {
         return;
       }
 
-      // Check if user is admin
-      const isAdminRes = await axios.get(
-        `${BASE_URL}/is-admin`,
+      // Check if user is admin by getting current user info
+      const userRes = await axios.get(
+        `${BASE_URL}/user-role`,
         { withCredentials: true }
       );
 
-      if (!isAdminRes.data.isAdmin) {
+      if (userRes.data.role !== 'admin') {
         console.log('User is not an admin, not fetching instructions');
         return;
       }
 
-      // Get all instructions sent by this admin
-      const res = await axios.get(
-        `${BASE_URL}/admin/sent-instructions`,
+      // Fetch all file messages (admin can see all messages)
+      const response = await axios.get(
+        `${BASE_URL}/file/messages`,
         { withCredentials: true }
       );
+      setInstructions(Array.isArray(response.data) ? response.data : []);
 
       // Process instructions data
-      const processedInstructions = Array.isArray(res.data) 
-        ? res.data.map(inst => ({
+      const processedInstructions = Array.isArray(response.data) 
+        ? response.data.map(inst => ({
             ...inst,
             isInstruction: true,
             created_at: inst.created_at || new Date().toISOString(),
@@ -88,10 +89,10 @@ const AdminInstructionDropdown = () => {
     return () => clearInterval(interval);
   }, [fetchInstructions]);
 
-  const markInstructionAsDone = async (instructionId) => {
+  const markInstructionAsDone = async (messageId) => {
     try {
       await axios.patch(
-        `${BASE_URL}/file-instructions/${instructionId}/complete`,
+        `${BASE_URL}/file/message/${messageId}/done`,
         {},
         { withCredentials: true }
       );
@@ -99,13 +100,17 @@ const AdminInstructionDropdown = () => {
       // Update local state
       setInstructions(prev => 
         prev.map(inst => 
-          inst.id === instructionId ? { ...inst, is_done: true } : inst
+          inst.id === messageId ? { ...inst, is_done: true } : inst
         )
       );
       
       message.success('Instruction marked as completed');
     } catch (err) {
       console.error('Error marking instruction as done:', err);
+      if (err.response) {
+        console.error('Response data:', err.response.data);
+        console.error('Response status:', err.response.status);
+      }
       message.error('Failed to update instruction status');
     }
   };
