@@ -1029,26 +1029,7 @@ func (app *App) UpdateUserPassword(username, hashedPassword string) error {
     `, hashedPassword, username)
 	return err
 }
-func (app *App) CreateFileVersion(fileID, versionNum int, path string) error {
-	_, err := app.DB.Exec(`
-        INSERT INTO file_versions (file_id, version_number, file_path)
-        VALUES ($1, $2, $3)
-    `, fileID, versionNum, path)
-	return err
-}
 
-// GetLatestVersionNumber retrieves the highest version_number for a given file_id.
-func (app *App) GetLatestVersionNumber(fileID int) (int, error) {
-	var maxVer int
-	err := app.DB.QueryRow(`
-        SELECT COALESCE(MAX(version_number), 0)
-        FROM file_versions
-        WHERE file_id = $1
-    `, fileID).Scan(&maxVer)
-	return maxVer, err
-}
-
-// GetFileIDByPath returns the files.id for a given file_path.
 func (app *App) GetFileIDByPath(path string) (int, error) {
 	var id int
 	err := app.DB.QueryRow(`
@@ -1059,14 +1040,6 @@ func (app *App) GetFileIDByPath(path string) (int, error) {
 	return id, err
 }
 
-// DeleteFileVersions removes all version records for a given file ID.
-func (app *App) DeleteFileVersions(fileID int) error {
-	_, err := app.DB.Exec(`
-        DELETE FROM file_versions
-        WHERE file_id = $1
-    `, fileID)
-	return err
-}
 func (app *App) GetFileRecordByPath(filePath string) (FileRecord, error) {
 	var fr FileRecord
 
@@ -1107,38 +1080,6 @@ func (app *App) UpdateFileMetadata(fileID int, newSize int64, newContentType str
 	return err
 }
 
-// DeleteFileVersionsInFolder removes file_versions rows for all files whose
-// file_path starts with the given folderPath prefix.
-func (app *App) DeleteFileVersionsInFolder(folderPath string) error {
-	// Step 1: Gather all file IDs in that folder (including subfolders).
-	rows, err := app.DB.Query(`
-        SELECT id
-        FROM files
-        WHERE file_path = $1
-           OR file_path LIKE $1 || '/%'
-    `, folderPath)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	var fileIDs []int
-	for rows.Next() {
-		var fid int
-		if err := rows.Scan(&fid); err != nil {
-			return err
-		}
-		fileIDs = append(fileIDs, fid)
-	}
-
-	// Step 2: For each file ID, delete any version rows in file_versions.
-	for _, fid := range fileIDs {
-		if _, err := app.DB.Exec(`DELETE FROM file_versions WHERE file_id = $1`, fid); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 func (app *App) ListFileAuditLogs() ([]AuditLog, error) {
 	rows, err := app.DB.Query(`
@@ -1226,13 +1167,12 @@ func (app *App) LogAudit(username string, fileID int, action, details string) {
 		INSERT INTO audit_logs (user_username, username_at_action, file_id, action, details)
 		VALUES ($1, $2, $3, $4, $5)
 	`,
-		username,          // user_username (who performed the action)
-		usernameAtAction,  // username_at_action (who the action was performed on/for)
-		nullableFileID,    // file_id
+		username,         // user_username (who performed the action)
+		usernameAtAction, // username_at_action (who the action was performed on/for)
+		nullableFileID,   // file_id
 		action,
 		details,
 	)
-
 
 	if err != nil {
 		log.Printf("SQL Error in LogAudit: %v", err)
@@ -1276,28 +1216,6 @@ func (app *App) ListAllFiles() ([]FileRecord, error) {
 		files = append(files, file)
 	}
 	return files, nil
-}
-
-// UpdateLatestVersionPath updates the path of the latest version of a file
-func (app *App) UpdateLatestVersionPath(fileID int, newPath string) error {
-	// First, get the latest version number for this file
-	latestVer, err := app.GetLatestVersionNumber(fileID)
-	if err != nil {
-		return fmt.Errorf("error getting latest version number: %v", err)
-	}
-
-	// Update the path for the latest version
-	_, err = app.DB.Exec(`
-		UPDATE file_versions 
-		SET file_path = $1 
-		WHERE file_id = $2 AND version_number = $3`,
-		newPath, fileID, latestVer)
-
-	if err != nil {
-		return fmt.Errorf("error updating version path: %v", err)
-	}
-
-	return nil
 }
 
 // GetFileRecordByID retrieves a file record by its ID.

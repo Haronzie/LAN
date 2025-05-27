@@ -130,14 +130,7 @@ func (dc *DirectoryController) Delete(w http.ResponseWriter, r *http.Request) {
 	//    e.g. If parent="Root" and name="FolderA", this becomes "Root/FolderA"
 	relativeFolder := filepath.Join(req.Parent, req.Name)
 
-	// *** Delete file_versions for any files in this folder.
-	if err := dc.App.DeleteFileVersionsInFolder(relativeFolder); err != nil {
-		models.RespondError(w, http.StatusInternalServerError,
-			"Error deleting file version records in the folder")
-		return
-	}
-
-	// 4) Delete the file records in that folder
+	// Delete the file records in that folder
 	if err := dc.App.DeleteFilesWithPrefix(relativeFolder); err != nil {
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file records in the folder")
 		return

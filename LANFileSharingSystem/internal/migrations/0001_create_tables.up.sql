@@ -46,16 +46,6 @@ CREATE TABLE IF NOT EXISTS activity_log (
 );
 CREATE INDEX IF NOT EXISTS idx_activity_timestamp_username ON activity_log (timestamp, username);
 
--- File Versions Table
-CREATE TABLE IF NOT EXISTS file_versions (
-    id SERIAL PRIMARY KEY,
-    file_id INT NOT NULL,
-    version_number INT NOT NULL,
-    file_path VARCHAR(500) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
-);
-
 -- Audit Logs Table
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,

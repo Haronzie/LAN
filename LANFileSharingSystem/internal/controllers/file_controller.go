@@ -234,22 +234,16 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
-		newVer := latestVer + 1
-		if verr := fc.App.CreateFileVersion(fileID, newVer, relativePath); verr != nil {
-			log.Println("Warning: failed to create file version record:", verr)
-		}
-
-		fc.App.LogActivity(user.Username, fmt.Sprintf("Re-uploaded file '%s' (version %d)", rawFileName, newVer))
-		fc.App.LogAudit(user.Username, fileID, "REUPLOAD", fmt.Sprintf("File '%s' re-uploaded as version %d", rawFileName, newVer))
+		fc.App.LogActivity(user.Username, fmt.Sprintf("Re-uploaded file '%s'", rawFileName))
+		fc.App.LogAudit(user.Username, fileID, "REUPLOAD", fmt.Sprintf("File '%s' re-uploaded", rawFileName))
 
 		if fc.App.NotificationHub != nil {
-			notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": %d}`, rawFileName, newVer))
+			notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s"}`, rawFileName))
 			fc.App.NotificationHub.Broadcast(notification)
 		}
 
 		models.RespondJSON(w, http.StatusOK, map[string]string{
-			"message": fmt.Sprintf("File '%s' updated (version %d) successfully", rawFileName, newVer),
+			"message": fmt.Sprintf("File '%s' updated successfully", rawFileName),
 		})
 		return
 	}
@@ -273,14 +267,9 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileID, _ := fc.App.GetFileIDByPath(fr.FilePath)
-	if fileID > 0 {
-		if verr := fc.App.CreateFileVersion(fileID, 1, fr.FilePath); verr != nil {
-			log.Println("Warning: failed to create version record:", verr)
-		}
-	}
 
-	fc.App.LogAudit(user.Username, fileID, "UPLOAD", fmt.Sprintf("File '%s' uploaded (version 1)", rawFileName))
-	fc.App.LogActivity(user.Username, fmt.Sprintf("Uploaded new file '%s' (version 1)", rawFileName))
+	fc.App.LogAudit(user.Username, fileID, "UPLOAD", fmt.Sprintf("File '%s' uploaded", rawFileName))
+	fc.App.LogActivity(user.Username, fmt.Sprintf("Uploaded new file '%s'", rawFileName))
 
 	if fc.App.NotificationHub != nil {
 		notification := []byte(fmt.Sprintf(`{"event": "file_uploaded", "file_name": "%s", "version": 1}`, rawFileName))
@@ -437,16 +426,10 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 6) Update the version record with the new path instead of creating a new version
+	// Log the audit event as a RENAME action
+	action := "RENAME"
+	details := fmt.Sprintf("File renamed from '%s' to '%s'", req.OldFilename, req.NewFilename)
 	if fileID > 0 {
-		// Update the latest version record with the new path
-		if verr := fc.App.UpdateLatestVersionPath(fileID, newRelativePath); verr != nil {
-			log.Println("Warning: failed to update file version record:", verr)
-		}
-
-		// Log the audit event as a RENAME action
-		action := "RENAME"
-		details := fmt.Sprintf("File renamed from '%s' to '%s'", req.OldFilename, req.NewFilename)
 		fc.App.LogAudit(user.Username, fileID, action, details)
 	}
 
@@ -539,15 +522,11 @@ func (fc *FileController) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("🗑 Deleting file record from database: '%s'", fr.FilePath)
-	fileID, err := fc.App.DeleteFileRecordByPath(fr.FilePath) // Use the path from the found record
+	_, err = fc.App.DeleteFileRecordByPath(fr.FilePath) // Use the path from the found record
 	if err != nil {
 		log.Printf("❌ Error deleting file record: %v", err)
 		models.RespondError(w, http.StatusInternalServerError, "Error deleting file record from database")
 		return
-	}
-
-	if delVerErr := fc.App.DeleteFileVersions(fileID); delVerErr != nil {
-		log.Printf("Warning: could not delete file versions for ID %d: %v\n", fileID, delVerErr)
 	}
 
 	fc.App.LogActivity(user.Username, fmt.Sprintf("Deleted file '%s'", fr.FileName))
@@ -729,8 +708,7 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 			// Overwrite: delete destination file and DB record only if different from source
 			log.Printf("[CopyFile] Overwriting: deleting destination file on disk: %s", filepath.Join("Cdrrmo", existingFR.FilePath))
 			_ = os.Remove(filepath.Join("Cdrrmo", existingFR.FilePath))
-			log.Printf("[CopyFile] Deleting DB file versions and record for file ID %d, path %s", existingFR.ID, existingFR.FilePath)
-			_ = fc.App.DeleteFileVersions(existingFR.ID)
+			log.Printf("[CopyFile] Deleting DB record for file ID %d, path %s", existingFR.ID, existingFR.FilePath)
 			_, _ = fc.App.DeleteFileRecordByPath(existingFR.FilePath)
 			break
 		}
@@ -785,9 +763,8 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[CopyFile] Inserted new file record: %+v", newRecord)
 
-	newFileID, err := fc.App.GetFileIDByPath(newRelativePath)
-	if err == nil && newFileID > 0 {
-		_ = fc.App.CreateFileVersion(newFileID, 1, newRelativePath)
+	newFileID, _ := fc.App.GetFileIDByPath(newRelativePath)
+	if newFileID > 0 {
 		fc.App.LogAudit(user.Username, newFileID, "COPY", fmt.Sprintf("File copied from '%s' to '%s'", req.SourceFile, newRelativePath))
 	}
 
@@ -954,7 +931,6 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 		if req.Overwrite {
 			log.Printf("[MoveFile] Overwriting existing file: %s", existingFR.FilePath)
 			_ = os.Remove(filepath.Join("Cdrrmo", existingFR.FilePath))
-			_ = fc.App.DeleteFileVersions(existingFR.ID)
 
 			_, deleteErr := fc.App.DeleteFileRecordByPath(existingFR.FilePath)
 			if deleteErr != nil {
@@ -1031,7 +1007,6 @@ func (fc *FileController) MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newID, _ := fc.App.GetFileIDByPath(newRelativePath)
-	fc.App.CreateFileVersion(newID, 1, newRelativePath)
 	fc.App.LogAudit(user.Username, newID, "MOVE", fmt.Sprintf("Moved file from '%s' to '%s'", oldRelativePath, newRelativePath))
 	fc.App.LogActivity(user.Username, fmt.Sprintf("Moved file from '%s' to '%s'", oldRelativePath, newRelativePath))
 
@@ -1408,7 +1383,7 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 	if queryWithoutFileID {
 		// If no file_id is provided, return all messages for the current user
 		log.Printf("📨 Fetching all messages for user '%s'", user.Username)
-		
+
 		if user.Role == "admin" {
 			// Admin can see all messages
 			query = `
@@ -1493,52 +1468,6 @@ func (fc *FileController) GetFileMessages(w http.ResponseWriter, r *http.Request
 	models.RespondJSON(w, http.StatusOK, messages)
 }
 
-func (fc *FileController) GetFileVersions(w http.ResponseWriter, r *http.Request) {
-	user, err := fc.App.GetUserFromSession(r)
-	if err != nil {
-		models.RespondError(w, http.StatusUnauthorized, "Not authenticated")
-		return
-	}
-
-	fileIDStr := r.URL.Query().Get("file_id")
-	fileID, err := strconv.Atoi(fileIDStr)
-	if err != nil || fileID <= 0 {
-		models.RespondError(w, http.StatusBadRequest, "Invalid file ID")
-		return
-	}
-
-	rows, err := fc.App.DB.Query(`
-		SELECT version_number, file_path, created_at
-		FROM file_versions
-		WHERE file_id = $1
-		ORDER BY version_number ASC
-	`, fileID)
-	if err != nil {
-		models.RespondError(w, http.StatusInternalServerError, "Error retrieving file versions")
-		return
-	}
-	defer rows.Close()
-
-	type VersionInfo struct {
-		Version   int       `json:"version"`
-		Path      string    `json:"file_path"`
-		Timestamp time.Time `json:"timestamp"`
-	}
-
-	var versions []VersionInfo
-	for rows.Next() {
-		var v VersionInfo
-		if err := rows.Scan(&v.Version, &v.Path, &v.Timestamp); err != nil {
-			continue
-		}
-		versions = append(versions, v)
-	}
-
-	// Optional: log the access
-	fc.App.LogActivity(user.Username, fmt.Sprintf("Viewed version history for file ID %d", fileID))
-
-	models.RespondJSON(w, http.StatusOK, versions)
-}
 func (fc *FileController) MarkFileMessageAsDone(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPatch {
 		models.RespondError(w, http.StatusMethodNotAllowed, "Invalid request method")
@@ -1731,8 +1660,6 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 					fileID = existingFR.ID
 					updateErr := fc.App.UpdateFileMetadata(fileID, fileHeader.Size, mime)
 					if updateErr == nil {
-						latestVer, _ := fc.App.GetLatestVersionNumber(fileID)
-						_ = fc.App.CreateFileVersion(fileID, latestVer+1, relativePath)
 						status = "overwritten"
 					}
 				}
@@ -1781,7 +1708,6 @@ func (fc *FileController) BulkUpload(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				fileID, _ = fc.App.GetFileIDByPath(fr.FilePath)
-				_ = fc.App.CreateFileVersion(fileID, 1, fr.FilePath)
 				status = "uploaded"
 			}
 		}()
