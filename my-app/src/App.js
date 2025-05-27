@@ -18,6 +18,7 @@ import ResearchDashboard from './components/ResearchDashboard';
 import InventoryDashboard from './components/InventoryDashboard';
 import UserSettings from './components/UserSettings';
 import Settings from './components/Settings';
+import InstructionsPage from './components/admin/InstructionsPage';
 import './App.css';
 import axios from 'axios';
 import { ToastContainer } from 'react-toastify';
@@ -88,6 +89,7 @@ function App() {
             <Route path="audit-logs" element={<AuditLog />} />
             <Route path="user-activities" element={<UserActivities />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="instructions" element={<InstructionsPage />} />
           </Route>
 
           {/* User Dashboard */}
