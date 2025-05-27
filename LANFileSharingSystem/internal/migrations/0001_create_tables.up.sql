@@ -41,9 +41,10 @@ CREATE INDEX IF NOT EXISTS idx_directories_parent ON directories (parent_directo
 CREATE TABLE IF NOT EXISTS activity_log (
     id SERIAL PRIMARY KEY,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    username VARCHAR(50) NOT NULL DEFAULT 'system',
     event VARCHAR(255) NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_log (timestamp);
+CREATE INDEX IF NOT EXISTS idx_activity_timestamp_username ON activity_log (timestamp, username);
 
 -- File Versions Table
 CREATE TABLE IF NOT EXISTS file_versions (
