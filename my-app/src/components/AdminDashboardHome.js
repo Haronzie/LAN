@@ -302,7 +302,14 @@ const folderColorsArray = Object.values(folderColors);
   const fetchAuditLogs = async () => {
     try {
       const res = await axios.get(`${BASE_URL}/auditlogs`, { withCredentials: true });
-      setAuditLogs(Array.isArray(res.data) ? res.data : []);
+      // Process the audit logs to ensure we have the correct username
+      const processedLogs = Array.isArray(res.data) 
+        ? res.data.map(log => ({
+            ...log,
+            user_name: log.username_at_action || log.user_username || log.user_name || 'System'
+          }))
+        : [];
+      setAuditLogs(processedLogs);
     } catch (error) {
       console.error('Error fetching audit logs:', error);
       message.error('Failed to fetch audit logs: ' + (error.message || 'Unknown error'));
