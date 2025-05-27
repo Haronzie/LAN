@@ -887,6 +887,19 @@ const folderColorsArray = Object.values(folderColors);
                         const actionText = action.endsWith('e') ? `${action}d` : `${action}ed`;
                         return (
                           <span>
+                            <span style={{
+                              backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                              color: '#4f46e5',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontWeight: 500,
+                              marginRight: '6px',
+                              fontSize: '12px',
+                              display: 'inline-block',
+                              lineHeight: '1.2'
+                            }}>
+                              {actionText}
+                            </span>
                             {cleanMessage}
                           </span>
                         );
