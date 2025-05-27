@@ -130,9 +130,29 @@ const AdminInstructionDropdown = () => {
   const instructionCount = instructions.filter(i => !i.is_done).length;
 
   const menu = (
-    <div style={{ width: 350, maxHeight: '60vh', overflowY: 'auto' }}>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
-        <strong>File Instructions Sent</strong>
+    <div style={{ 
+      width: 400, 
+      maxHeight: '70vh', 
+      overflowY: 'auto',
+      backgroundColor: 'rgba(255, 255, 255, 0.98)',
+      borderRadius: 8,
+      boxShadow: '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)'
+    }}>
+      <div style={{ 
+        padding: '16px', 
+        borderBottom: '1px solid #f0f0f0',
+        backgroundColor: '#fafafa',
+        borderTopLeftRadius: 8,
+        borderTopRightRadius: 8,
+        position: 'sticky',
+        top: 0,
+        zIndex: 1,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <Text strong style={{ fontSize: '16px' }}>File Instructions Sent</Text>
+        <Badge count={instructionCount} style={{ backgroundColor: '#1890ff' }} />
       </div>
       
       <List
@@ -150,10 +170,14 @@ const AdminInstructionDropdown = () => {
         renderItem={instruction => (
           <List.Item
             style={{
-              padding: '12px 16px',
+              padding: '16px',
               borderBottom: '1px solid #f0f0f0',
               cursor: 'pointer',
-              backgroundColor: instruction.is_read ? '#fff' : '#f6f9ff'
+              transition: 'all 0.3s',
+              backgroundColor: instruction.is_read ? '#fff' : 'rgba(24, 144, 255, 0.04)',
+              ':hover': {
+                backgroundColor: 'rgba(24, 144, 255, 0.08)'
+              }
             }}
             onClick={() => navigateToFile(instruction.file_id, instruction.file_path)}
           >
