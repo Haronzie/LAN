@@ -688,44 +688,35 @@ const folderColorsArray = Object.values(folderColors);
               flex: '1 1 auto',
               display: 'flex',
               flexDirection: 'column',
-              minHeight: '450px',
+              minHeight: '400px',
+              maxHeight: '500px',
               position: 'relative',
               overflow: 'hidden'
             }}>
               <div style={{ 
-                width: '100%',
                 flex: '1 1 auto',
+                width: '100%',
                 position: 'relative',
-                minHeight: '350px',
-                padding: '16px 0 60px',
-                marginBottom: '16px',
-                overflow: 'visible'
+                overflow: 'visible',
+                minHeight: '450px',
+                padding: '16px 0 80px' // Increased bottom padding for x-axis labels
               }}>
                 {filteredChartData.length > 0 ? (
                   <div style={{
                     position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
+                    top: '0',
+                    left: '0',
+                    right: '0',
+                    bottom: '0',
                     width: '100%',
                     height: '100%',
-                    overflow: 'visible',
-                    display: 'flex',
-                    flexDirection: 'column'
+                    padding: '0 10px 10px 10px',
+                    boxSizing: 'border-box'
                   }}>
                     <Bar
                       options={{
                         responsive: true,
                         maintainAspectRatio: false,
-                        animation: {
-                          duration: 500,
-                          easing: 'easeOutQuart'
-                        },
-                        interaction: {
-                          mode: 'index',
-                          intersect: false
-                        },
                         plugins: {
                           legend: {
                             position: 'top',
@@ -733,13 +724,8 @@ const folderColorsArray = Object.values(folderColors);
                             labels: {
                               boxWidth: 12,
                               usePointStyle: true,
-                              padding: 12,
-                              font: { 
-                                size: 12,
-                                family: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-                              },
-                              color: '#4a5568',
-                              padding: 8
+                              padding: 16,
+                              font: { size: 12 }
                             }
                           }
                         },
@@ -753,65 +739,35 @@ const folderColorsArray = Object.values(folderColors);
                         },
                         scales: {
                           x: { 
-                            grid: { 
-                              display: false,
-                              drawBorder: false,
-                              drawOnChartArea: false
-                            },
+                            grid: { display: false },
                             ticks: {
                               maxRotation: 45,
                               minRotation: 45,
                               padding: 12,
                               autoSkip: false,
                               font: {
-                                size: 11,
-                                family: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+                                size: 11
                               },
-                              color: '#4a5568',
                               callback: function(value) {
+                                // Truncate long labels if needed
                                 const label = this.getLabelForValue(value);
                                 if (label.length > 10) {
-                                  return label.substring(0, 10) + '..';
+                                  return label.substring(0, 10) + '...';
                                 }
                                 return label;
                               }
-                            },
-                            afterFit: function(scale) {
-                              scale.height = 80; // Reduce the height of the x-axis
-                            },
-                            gridLines: {
-                              display: false,
-                              drawBorder: false,
-                              drawOnChartArea: false
                             }
                           },
                           y: { 
                             beginAtZero: true,
                             grid: { 
-                              color: 'rgba(0, 0, 0, 0.03)',
-                              drawBorder: false,
-                              drawTicks: false,
-                              drawOnChartArea: true
+                              color: 'rgba(0,0,0,0.05)',
+                              drawBorder: false
                             },
                             ticks: { 
                               stepSize: 1,
                               padding: 8,
-                              precision: 0,
-                              font: {
-                                size: 11,
-                                family: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-                              },
-                              color: '#718096',
-                              maxTicksLimit: 6,
-                              callback: function(value) {
-                                if (value % 1 === 0) return value;
-                              }
-                            },
-                            border: {
-                              display: false
-                            },
-                            afterFit: function(scale) {
-                              scale.paddingRight = 10; // Add some padding to the right of y-axis
+                              precision: 0
                             }
                           }
                         }
