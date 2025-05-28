@@ -82,6 +82,12 @@ const AdminDashboard = () => {
       setDrawerVisible(!drawerVisible);
     } else {
       setCollapsed(!collapsed);
+      
+      // Force a reflow to ensure the animation works
+      const sider = document.querySelector('.admin-sider');
+      if (sider) {
+        sider.style.transition = 'all 0.2s ease';
+      }
     }
   };
 
@@ -125,82 +131,87 @@ const AdminDashboard = () => {
   return (
     <ConfigProvider warning={{ strict: false }}>
       <Layout className="admin-dashboard-container">
-        {/* Mobile Drawer */}
-        <Drawer
-          title="Menu"
-          placement="left"
-          width={250}
-          onClose={() => setDrawerVisible(false)}
-          visible={drawerVisible}
-          bodyStyle={{ padding: 0 }}
-          className="mobile-drawer"
-        >
-          <div className="user-info">
-            <Avatar size={64} icon={<UserOutlined />} />
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontWeight: 'bold' }}>{adminName}</div>
-              <div style={{ color: '#666' }}>Administrator</div>
-            </div>
-          </div>
-          <Menu
-            theme="light"
-            mode="inline"
-            selectedKeys={[currentSection]}
-            items={menuItems}
-            onClick={() => setDrawerVisible(false)}
-          />
-        </Drawer>
-
-        {/* Desktop Sider */}
-        <div className="sider-container">
-          <Sider
-            className="admin-sider"
-            collapsible
-            collapsed={collapsed}
-            onCollapse={setCollapsed}
+        {/* Mobile Drawer - Only for mobile view */}
+        {isMobile && (
+          <Drawer
+            title="Menu"
+            placement="left"
             width={250}
-            theme="light"
-            trigger={null}
-            collapsedWidth={0}
-            breakpoint="lg"
+            onClose={() => setDrawerVisible(false)}
+            visible={drawerVisible}
+            bodyStyle={{ padding: 0 }}
+            className="mobile-drawer"
+            closable={true}
           >
-            <div className="admin-logo">
-              <h1>LAN Admin</h1>
-            </div>
-          <div className="user-info">
-            <Avatar size={64} icon={<UserOutlined />} />
-            {!collapsed && (
+            <div className="user-info">
+              <Avatar size={64} icon={<UserOutlined />} />
               <div style={{ marginTop: 12 }}>
                 <div style={{ fontWeight: 'bold' }}>{adminName}</div>
                 <div style={{ color: '#666' }}>Administrator</div>
               </div>
-            )}
+            </div>
+            <Menu
+              theme="light"
+              mode="inline"
+              selectedKeys={[currentSection]}
+              items={menuItems}
+              onClick={() => setDrawerVisible(false)}
+            />
+          </Drawer>
+        )}
+
+        {/* Desktop Sider - Only for desktop view */}
+        {!isMobile && (
+          <div className="sider-container">
+            <Sider
+              className="admin-sider"
+              collapsible
+              collapsed={collapsed}
+              onCollapse={setCollapsed}
+              width={250}
+              theme="light"
+              trigger={null}
+              collapsedWidth={0}
+              breakpoint="lg"
+            >
+              <div className="admin-logo">
+                <h1>LAN Admin</h1>
+              </div>
+              <div className="user-info">
+                <Avatar size={64} icon={<UserOutlined />} />
+                {!collapsed && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontWeight: 'bold' }}>{adminName}</div>
+                    <div style={{ color: '#666' }}>Administrator</div>
+                  </div>
+                )}
+              </div>
+              <Menu
+                theme="light"
+                mode="inline"
+                selectedKeys={[currentSection]}
+                items={menuItems}
+              />
+            </Sider>
+            <div 
+              className={`sider-toggle ${collapsed ? 'collapsed' : ''}`}
+              onClick={toggleMenu}
+            >
+              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            </div>
           </div>
-          <Menu
-            theme="light"
-            mode="inline"
-            selectedKeys={[currentSection]}
-            items={menuItems}
-          />
-          </Sider>
-          <div 
-            className={`sider-toggle ${collapsed ? 'collapsed' : ''}`}
-            onClick={toggleMenu}
-          >
-            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-          </div>
-        </div>
+        )}
 
         <Layout className="site-layout">
           <Header className="admin-header">
             <div className="header-content">
               <div className="header-left">
-                <Button
-                  type="text"
-                  icon={isMobile ? <MenuOutlined /> : (collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />)}
+                <div 
+                  className={`sider-toggle ${collapsed ? 'collapsed' : ''}`}
                   onClick={toggleMenu}
-                  className="menu-toggle"
-                />
+                >
+                  {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                </div>
                 <div className="welcome-message">
                   <div className="welcome-text">Welcome to the Admin Dashboard</div>
                 </div>
