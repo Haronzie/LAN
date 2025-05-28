@@ -680,40 +680,52 @@ const folderColorsArray = Object.values(folderColors);
             {/* Chart Container */}
             <div style={{ 
               width: '100%',
-              padding: '24px',
+              padding: '16px',
               boxSizing: 'border-box',
               backgroundColor: '#fff',
               borderRadius: '8px',
               boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              minHeight: '500px',
+              flex: '1 1 auto',
               display: 'flex',
               flexDirection: 'column',
+              minHeight: '450px',
+              position: 'relative',
               overflow: 'hidden'
             }}>
               <div style={{ 
-                flex: '1 1 auto',
                 width: '100%',
+                flex: '1 1 auto',
                 position: 'relative',
-                overflow: 'visible',
-                minHeight: '400px',
-                padding: '16px 0 40px' // Added more padding at bottom for x-axis labels
+                minHeight: '350px',
+                padding: '16px 0 60px',
+                marginBottom: '16px',
+                overflow: 'visible'
               }}>
                 {filteredChartData.length > 0 ? (
                   <div style={{
                     position: 'absolute',
-                    top: '0',
-                    left: '0',
-                    right: '0',
-                    bottom: '0',
-                    minHeight: '400px',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
                     width: '100%',
                     height: '100%',
-                    overflow: 'visible'
+                    overflow: 'visible',
+                    display: 'flex',
+                    flexDirection: 'column'
                   }}>
                     <Bar
                       options={{
                         responsive: true,
                         maintainAspectRatio: false,
+                        animation: {
+                          duration: 500,
+                          easing: 'easeOutQuart'
+                        },
+                        interaction: {
+                          mode: 'index',
+                          intersect: false
+                        },
                         plugins: {
                           legend: {
                             position: 'top',
@@ -721,8 +733,13 @@ const folderColorsArray = Object.values(folderColors);
                             labels: {
                               boxWidth: 12,
                               usePointStyle: true,
-                              padding: 16,
-                              font: { size: 12 }
+                              padding: 12,
+                              font: { 
+                                size: 12,
+                                family: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+                              },
+                              color: '#4a5568',
+                              padding: 8
                             }
                           }
                         },
@@ -736,26 +753,65 @@ const folderColorsArray = Object.values(folderColors);
                         },
                         scales: {
                           x: { 
-                            grid: { display: false },
+                            grid: { 
+                              display: false,
+                              drawBorder: false,
+                              drawOnChartArea: false
+                            },
                             ticks: {
                               maxRotation: 45,
                               minRotation: 45,
-                              padding: 8,
+                              padding: 12,
                               autoSkip: false,
                               font: {
-                                size: 11
+                                size: 11,
+                                family: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+                              },
+                              color: '#4a5568',
+                              callback: function(value) {
+                                const label = this.getLabelForValue(value);
+                                if (label.length > 10) {
+                                  return label.substring(0, 10) + '..';
+                                }
+                                return label;
                               }
+                            },
+                            afterFit: function(scale) {
+                              scale.height = 80; // Reduce the height of the x-axis
+                            },
+                            gridLines: {
+                              display: false,
+                              drawBorder: false,
+                              drawOnChartArea: false
                             }
                           },
                           y: { 
                             beginAtZero: true,
                             grid: { 
-                              color: 'rgba(0,0,0,0.05)',
-                              drawBorder: false
+                              color: 'rgba(0, 0, 0, 0.03)',
+                              drawBorder: false,
+                              drawTicks: false,
+                              drawOnChartArea: true
                             },
                             ticks: { 
                               stepSize: 1,
-                              padding: 8
+                              padding: 8,
+                              precision: 0,
+                              font: {
+                                size: 11,
+                                family: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+                              },
+                              color: '#718096',
+                              maxTicksLimit: 6,
+                              callback: function(value) {
+                                if (value % 1 === 0) return value;
+                              }
+                            },
+                            border: {
+                              display: false
+                            },
+                            afterFit: function(scale) {
+                              scale.paddingRight = 10; // Add some padding to the right of y-axis
                             }
                           }
                         }
