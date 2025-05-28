@@ -596,17 +596,23 @@ const folderColorsArray = Object.values(folderColors);
       {/* Main Content */}
       <div style={{ 
         display: 'flex', 
-        flex: 1,
-        gap: '16px',
+        flex: 1, 
+        gap: '0',
+        padding: '24px',
         minHeight: 0,
-        overflow: 'hidden'
+        overflow: 'hidden',
+        width: '100%',
+        boxSizing: 'border-box'
       }}>
         {/* Left Column - Chart */}
         <div style={{ 
-          flex: 2, 
+          flex: '1 1 60%',
           display: 'flex', 
           flexDirection: 'column',
-          minWidth: 0
+          minWidth: 0,
+          overflow: 'hidden',
+          paddingRight: '12px',
+          height: '100%'
         }}>
           <Card 
             style={{ 
@@ -812,11 +818,16 @@ const folderColorsArray = Object.values(folderColors);
 
         {/* Right Column - Activity Logs */}
         <div style={{ 
-          flex: 1, 
-          display: 'flex', 
+          flex: '0 0 35%',
+          display: 'flex',
           flexDirection: 'column',
           gap: '16px',
-          minWidth: 0
+          minWidth: 0,
+          overflow: 'hidden',
+          padding: '0 0 16px 12px',
+          height: '100%',
+          borderLeft: '1px solid #f0f0f0',
+          boxSizing: 'border-box'
         }}>
           {/* Audit Logs Card */}
           <Card 
@@ -824,37 +835,59 @@ const folderColorsArray = Object.values(folderColors);
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between',
-                alignItems: 'center'
+                alignItems: 'center',
+                padding: '0 8px'
               }}>
-                <span>Recent Audit Logs</span>
+                <span style={{ fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap' }}>Recent Audit Logs</span>
                 <Button 
                   type="link" 
                   size="small" 
                   onClick={() => navigate('audit-logs')}
-                  style={{ padding: 0, height: 'auto' }}
+                  style={{ 
+                    padding: '0 6px', 
+                    height: '24px', 
+                    fontSize: '11px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
                 >
                   View All
                 </Button>
               </div>
             }
             style={{ 
-              flex: 1,
+              flex: '1 1 50%',
               display: 'flex',
               flexDirection: 'column',
+              borderRadius: 4,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              width: '100%',
               overflow: 'hidden',
-              borderRadius: 8,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              marginBottom: 0
+            }}
+            headStyle={{ 
+              padding: '0 8px',
+              minHeight: '28px',
+              height: '28px',
+              borderBottom: '1px solid #f0f0f0',
+              display: 'flex',
+              alignItems: 'center',
+              backgroundColor: '#fafafa',
+              fontSize: '12px'
             }}
             bodyStyle={{ 
-              padding: 0,
-              flex: 1,
-              overflow: 'auto'
+              padding: '8px',
+              overflow: 'visible',
+              flex: '0 0 auto',
+              minHeight: 'auto',
+              backgroundColor: '#fff'
             }}
           >
             {auditLogs.length > 0 ? (
               <List
                 size="small"
-                dataSource={auditLogs.slice(0, 10)}
+                dataSource={auditLogs.slice(0, 1)}
                 renderItem={(item) => {
                   // Parse the action and details to create a more user-friendly message
                   const getActionIcon = (action) => {
@@ -1019,31 +1052,53 @@ const folderColorsArray = Object.values(folderColors);
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between',
-                alignItems: 'center'
+                alignItems: 'center',
+                padding: '0 8px'
               }}>
-                <span>Recent Activities</span>
+                <span style={{ fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap' }}>Recent Activities</span>
                 <Button 
                   type="link" 
-                  size="small" 
+                  size="small"
                   onClick={() => navigate('user-activities')}
-                  style={{ padding: 0, height: 'auto' }}
+                  style={{ 
+                    padding: '0 6px', 
+                    height: '24px', 
+                    fontSize: '11px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
                 >
                   View All
                 </Button>
               </div>
             }
             style={{ 
-              flex: 1,
+              flex: '1 1 50%',
               display: 'flex',
               flexDirection: 'column',
+              borderRadius: 4,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              width: '100%',
               overflow: 'hidden',
-              borderRadius: 8,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              marginBottom: 0
+            }}
+            headStyle={{ 
+              padding: '0 8px',
+              minHeight: '28px',
+              height: '28px',
+              borderBottom: '1px solid #f0f0f0',
+              display: 'flex',
+              alignItems: 'center',
+              backgroundColor: '#fafafa',
+              fontSize: '12px'
             }}
             bodyStyle={{ 
-              padding: 0,
-              flex: 1,
-              overflow: 'auto'
+              padding: '8px',
+              overflow: 'visible',
+              flex: '0 0 auto',
+              minHeight: 'auto',
+              backgroundColor: '#fff'
             }}
           >
             {activities.length > 0 ? (
@@ -1064,113 +1119,98 @@ const folderColorsArray = Object.values(folderColors);
                       event.includes('rename file')
                     );
                   })
-                  .slice(0, 10)}
+                  .slice(0, 1)} // Show only the most recent activity
                 renderItem={(item) => {
-                  // Parse the event message to extract relevant information
                   const event = item.event || '';
                   const userName = item.user_name || 'System';
                   const timestamp = new Date(item.timestamp || item.created_at);
                   const timeString = timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                  const dateString = timestamp.toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  });
-                  
-                  // Format the activity message with highlighted username
-                  const formatActivityMessage = (event, currentUserName) => {
-                    // Don't modify system messages
-                    if (currentUserName.toLowerCase() === 'system') {
-                      return event;
-                    }
-                    
-                    // Format similar to audit log
-                    const action = event;
-                    let actionText = action;
-                    
-                    // Simple formatting that matches audit log style
-                    return (
-                      <span>
-                        <span style={{ color: '#4f46e5', fontWeight: 'bold' }}>{currentUserName}</span>
-                        {` ${actionText}`}
-                      </span>
-                    );
-                  };
                   
                   // Determine icon and color based on event type
-                  let icon = <MessageOutlined />;
+                  let icon = <MessageOutlined style={{ fontSize: '12px' }} />;
                   let iconColor = '#4f46e5';
                   
                   if (event.toLowerCase().includes('login')) {
-                    icon = <LoginOutlined />;
-                    iconColor = '#10b981'; // Green
+                    icon = <LoginOutlined style={{ fontSize: '12px' }} />;
+                    iconColor = '#10b981';
                   } else if (event.toLowerCase().includes('logout')) {
-                    icon = <LogoutOutlined />;
-                    iconColor = '#ef4444'; // Red
+                    icon = <LogoutOutlined style={{ fontSize: '12px' }} />;
+                    iconColor = '#ef4444';
                   } else if (event.toLowerCase().includes('upload')) {
-                    icon = <FileOutlined />;
-                    iconColor = '#3b82f6'; // Blue
+                    icon = <FileOutlined style={{ fontSize: '12px' }} />;
+                    iconColor = '#3b82f6';
                   } else if (event.toLowerCase().includes('delete')) {
-                    icon = <DeleteOutlined />;
-                    iconColor = '#ef4444'; // Red
+                    icon = <DeleteOutlined style={{ fontSize: '12px' }} />;
+                    iconColor = '#ef4444';
                   }
                   
                   return (
                     <List.Item 
                       style={{ 
-                        padding: '12px 16px',
-                        borderBottom: '1px solid #edf2f7',
-                        transition: 'background-color 0.2s',
+                        padding: '4px 6px',
+                        borderBottom: '1px solid #f0f0f0',
                         display: 'flex',
                         alignItems: 'flex-start',
-                        gap: '12px'
+                        gap: '6px',
+                        backgroundColor: '#fff',
+                        borderRadius: '4px',
+                        margin: '1px 0',
+                        lineHeight: '1.2'
                       }}
-                      className="hover:bg-gray-50"
                     >
                       <div style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '50%',
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '4px',
                         backgroundColor: `${iconColor}15`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0
                       }}>
-                        {React.cloneElement(icon, { 
-                          style: { color: iconColor, fontSize: 14 } 
-                        })}
+                        {React.cloneElement(icon, { style: { color: iconColor } })}
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ 
+                        flex: 1, 
+                        minWidth: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px'
+                      }}>
                         <div style={{ 
                           display: 'flex', 
                           justifyContent: 'space-between',
-                          marginBottom: 4,
-                          alignItems: 'center'
+                          alignItems: 'center',
+                          width: '100%'
                         }}>
-                          <div style={{ 
-                            width: '70%',
+                          <span style={{ 
+                            fontSize: '11px',
+                            color: '#4a5568',
+                            fontWeight: 500,
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }} />
-                          <Text type="secondary" style={{ 
-                            fontSize: 11, 
-                            color: '#718096',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '70%'
+                          }}>
+                            {userName}
+                          </span>
+                          <span style={{ 
+                            fontSize: '10px', 
+                            color: '#a0aec0',
                             whiteSpace: 'nowrap',
-                            marginLeft: 8
+                            marginLeft: '8px'
                           }}>
                             {timeString}
-                          </Text>
+                          </span>
                         </div>
                         <div style={{ 
-                          fontSize: 13,
-                          lineHeight: 1.4,
+                          fontSize: '12px',
+                          lineHeight: 1.3,
                           color: '#4a5568',
                           wordBreak: 'break-word',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '4px'
+                          gap: '2px'
                         }}>
                           {userName && userName.toLowerCase() !== 'system' ? (
                             <div style={{
@@ -1205,7 +1245,11 @@ const folderColorsArray = Object.values(folderColors);
                         </div>
                         <div style={{ marginTop: 4 }}>
                           <Text type="secondary" style={{ fontSize: 11 }}>
-                            {dateString}
+                            {timestamp.toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
                           </Text>
                         </div>
                       </div>
