@@ -688,18 +688,17 @@ const folderColorsArray = Object.values(folderColors);
               flex: '1 1 auto',
               display: 'flex',
               flexDirection: 'column',
-              minHeight: '400px',
-              maxHeight: '500px',
+              minHeight: '350px',
+              maxHeight: '400px',
               position: 'relative',
               overflow: 'hidden'
             }}>
               <div style={{ 
-                flex: '1 1 auto',
                 width: '100%',
+                height: 'calc(100% - 60px)',
                 position: 'relative',
-                overflow: 'visible',
-                minHeight: '450px',
-                padding: '16px 0 80px' // Increased bottom padding for x-axis labels
+                overflow: 'hidden',
+                padding: '0 0 40px 0'
               }}>
                 {filteredChartData.length > 0 ? (
                   <div style={{
@@ -710,7 +709,7 @@ const folderColorsArray = Object.values(folderColors);
                     bottom: '0',
                     width: '100%',
                     height: '100%',
-                    padding: '0 10px 10px 10px',
+                    padding: '0 5px 5px 5px',
                     boxSizing: 'border-box'
                   }}>
                     <Bar
@@ -731,10 +730,10 @@ const folderColorsArray = Object.values(folderColors);
                         },
                         layout: {
                           padding: {
-                            left: 10,
-                            right: 10,
-                            top: 10,
-                            bottom: 60 // Increased bottom padding for x-axis labels
+                            left: 5,
+                            right: 5,
+                            top: 5,
+                            bottom: 40
                           }
                         },
                         scales: {
@@ -743,8 +742,9 @@ const folderColorsArray = Object.values(folderColors);
                             ticks: {
                               maxRotation: 45,
                               minRotation: 45,
-                              padding: 12,
-                              autoSkip: false,
+                              padding: 8,
+                              autoSkip: true,
+                              maxTicksLimit: 12,
                               font: {
                                 size: 11
                               },
