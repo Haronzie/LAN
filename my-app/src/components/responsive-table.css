@@ -1,0 +1,69 @@
+/* Responsive table styles */
+.file-manager-table {
+  width: 100%;
+  overflow-x: auto;
+  margin-bottom: 24px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+}
+
+.file-manager-table .ant-table {
+  min-width: 800px;
+}
+
+.file-manager-table .ant-table-thead > tr > th {
+  background-color: #fafafa;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.file-manager-table .ant-table-tbody > tr > td {
+  transition: all 0.3s;
+}
+
+.file-manager-table .ant-table-tbody > tr:hover > td {
+  background: #f5f5f5;
+}
+
+/* Responsive actions */
+.file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* For mobile view */
+@media (max-width: 768px) {
+  .file-manager-table {
+    border: 1px solid #f0f0f0;
+  }
+  
+  .file-manager-table .ant-table-thead > tr > th,
+  .file-manager-table .ant-table-tbody > tr > td {
+    padding: 12px 8px;
+  }
+  
+  .file-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .file-actions .ant-btn {
+    width: 100%;
+    margin-bottom: 4px;
+  }
+}
+
+/* For small mobile devices */
+@media (max-width: 480px) {
+  .file-manager-table .ant-table-thead > tr > th,
+  .file-manager-table .ant-table-tbody > tr > td {
+    padding: 8px 4px;
+    font-size: 13px;
+  }
+  
+  .file-actions .ant-btn {
+    padding: 0 8px;
+    font-size: 12px;
+  }
+}

@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
+import './responsive.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 // Import Ant Design styles - only need reset.css for Ant Design v5+

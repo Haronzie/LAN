@@ -49,6 +49,8 @@ import CommonModals from './common/CommonModals';
 import './action-buttons-fix.css'; // Import CSS to fix action buttons
 import './searchbar-fix.css'; // Import CSS to fix search bar overlap and ensure responsive layout
 import './pagination-fix.css'; // Import CSS to enhance pagination styling
+import './responsive-table.css'; // Import responsive table styles
+import './file-manager-responsive.css'; // Import responsive file manager styles
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -2660,7 +2662,7 @@ const FileManager = () => {
             </Col>
           </Row>
         ) : (
-          <div style={{ minHeight: '50vh' }}>
+          <div className="file-manager-table-container">
             {sortedItems.length > 0 ? (
               <div style={{ 
                 display: 'flex', 
@@ -2679,7 +2681,7 @@ const FileManager = () => {
                     overflowX: isSearching && currentPath === 'Operation' ? 'visible' : 'auto'
                   }}>
                     <Table
-                      className={`action-buttons-table ${isSearching && currentPath === 'Operation' ? 'operation-search-table' : ''}`}
+                      className={`file-manager-table action-buttons-table ${isSearching && currentPath === 'Operation' ? 'operation-search-table' : ''}`}
                       columns={columns}
                       dataSource={sortedItems.slice(
                         (currentPage - 1) * pageSize,

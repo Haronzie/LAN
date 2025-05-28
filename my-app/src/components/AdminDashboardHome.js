@@ -417,16 +417,6 @@ const folderColorsArray = Object.values(folderColors);
       padding: '16px',
       backgroundColor: '#f5f7fa'
     }}>
-      {/* Title */}
-      <Title level={3} style={{ 
-        margin: '0 0 16px 0',
-        textAlign: 'center',
-        fontWeight: 600,
-        color: '#1a365d'
-      }}>
-        Welcome to the Admin Dashboard
-      </Title>
-      
       {/* Stats Row */}
       <div style={{ 
         display: 'grid',
@@ -689,92 +679,117 @@ const folderColorsArray = Object.values(folderColors);
             
             {/* Chart Container */}
             <div style={{ 
-              flex: 1,
-              padding: '16px 24px 24px',
-              minHeight: 0,
-              overflow: 'auto'
+              width: '100%',
+              padding: '24px',
+              boxSizing: 'border-box',
+              backgroundColor: '#fff',
+              borderRadius: '8px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              minHeight: '500px',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
             }}>
-              {filteredChartData.length > 0 ? (
-                <div style={{ height: '100%', minHeight: '300px' }}>
-                  <Bar
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          position: 'top',
-                          align: 'center',
-                          labels: {
-                            boxWidth: 12,
-                            usePointStyle: true,
-                            padding: 16,
-                            font: { size: 12 }
-                          }
-                        }
-                      },
-                      layout: {
-                        padding: {
-                          left: 10,
-                          right: 10,
-                          top: 10,
-                          bottom: 10
-                        }
-                      },
-                      scales: {
-                        x: { 
-                          grid: { display: false },
-                          ticks: {
-                            maxRotation: 0,
-                            minRotation: 0,
-                            padding: 8,
-                            autoSkip: false,
-                            font: {
-                              size: 11
+              <div style={{ 
+                flex: '1 1 auto',
+                width: '100%',
+                position: 'relative',
+                overflow: 'visible',
+                minHeight: '400px',
+                padding: '16px 0 40px' // Added more padding at bottom for x-axis labels
+              }}>
+                {filteredChartData.length > 0 ? (
+                  <div style={{
+                    position: 'absolute',
+                    top: '0',
+                    left: '0',
+                    right: '0',
+                    bottom: '0',
+                    minHeight: '400px',
+                    width: '100%',
+                    height: '100%',
+                    overflow: 'visible'
+                  }}>
+                    <Bar
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            position: 'top',
+                            align: 'center',
+                            labels: {
+                              boxWidth: 12,
+                              usePointStyle: true,
+                              padding: 16,
+                              font: { size: 12 }
                             }
                           }
                         },
-                        y: { 
-                          beginAtZero: true,
-                          grid: { 
-                            color: 'rgba(0,0,0,0.05)',
-                            drawBorder: false
+                        layout: {
+                          padding: {
+                            left: 10,
+                            right: 10,
+                            top: 10,
+                            bottom: 60 // Increased bottom padding for x-axis labels
+                          }
+                        },
+                        scales: {
+                          x: { 
+                            grid: { display: false },
+                            ticks: {
+                              maxRotation: 45,
+                              minRotation: 45,
+                              padding: 8,
+                              autoSkip: false,
+                              font: {
+                                size: 11
+                              }
+                            }
                           },
-                          ticks: { 
-                            stepSize: 1,
-                            padding: 8
+                          y: { 
+                            beginAtZero: true,
+                            grid: { 
+                              color: 'rgba(0,0,0,0.05)',
+                              drawBorder: false
+                            },
+                            ticks: { 
+                              stepSize: 1,
+                              padding: 8
+                            }
                           }
                         }
-                      }
-                    }}
-                    data={{
-                      labels: filteredChartData.map(item => item.monthYear),
-                      datasets: validFolders.map((folder, index) => {
-                        const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
-                        return {
-                          label: capitalizedFolder,
-                          data: filteredChartData.map(item => item[capitalizedFolder] || 0),
-                          backgroundColor: folderColors[capitalizedFolder],
-                          borderRadius: 4
-                        };
-                      })
-                    }}
-                  />
-                </div>
-              ) : (
-                <div style={{ 
-                  height: '100%', 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  justifyContent: 'center', 
-                  alignItems: 'center',
-                  color: '#a0aec0',
-                  textAlign: 'center',
-                  padding: '24px'
-                }}>
-                  <FileOutlined style={{ fontSize: 32, marginBottom: 12 }} />
-                  <Text style={{ color: '#a0aec0' }}>No uploads yet</Text>
-                </div>
-              )}
+                      }}
+                      data={{
+                        labels: filteredChartData.map(item => item.monthYear),
+                        datasets: validFolders.map((folder) => {
+                          const capitalizedFolder = folder.charAt(0).toUpperCase() + folder.slice(1);
+                          return {
+                            label: capitalizedFolder,
+                            data: filteredChartData.map(item => item[capitalizedFolder] || 0),
+                            backgroundColor: folderColors[capitalizedFolder],
+                            borderRadius: 4
+                          };
+                        })
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ 
+                    height: '100%', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    color: '#a0aec0',
+                    textAlign: 'center',
+                    padding: '24px'
+                  }}>
+                    <FileOutlined style={{ fontSize: 32, marginBottom: 12 }} />
+                    <Text style={{ color: '#a0aec0' }}>No uploads yet</Text>
+                  </div>
+                )}
+              </div>
             </div>
           </Card>
         </div>

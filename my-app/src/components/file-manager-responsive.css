@@ -1,0 +1,157 @@
+/* Responsive File Manager Container */
+.file-manager-container {
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* Responsive Toolbar */
+.file-manager-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+/* Responsive Search Bar */
+.file-manager-search {
+  flex: 1;
+  min-width: 200px;
+  max-width: 400px;
+}
+
+/* Responsive Action Buttons */
+.file-manager-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* Responsive Table Container */
+.file-manager-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  margin-bottom: 24px;
+}
+
+/* Responsive Table */
+.file-manager-table {
+  min-width: 800px; /* Ensures table doesn't get too narrow */
+  width: 100%;
+}
+
+/* Responsive Table Cells */
+.file-manager-table .ant-table-thead > tr > th,
+.file-manager-table .ant-table-tbody > tr > td {
+  padding: 12px 16px;
+  white-space: nowrap;
+  transition: all 0.3s;
+}
+
+/* Responsive Actions Column */
+.file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Responsive Pagination */
+.file-manager-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* Responsive Modals */
+.file-manager-modal .ant-modal {
+  max-width: calc(100vw - 32px);
+}
+
+.file-manager-modal .ant-modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .file-manager-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .file-manager-search {
+    max-width: 100%;
+  }
+  
+  .file-manager-actions {
+    justify-content: space-between;
+  }
+  
+  .file-manager-table .ant-table-thead > tr > th,
+  .file-manager-table .ant-table-tbody > tr > td {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  
+  .file-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .file-actions .ant-btn {
+    width: 100%;
+    margin-bottom: 4px;
+  }
+  
+  .file-manager-pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+}
+
+/* Small Mobile Devices */
+@media (max-width: 480px) {
+  .file-manager-container {
+    padding: 8px;
+  }
+  
+  .file-manager-table .ant-table-thead > tr > th,
+  .file-manager-table .ant-table-tbody > tr > td {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  
+  .ant-btn {
+    padding: 0 8px;
+    font-size: 12px;
+    height: 32px;
+  }
+  
+  .ant-input {
+    font-size: 14px;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .file-manager-toolbar,
+  .file-manager-actions,
+  .ant-table-selection-col,
+  .ant-table-row-expand-icon-cell {
+    display: none !important;
+  }
+  
+  .file-manager-table {
+    width: 100% !important;
+    min-width: 100% !important;
+  }
+}
