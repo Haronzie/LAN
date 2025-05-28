@@ -35,7 +35,6 @@ const { Title } = Typography;
 
 const AdminDashboard = () => {
   const [adminName, setAdminName] = useState('Admin');
-  const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 992);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const siderRef = useRef(null);
@@ -80,14 +79,6 @@ const AdminDashboard = () => {
   const toggleMenu = () => {
     if (isMobile) {
       setDrawerVisible(!drawerVisible);
-    } else {
-      setCollapsed(!collapsed);
-      
-      // Force a reflow to ensure the animation works
-      const sider = document.querySelector('.admin-sider');
-      if (sider) {
-        sider.style.transition = 'all 0.2s ease';
-      }
     }
   };
 
@@ -160,79 +151,104 @@ const AdminDashboard = () => {
           </Drawer>
         )}
 
-        {/* Desktop Sider - Only for desktop view */}
+        {/* Desktop Sider - Static and non-collapsible */}
         {!isMobile && (
           <div className="sider-container">
             <Sider
               className="admin-sider"
-              collapsible
-              collapsed={collapsed}
-              onCollapse={setCollapsed}
-              width={250}
+              width={280}
               theme="light"
-              trigger={null}
-              collapsedWidth={0}
-              breakpoint="lg"
+              style={{
+                overflow: 'auto',
+                height: '100vh',
+                position: 'fixed',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                boxShadow: '2px 0 8px 0 rgba(0, 0, 0, 0.1)'
+              }}
             >
-              <div className="admin-logo">
-                <h1>LAN Admin</h1>
+              <div className="admin-logo" style={{ padding: '16px 24px' }}>
+                <h1 style={{ margin: 0, fontSize: '20px', color: '#1890ff' }}>LAN Admin</h1>
               </div>
-              <div className="user-info">
-                <Avatar size={64} icon={<UserOutlined />} />
-                {!collapsed && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ fontWeight: 'bold' }}>{adminName}</div>
-                    <div style={{ color: '#666' }}>Administrator</div>
-                  </div>
-                )}
+              <div className="user-info" style={{ padding: '24px', textAlign: 'center' }}>
+                <Avatar size={80} icon={<UserOutlined style={{ fontSize: '32px' }} />} />
+                <div style={{ marginTop: '16px' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{adminName}</div>
+                  <div style={{ color: '#666', fontSize: '14px' }}>Administrator</div>
+                </div>
               </div>
               <Menu
                 theme="light"
                 mode="inline"
                 selectedKeys={[currentSection]}
                 items={menuItems}
+                style={{ padding: '0 8px' }}
               />
             </Sider>
-            <div 
-              className={`sider-toggle ${collapsed ? 'collapsed' : ''}`}
-              onClick={toggleMenu}
-            >
-              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            </div>
           </div>
         )}
 
-        <Layout className="site-layout">
-          <Header className="admin-header">
-            <div className="header-content">
-              <div className="header-left">
-                <div 
-                  className={`sider-toggle ${collapsed ? 'collapsed' : ''}`}
-                  onClick={toggleMenu}
-                >
-                  {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                </div>
-                <div className="welcome-message">
-                  <div className="welcome-text">Welcome to the Admin Dashboard</div>
-                </div>
+        <Layout className="site-layout" style={{ marginLeft: isMobile ? 0 : 280 }}>
+          <Header className="site-layout-background" style={{ 
+            padding: '0 24px',
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr auto',
+            alignItems: 'center',
+            height: '64px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            background: '#fff',
+            boxShadow: '0 1px 4px rgba(0, 0, 0, 0.1)',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              {isMobile && (
+                <Button type="text" icon={<MenuOutlined />} onClick={toggleMenu} style={{ marginRight: 16 }} />
+              )}
+            </div>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              width: '100%'
+            }}>
+              <div style={{
+                background: 'linear-gradient(90deg, #1890ff, #36cfc9)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                fontWeight: 600,
+                fontSize: '18px',
+                letterSpacing: '0.5px',
+                textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                whiteSpace: 'nowrap',
+                padding: '0 20px'
+              }}>
+                Welcome to Admin Dashboard
               </div>
-              <div className="header-right">
-                <AdminInstructionDropdown />
-                <Button 
-                  type="text" 
-                  icon={<LogoutOutlined />} 
-                  onClick={handleLogout}
-                  className="logout-btn"
-                  style={{ 
-                    zIndex: 1,
-                    color: '#ff4d4f',
-                    borderColor: '#ff4d4f',
-                    marginLeft: '8px'
-                  }}
-                >
-                  <span className="logout-text">Logout</span>
-                </Button>
-              </div>
+            </div>
+            <div className="header-right" style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              marginLeft: 'auto'
+            }}>
+              <AdminInstructionDropdown />
+              <Button 
+                type="text" 
+                icon={<LogoutOutlined />} 
+                onClick={handleLogout}
+                className="logout-btn"
+                style={{ 
+                  zIndex: 1,
+                  color: '#ff4d4f',
+                  borderColor: '#ff4d4f',
+                  marginLeft: '8px'
+                }}
+              >
+                <span className="logout-text">Logout</span>
+              </Button>
             </div>
           </Header>
           <Content className="admin-content">
