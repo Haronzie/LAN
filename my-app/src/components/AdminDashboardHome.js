@@ -835,7 +835,7 @@ const folderColorsArray = Object.values(folderColors);
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: 'center+',
                 padding: '0 8px'
               }}>
                 <span style={{ fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap' }}>Recent Audit Logs</span>
