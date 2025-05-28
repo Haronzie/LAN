@@ -681,6 +681,7 @@ const folderColorsArray = Object.values(folderColors);
             <div style={{ 
               width: '100%',
               padding: '16px',
+              margin: '16px 0',
               boxSizing: 'border-box',
               backgroundColor: '#fff',
               borderRadius: '8px',
@@ -688,17 +689,17 @@ const folderColorsArray = Object.values(folderColors);
               flex: '1 1 auto',
               display: 'flex',
               flexDirection: 'column',
-              minHeight: '350px',
-              maxHeight: '400px',
+              minHeight: '380px',
               position: 'relative',
-              overflow: 'hidden'
+              overflow: 'visible',
+              border: '1px solid #f0f0f0'
             }}>
               <div style={{ 
                 width: '100%',
-                height: 'calc(100% - 60px)',
+                height: 'calc(100% - 45px)',
                 position: 'relative',
-                overflow: 'hidden',
-                padding: '0 0 40px 0'
+                overflow: 'visible',
+                padding: '5px 0 45px 0'
               }}>
                 {filteredChartData.length > 0 ? (
                   <div style={{
@@ -709,7 +710,7 @@ const folderColorsArray = Object.values(folderColors);
                     bottom: '0',
                     width: '100%',
                     height: '100%',
-                    padding: '0 5px 5px 5px',
+                    padding: '0 12px 15px 12px',
                     boxSizing: 'border-box'
                   }}>
                     <Bar
@@ -742,20 +743,23 @@ const folderColorsArray = Object.values(folderColors);
                             ticks: {
                               maxRotation: 45,
                               minRotation: 45,
-                              padding: 8,
+                              padding: 4,
                               autoSkip: true,
                               maxTicksLimit: 12,
-                              font: {
-                                size: 11
-                              },
-                              callback: function(value) {
-                                // Truncate long labels if needed
-                                const label = this.getLabelForValue(value);
-                                if (label.length > 10) {
-                                  return label.substring(0, 10) + '...';
-                                }
-                                return label;
+                              afterFit: function(scale) {
+                              scale.height = 42; // Fine-tuned height for x-axis
+                            },
+                            font: {
+                              size: 11,
+                              weight: 500
+                            },
+                            callback: function(value) {
+                              const label = this.getLabelForValue(value);
+                              if (label.length > 8) {
+                                return label.substring(0, 8) + '..';
                               }
+                              return label;
+                            }
                             }
                           },
                           y: { 
