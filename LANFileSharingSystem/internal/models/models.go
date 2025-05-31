@@ -1331,10 +1331,34 @@ func (app *App) DeleteFileRecordByPath(filePath string) (int, error) {
 
 // UpdateSubdirectoryPaths updates all subdirectory records when a folder is moved.
 func (app *App) UpdateSubdirectoryPaths(dirName, oldParent, newParent string) error {
-	// TODO: Implement actual DB update logic for subdirectory paths
-	log.Printf("[STUB] UpdateSubdirectoryPaths called for dirName='%s', oldParent='%s', newParent='%s'", dirName, oldParent, newParent)
+	// Build old and new parent_directory prefixes
+	oldPrefix := oldParent
+	if oldPrefix != "" {
+		oldPrefix += "/"
+	}
+	oldPrefix += dirName
+
+	newPrefix := newParent
+	if newPrefix != "" {
+		newPrefix += "/"
+	}
+	newPrefix += dirName
+
+	// Update parent_directory for all subdirectories whose parent_directory starts with oldPrefix
+	query := `
+        UPDATE directories
+        SET parent_directory = regexp_replace(parent_directory, '^' || $1, $2)
+        WHERE parent_directory LIKE $1 || '/%'
+    `
+	_, err := app.DB.Exec(query, oldPrefix, newPrefix)
+	if err != nil {
+		log.Printf("[ERROR] Failed to update subdirectory paths from '%s' to '%s': %v", oldPrefix, newPrefix, err)
+		return err
+	}
+	log.Printf("[INFO] Updated subdirectory paths from '%s' to '%s'", oldPrefix, newPrefix)
 	return nil
 }
+
 
 // UpdateFileDirectoryPaths updates all file records in a moved directory and its subdirectories.
 func (app *App) UpdateFileDirectoryPaths(dirName, oldParent, newParent string) error {
