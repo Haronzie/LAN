@@ -221,43 +221,47 @@ const latestFetchPathRef = useRef(''); // Track the latest fetch path
   };
 
   const fetchItems = async (pathArg) => {
-  const fetchPath = typeof pathArg === 'string' ? pathArg : currentPath;
-    // Always use lowercase for backend queries
-    const normalizedCurrentPath = (currentPath || '').toLowerCase();
+    const fetchPath = typeof pathArg === 'string' ? pathArg : currentPath;
+    latestFetchPathRef.current = fetchPath; // Update the latest fetch path reference
+    
     setLoading(true);
     try {
-      console.log("📂 Fetching files in:", currentPath);
-      const directoryParam = encodeURIComponent(currentPath);
+      console.log("📂 Fetching files in:", fetchPath);
+      const directoryParam = encodeURIComponent(fetchPath);
+      
+      // Fetch files and directories in parallel
       const [filesRes, dirsRes] = await Promise.all([
         axios.get(`${BASE_URL}/files?directory=${directoryParam}`, { withCredentials: true }),
         axios.get(`${BASE_URL}/directory/list?directory=${directoryParam}`, { withCredentials: true })
       ]);
 
-      // Add a delay to ensure folders have time to process on the backend
-      // This helps with the issue of folders appearing empty after move operations
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      const files = (filesRes.data || []).filter(f => normalizePath(f.directory) === normalizePath(fetchPath));
-      const directories = (dirsRes.data || []).filter(d => normalizePath(d.name) !== normalizePath(fetchPath));
-      // Include fixed folders at root level if missing
+      // Process files and directories
+      const files = Array.isArray(filesRes.data) ? filesRes.data : [];
+      let directories = Array.isArray(dirsRes.data) ? dirsRes.data : [];
+      
+      // Add fixed folders at root level if they don't exist
       if (fetchPath === '') {
-        const fixedFolders = ['Operation', 'Research', 'Training'].map(folder => ({
-          name: folder,
-          type: 'directory',
-          parent: '',
-        }));
-        const dirNames = directories.map(d => d.name);
+        const fixedFolders = ['Operation', 'Research', 'Training'];
+        const existingFolders = new Set(directories.map(d => d.name));
+        
         fixedFolders.forEach(folder => {
-          if (!dirNames.includes(folder.name)) {
-            directories.push(folder);
+          if (!existingFolders.has(folder)) {
+            directories.push({
+              name: folder,
+              type: 'directory',
+              parent: ''
+            });
           }
         });
       }
+      
+      console.log('Fetched files:', files);
+      console.log('Fetched directories:', directories);
+      
       // Only update items if this fetch is for the latest path
       if (fetchPath === latestFetchPathRef.current) {
         setItems([...directories, ...files]);
       } else {
-        // Ignore stale fetch results
         console.log('Ignored stale fetch for path:', fetchPath);
       }
     } catch (error) {
@@ -2355,15 +2359,13 @@ const latestFetchPathRef = useRef(''); // Track the latest fetch path
   // Update breadcrumb items when currentPath changes
   useEffect(() => {
     const newBreadcrumbItems = [
-      <Breadcrumb.Item key="root">
-        {isRoot ? 'Root' : <a onClick={() => setCurrentPath('')}>Root</a>}
-      </Breadcrumb.Item>
+      <Breadcrumb.Item key="root" onClick={() => setCurrentPath('')}>Root</Breadcrumb.Item>
     ];
     
-    segments.forEach((seg, index) => {
+    segments.forEach((seg, idx, arr) => {
       newBreadcrumbItems.push(
-        <Breadcrumb.Item key={index}>
-          {index === segments.length - 1 ? seg : <a onClick={() => handleBreadcrumbClick(index)}>{seg}</a>}
+        <Breadcrumb.Item key={seg + idx} onClick={() => setCurrentPath(arr.slice(0, idx + 1).join('/'))}>
+          {seg}
         </Breadcrumb.Item>
       );
     });
