@@ -6,6 +6,9 @@ import path from 'path-browserify';
 /**
  * Custom hook to manage common modal functionality across dashboard components
  */
+
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 const useCommonModals = (container, fetchItems, fetchDirectories) => {
   // Create Folder Modal state
   const [createFolderModal, setCreateFolderModal] = useState(false);
@@ -42,7 +45,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
     }
     try {
       await axios.post(
-        '/directory/create',
+        `${BASE_URL}/directory/create`,
         { name: newFolderName, parent: currentPath, container },
         { withCredentials: true }
       );
@@ -72,7 +75,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
     try {
       if (selectedItem.type === 'directory') {
         await axios.put(
-          '/directory/rename',
+          `${BASE_URL}/directory/rename`,
           {
             old_name: selectedItem.name,
             new_name: renameNewName,
@@ -83,7 +86,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
         );
       } else {
         await axios.put(
-          '/file/rename',
+          `${BASE_URL}/file/rename`,
           {
             directory: currentPath,
             old_filename: selectedItem.name,
@@ -106,7 +109,6 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
 
   // Copy handler
   const handleCopy = (record) => {
-    // Suggest a name for the copy
     let baseName = record.name;
     let extension = '';
     const dotIndex = record.name.lastIndexOf('.');
@@ -131,7 +133,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
     try {
       if (copyItem.type === 'directory') {
         await axios.post(
-          '/directory/copy',
+          `${BASE_URL}/directory/copy`,
           {
             source_name: copyItem.name,
             source_parent: currentPath,
@@ -143,7 +145,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
         );
       } else {
         await axios.post(
-          '/copy-file',
+          `${BASE_URL}/copy-file`,
           {
             source_file: copyItem.name,
             new_file_name: copyNewName,
@@ -175,14 +177,13 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
     setMoveModalVisible(true);
   };
 
-  // Function to fetch subfolders when a main folder is selected
   const fetchSubFolders = async (mainFolder) => {
     try {
-      const res = await axios.get(`/directory/list?directory=${encodeURIComponent(mainFolder)}`,
+      const res = await axios.get(
+        `${BASE_URL}/directory/list?directory=${encodeURIComponent(mainFolder)}`,
         { withCredentials: true }
       );
 
-      // Filter to only include directories
       const folders = (res.data || [])
         .filter(item => item.type === 'directory')
         .map(folder => ({
@@ -198,11 +199,10 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
     }
   };
 
-  // Handle main folder selection
   const handleMainFolderChange = (value) => {
     setSelectedMainFolder(value);
     setSelectedSubFolder('');
-    setMoveDestination(value); // Set the destination to the main folder by default
+    setMoveDestination(value);
 
     if (value) {
       fetchSubFolders(value);
@@ -211,14 +211,11 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
     }
   };
 
-  // Handle subfolder selection
   const handleSubFolderChange = (value) => {
     setSelectedSubFolder(value);
     if (value) {
-      // Combine main folder and subfolder for the full path
       setMoveDestination(`${selectedMainFolder}/${value}`);
     } else {
-      // If no subfolder is selected, use just the main folder
       setMoveDestination(selectedMainFolder);
     }
   };
@@ -235,7 +232,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
     try {
       if (moveItem.type === 'directory') {
         await axios.post(
-          '/directory/move',
+          `${BASE_URL}/directory/move`,
           {
             name: moveItem.name,
             old_parent: currentPath,
@@ -245,16 +242,8 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
           { withCredentials: true }
         );
       } else {
-        console.log('Moving file with:', {
-          id: moveItem.id.toString(),
-          filename: moveItem.name,
-          old_parent: currentPath,
-          new_parent: moveDestination,
-          overwrite: false
-        });
-
         await axios.post(
-          '/move-file',
+          `${BASE_URL}/move-file`,
           {
             id: moveItem.id.toString(),
             filename: moveItem.name,
@@ -277,7 +266,6 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
     }
   };
 
-  // Upload handler
   const handleOpenUploadModal = (currentPath) => {
     if (!currentPath) {
       message.error("Please select or create a folder first.");
@@ -302,7 +290,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
         formData.append('directory', normalizedPath);
         formData.append('container', container);
 
-        await axios.post('/upload', formData, {
+        await axios.post(`${BASE_URL}/upload`, formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -316,7 +304,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
         formData.append('overwrite', 'false');
         formData.append('skip', 'false');
 
-        const res = await axios.post('/bulk-upload', formData, {
+        const res = await axios.post(`${BASE_URL}/bulk-upload`, formData, {
           withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -331,7 +319,7 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
 
       setUploadModalVisible(false);
       setUploadingFiles([]);
-      fetchItems(); // refresh file list
+      fetchItems();
     } catch (error) {
       console.error('Upload error:', error);
       message.error(error.response?.data?.error || 'Upload failed');
@@ -339,15 +327,12 @@ const useCommonModals = (container, fetchItems, fetchDirectories) => {
   };
 
   return {
-    // State
     createFolderModal, setCreateFolderModal, newFolderName, setNewFolderName,
     renameModalVisible, setRenameModalVisible, selectedItem, setSelectedItem, renameNewName, setRenameNewName,
     copyModalVisible, setCopyModalVisible, copyItem, setCopyItem, copyNewName, setCopyNewName, selectedDestination, setSelectedDestination,
     moveModalVisible, setMoveModalVisible, moveItem, setMoveItem, moveDestination, setMoveDestination,
     selectedMainFolder, setSelectedMainFolder, selectedSubFolder, setSelectedSubFolder, subFolders,
     uploadModalVisible, setUploadModalVisible, uploadingFiles, setUploadingFiles,
-
-    // Handlers
     handleCreateFolder, handleRename, handleRenameConfirm,
     handleCopy, handleCopyConfirm, handleMove, handleMoveConfirm,
     handleMainFolderChange, handleSubFolderChange,

@@ -3,6 +3,8 @@ import axios from 'axios';
 
 const AuthContext = createContext(null);
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8080';
+
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -11,7 +13,7 @@ export const AuthProvider = ({ children }) => {
     // Check if user is already logged in
     const checkAuth = async () => {
       try {
-        const response = await axios.get('/api/auth/me', { withCredentials: true });
+        const response = await axios.get(`${BASE_URL}/api/auth/me`, { withCredentials: true });
         if (response.data.user) {
           setCurrentUser(response.data.user);
         }
@@ -27,7 +29,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
-      const response = await axios.post('/api/auth/login', credentials, { withCredentials: true });
+      const response = await axios.post(`${BASE_URL}/api/auth/login`, credentials, { withCredentials: true });
       setCurrentUser(response.data.user);
       return { success: true };
     } catch (error) {
@@ -38,7 +40,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await axios.post('/api/auth/logout', {}, { withCredentials: true });
+      await axios.post(`${BASE_URL}/api/auth/logout`, {}, { withCredentials: true });
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
