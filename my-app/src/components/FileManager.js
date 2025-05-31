@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Layout,
@@ -138,8 +138,12 @@ function formatFileSize(size) {
   return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
 }
 
+// Utility function to normalize folder paths for comparison
+const normalizePath = (path) => (path || '').replace(/^\/|\/$/g, '').toLowerCase();
+
 const FileManager = () => {
   const [items, setItems] = useState([]);
+const latestFetchPathRef = useRef(''); // Track the latest fetch path
   const [loading, setLoading] = useState(false);
   const [showLoading, setShowLoading] = useState(false);
   const [currentPath, setCurrentPath] = useState('');
@@ -216,7 +220,8 @@ const FileManager = () => {
     }
   };
 
-  const fetchItems = async () => {
+  const fetchItems = async (pathArg) => {
+  const fetchPath = typeof pathArg === 'string' ? pathArg : currentPath;
     // Always use lowercase for backend queries
     const normalizedCurrentPath = (currentPath || '').toLowerCase();
     setLoading(true);
@@ -232,45 +237,29 @@ const FileManager = () => {
       // This helps with the issue of folders appearing empty after move operations
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      const files = (filesRes.data || [])
-      const normalizePath = path => (path || '').replace(/^\/|\/$/g, '').toLowerCase()
-
-      .filter(f => normalizePath(f.directory) === normalizePath(currentPath))
-      .map(f => {
-        // Ensure size is a valid number
-        const fileSize = typeof f.size === 'number' ? f.size :
-                        (f.size ? parseInt(f.size, 10) : null);
-
-        return {
-          name: f.name,
-          type: 'file',
-          size: fileSize,
-          formattedSize: formatFileSize(fileSize),
-          contentType: f.contentType,
-          uploader: f.uploader,
-          id: f.id
-        };
-      });
-
-
-      let directories = dirsRes.data || [];
-
-      if (currentPath === '') {
-        const fixedFolders = ['Operation', 'Research', 'Training'].map((folder) => ({
+      const files = (filesRes.data || []).filter(f => normalizePath(f.directory) === normalizePath(fetchPath));
+      const directories = (dirsRes.data || []).filter(d => normalizePath(d.name) !== normalizePath(fetchPath));
+      // Include fixed folders at root level if missing
+      if (fetchPath === '') {
+        const fixedFolders = ['Operation', 'Research', 'Training'].map(folder => ({
           name: folder,
           type: 'directory',
           parent: '',
         }));
-
-        const dirNames = directories.map((d) => d.name);
-        fixedFolders.forEach((folder) => {
+        const dirNames = directories.map(d => d.name);
+        fixedFolders.forEach(folder => {
           if (!dirNames.includes(folder.name)) {
             directories.push(folder);
           }
         });
       }
-
-      setItems([...directories, ...files]);
+      // Only update items if this fetch is for the latest path
+      if (fetchPath === latestFetchPathRef.current) {
+        setItems([...directories, ...files]);
+      } else {
+        // Ignore stale fetch results
+        console.log('Ignored stale fetch for path:', fetchPath);
+      }
     } catch (error) {
       console.error('Error fetching items:', error);
       message.error(error.response?.data?.error || 'Error fetching directory contents');
@@ -484,6 +473,8 @@ const FileManager = () => {
 
   // Initial data fetch
   useEffect(() => {
+    latestFetchPathRef.current = currentPath;
+    fetchItems(currentPath);
     fetchFolderTree();
     
     // Check for navigation state from notifications
@@ -536,7 +527,7 @@ const FileManager = () => {
   }, [currentPath, initialLoad]);
 
   useEffect(() => {
-    fetchItems().then(() => {
+    fetchItems(currentPath).then(() => {
       // After items are loaded, check if we need to scroll to a specific file
       const scrollToFile = localStorage.getItem('scrollToFile');
       if (scrollToFile) {
@@ -563,8 +554,8 @@ const FileManager = () => {
     try {
       setLoading(true);
       setShowLoading(false);
+      setItems([]); // Clear items immediately to prevent flicker
       
-      // Set a timer to show loading indicator if the operation takes more than 100ms
       const loadingTimer = setTimeout(() => {
         setShowLoading(true);
       }, 100);
@@ -572,11 +563,10 @@ const FileManager = () => {
       const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
       setCurrentPath(newPath);
       setCurrentPage(1);
+      latestFetchPathRef.current = newPath;
       
-      // Wait for items to load
-      await fetchItems();
+      await fetchItems(newPath);
       
-      // Clear the loading timer and hide the loading indicator
       clearTimeout(loadingTimer);
       setShowLoading(false);
     } catch (error) {
@@ -593,7 +583,7 @@ const FileManager = () => {
     const interval = setInterval(() => {
       // Only auto-refresh if we're not in the middle of an operation
       if (!moveModalVisible && !copyModalVisible && !renameModalVisible && !createFolderModal && !uploadModalVisible) {
-        fetchItems();
+        fetchItems(currentPath);
       }
     }, 10000);
     return () => clearInterval(interval);
@@ -601,82 +591,82 @@ const FileManager = () => {
 
   // Perform search for files and folders, with special handling for numeric searches
   const performSearch = async (query) => {
-  if (!query.trim()) {
-    setIsSearching(false);
-    setSearchResults([]);
-    return;
-  }
+    if (!query.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      return;
+    }
 
-  setSearchLoading(true);
-  setIsSearching(true);
+    setSearchLoading(true);
+    setIsSearching(true);
 
-  try {
-    // Convert the query to string to ensure it works with numbers
-    const queryStr = String(query).trim();
-    console.log('Searching for:', queryStr, 'in folder:', currentPath || 'root');
+    try {
+      // Convert the query to string to ensure it works with numbers
+      const queryStr = String(query).trim();
+      console.log('Searching for:', queryStr, 'in folder:', currentPath || 'root');
 
-    // Use the search endpoint for root directory searches
-    if (currentPath === '') {
-      const response = await axios.get(`${BASE_URL}/search`, {
-        params: {
-          q: queryStr
-        },
-        withCredentials: true
-      });
+      // Use the search endpoint for root directory searches
+      if (currentPath === '') {
+        const response = await axios.get(`${BASE_URL}/search`, {
+          params: {
+            q: queryStr
+          },
+          withCredentials: true
+        });
 
-      console.log('Search response:', response.data);
-      const searchResults = (response.data || []).map(item => ({
-        name: item.name || '',
-        type: item.type || 'file',
-        size: item.size || 0,
-        formattedSize: formatFileSize(item.size),
-        contentType: item.contentType || '',
-        id: item.id || null,
-        directory: item.directory || '',
-        path: item.path || ''
-      }));
-
-      console.log('Processed search results:', searchResults);
-      setSearchResults(searchResults);
-      console.log(`🔍 Search found ${searchResults.length} results`);
-      
-    } else {
-      // Use directory listing + filtering for subfolder searches
-      const directoryParam = encodeURIComponent(currentPath);
-      const response = await axios.get(`${BASE_URL}/files?directory=${directoryParam}`, {
-        withCredentials: true
-      });
-
-      console.log('Files response:', response.data);
-      const responseData = response.data || [];
-      
-      const searchResults = responseData
-        .filter(item => 
-          item.name.toLowerCase().includes(queryStr.toLowerCase())
-        )
-        .map(item => ({
+        console.log('Search response:', response.data);
+        const searchResults = (response.data || []).map(item => ({
           name: item.name || '',
           type: item.type || 'file',
           size: item.size || 0,
           formattedSize: formatFileSize(item.size),
           contentType: item.contentType || '',
           id: item.id || null,
-          directory: currentPath || '',
+          directory: item.directory || '',
           path: item.path || ''
         }));
 
-      console.log('Processed search results:', searchResults);
-      setSearchResults(searchResults);
-      console.log(`🔍 Search found ${searchResults.length} results`);
+        console.log('Processed search results:', searchResults);
+        setSearchResults(searchResults);
+        console.log(`🔍 Search found ${searchResults.length} results`);
+        
+      } else {
+        // Use directory listing + filtering for subfolder searches
+        const directoryParam = encodeURIComponent(currentPath);
+        const response = await axios.get(`${BASE_URL}/files?directory=${directoryParam}`, {
+          withCredentials: true
+        });
+
+        console.log('Files response:', response.data);
+        const responseData = response.data || [];
+        
+        const searchResults = responseData
+          .filter(item => 
+            item.name.toLowerCase().includes(queryStr.toLowerCase())
+          )
+          .map(item => ({
+            name: item.name || '',
+            type: item.type || 'file',
+            size: item.size || 0,
+            formattedSize: formatFileSize(item.size),
+            contentType: item.contentType || '',
+            id: item.id || null,
+            directory: currentPath || '',
+            path: item.path || ''
+          }));
+
+        console.log('Processed search results:', searchResults);
+        setSearchResults(searchResults);
+        console.log(`🔍 Search found ${searchResults.length} results`);
+      }
+    } catch (error) {
+      console.error('Error performing search:', error);
+      message.error('Error performing search');
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
     }
-  } catch (error) {
-    console.error('Error performing search:', error);
-    message.error('Error performing search');
-    setSearchResults([]);
-  } finally {
-    setSearchLoading(false);
-  }
-};
+  };
 
   // Debounce the search to avoid too many requests
   const debouncedSearch = useCallback(
@@ -734,7 +724,7 @@ const FileManager = () => {
       message.success('Folder created successfully');
       setCreateFolderModal(false);
       setNewFolderName('');
-      await fetchItems();
+      await fetchItems(currentPath);
       await fetchFolderTree();
       // Ensure subfolders are refreshed so the new folder is available as a move destination
       await fetchSubFolders(currentPath, false, false);
@@ -886,7 +876,7 @@ const FileManager = () => {
           }
 
           message.success(successMessage);
-          fetchItems(); // Refresh the file list
+          fetchItems(currentPath); // Refresh the file list
           setUploadModalVisible(false); // Close the upload modal after successful upload
         } catch (error) {
           console.error('Upload failed:', error);
@@ -1058,7 +1048,7 @@ const FileManager = () => {
         setUploadingFile([]);
         setFileUploadMessage('');
         setTargetUsername('');
-        fetchItems();
+        fetchItems(currentPath);
       } catch (error) {
         console.error('Bulk upload failed:', error);
         const errorMessage = error.response?.data?.error || 'Bulk upload failed';
@@ -1097,7 +1087,7 @@ const FileManager = () => {
   //     setUploadingFile(null);
   //     setFileUploadMessage('');
   //     setTargetUsername('');
-  //     fetchItems();
+  //     fetchItems(currentPath);
   //   } catch (error) {
   //     console.error('Upload failed:', error);
   //     message.error(error.response?.data?.error || 'Upload error');
@@ -1122,7 +1112,7 @@ const FileManager = () => {
         });
       }
       message.success(`${record.name} deleted successfully`);
-      fetchItems();
+      fetchItems(currentPath);
       if (record.type === 'directory') {
         fetchFolderTree();
       }
@@ -1220,7 +1210,7 @@ const FileManager = () => {
       setRenameModalVisible(false);
       setSelectedItem(null);
       setRenameNewName('');
-      fetchItems();
+      fetchItems(currentPath);
     } catch (error) {
       console.error('Rename error:', error);
       message.error(error.response?.data?.error || 'Error renaming item');
@@ -1357,7 +1347,7 @@ const FileManager = () => {
       setCopySelectedMainFolder('');
       setCopySelectedSubFolder('');
       setSelectedDestination('');
-      fetchItems();
+      fetchItems(currentPath);
     } catch (err) {
       console.error('Copy error:', err);
 
@@ -1651,100 +1641,99 @@ const FileManager = () => {
     setSelectedSubFolder('');
     setSubFolders([]);
     setMoveModalVisible(true);
-  } // <--- Added the missing closing brace here
+  };
 
   const handleMoveConfirm = async () => {
-  try {
-    console.log('[Move] handleMoveConfirm called', { moveItem, moveDestination });
-    if (!moveDestination?.trim()) {
-      message.error('Please select a destination folder');
-      return;
-    }
-    if (!moveItem) {
-      message.error('No item selected to move');
-      return;
-    }
-    // Prevent moving to the same location
-    if (
-      (moveItem.type === 'file' && currentPath === moveDestination) ||
-      (moveItem.type === 'directory' && currentPath === moveDestination)
-    ) {
-      message.info('The source and destination are the same. No move was performed.');
-      setMoveModalVisible(false);
-      return;
-    }
-    let conflictChecked = false;
-    if (moveItem.type === 'file') {
-      // Check for name conflict by listing files in the destination
-      const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
-        withCredentials: true
-      });
-      const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
-      const nameExists = existingNames.includes(moveItem.name);
-      if (nameExists) {
-        conflictChecked = true;
-        const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
-        FileOperationConflictModal({
-          fileName: moveItem.name,
-          destinationPath: moveDestination,
-          operation: 'move',
-          onOverwrite: async () => {
-            try {
-              await finalizeMove(true);
-            } catch (err) {
-              console.error('Move error (overwrite):', err);
-              message.error('Error overwriting file during move');
-            } finally {
-              setMoveModalVisible(false);
-              fetchItems();
-              fetchFolderTree();
-            }
-          },
-          onKeepBoth: async () => {
-            try {
-              await finalizeMove(false);
-            } catch (err) {
-              console.error('Move error (keep both):', err);
-              message.error('Error keeping both files during move');
-            } finally {
-              setMoveModalVisible(false);
-              fetchItems();
-              fetchFolderTree();
-            }
-          },
-          onSkip: () => {
-            message.info(`Skipped moving ${moveItem.name}`);
-            setMoveModalVisible(false);
-            fetchItems();
-            fetchFolderTree();
-          }
-        });
+    try {
+      console.log('[Move] handleMoveConfirm called', { moveItem, moveDestination });
+      if (!moveDestination?.trim()) {
+        message.error('Please select a destination folder');
         return;
       }
-    }
-    // Always call finalizeMove for both file and directory if no conflict or if not already handled by conflict modal
-    if (!conflictChecked) {
-      try {
-        await finalizeMove(false);
-        message.success(`Move operation completed for '${moveItem.name}'`);
-      } catch (err) {
-        console.error('Move error:', err);
-        message.error('Error checking for conflict or moving file');
-      } finally {
-        setMoveModalVisible(false);
-        fetchItems();
-        fetchFolderTree();
+      if (!moveItem) {
+        message.error('No item selected to move');
+        return;
       }
+      // Prevent moving to the same location
+      if (
+        (moveItem.type === 'file' && currentPath === moveDestination) ||
+        (moveItem.type === 'directory' && currentPath === moveDestination)
+      ) {
+        message.info('The source and destination are the same. No move was performed.');
+        setMoveModalVisible(false);
+        return;
+      }
+      let conflictChecked = false;
+      if (moveItem.type === 'file') {
+        // Check for name conflict by listing files in the destination
+        const res = await axios.get(`${BASE_URL}/files?directory=${encodeURIComponent(moveDestination)}`, {
+          withCredentials: true
+        });
+        const existingNames = Array.isArray(res.data) ? res.data.map(f => f.name) : [];
+        const nameExists = existingNames.includes(moveItem.name);
+        if (nameExists) {
+          conflictChecked = true;
+          const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+          FileOperationConflictModal({
+            fileName: moveItem.name,
+            destinationPath: moveDestination,
+            operation: 'move',
+            onOverwrite: async () => {
+              try {
+                await finalizeMove(true);
+              } catch (err) {
+                console.error('Move error (overwrite):', err);
+                message.error('Error overwriting file during move');
+              } finally {
+                setMoveModalVisible(false);
+                fetchItems(currentPath);
+                fetchFolderTree();
+              }
+            },
+            onKeepBoth: async () => {
+              try {
+                await finalizeMove(false);
+              } catch (err) {
+                console.error('Move error (keep both):', err);
+                message.error('Error keeping both files during move');
+              } finally {
+                setMoveModalVisible(false);
+                fetchItems(currentPath);
+                fetchFolderTree();
+              }
+            },
+            onSkip: () => {
+              message.info(`Skipped moving ${moveItem.name}`);
+              setMoveModalVisible(false);
+              fetchItems(currentPath);
+              fetchFolderTree();
+            }
+          });
+          return;
+        }
+      }
+      // Always call finalizeMove for both file and directory if no conflict or if not already handled by conflict modal
+      if (!conflictChecked) {
+        try {
+          await finalizeMove(false);
+          message.success(`Move operation completed for '${moveItem.name}'`);
+        } catch (err) {
+          console.error('Move error:', err);
+          message.error('Error checking for conflict or moving file');
+        } finally {
+          setMoveModalVisible(false);
+          fetchItems(currentPath);
+          fetchFolderTree();
+        }
+      }
+    } catch (err) {
+      console.error('Move operation failed:', err);
+      message.error('Move operation failed');
+      setMoveModalVisible(false);
+      fetchItems(currentPath);
+      fetchFolderTree();
     }
-  } catch (err) {
-    console.error('Move operation failed:', err);
-    message.error('Move operation failed');
-    setMoveModalVisible(false);
-    fetchItems();
-    fetchFolderTree();
-  }
-};
-
+  };
 
   const finalizeMove = async (overwrite) => {
     try {
@@ -1786,7 +1775,7 @@ const FileManager = () => {
                     setMoveModalVisible(false);
                     setMoveDestination('');
                     setMoveItem(null);
-                    fetchItems();  // Stay in current folder
+                    fetchItems(currentPath);  // Stay in current folder
                     fetchFolderTree();
                   };
                   completeMoveCleanup();
@@ -1956,86 +1945,86 @@ const FileManager = () => {
             });
           } else {
             try {
-            // Try to move the file
-            const response = await axios.post(
-              `${BASE_URL}/move-file`,
-              {
-                id: fileId,
-                filename: moveItem.name,
-                old_parent: currentPath,
-                new_parent: moveDestination,
-                overwrite: overwrite
-              },
-              { withCredentials: true }
-            );
-            
-            // If we get here, the move was successful
-            message.success(`Moved '${moveItem.name}' to ${moveDestination || 'root'}`);
-            return true;
-          } catch (moveErr) {
-            // Check if this is a conflict error
-            if (moveErr.response?.status === 409 && moveErr.response?.data?.file_exists) {
-              // Show conflict resolution modal
-              const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+              // Try to move the file
+              const response = await axios.post(
+                `${BASE_URL}/move-file`,
+                {
+                  id: fileId,
+                  filename: moveItem.name,
+                  old_parent: currentPath,
+                  new_parent: moveDestination,
+                  overwrite: overwrite
+                },
+                { withCredentials: true }
+              );
               
-              return new Promise((resolve) => {
-                FileOperationConflictModal({
-                  fileName: moveItem.name,
-                  destinationPath: moveDestination || 'root',
-                  operation: 'move',
-                  onOverwrite: async () => {
-                    try {
-                      await axios.post(
-                        `${BASE_URL}/move-file`,
-                        {
-                          id: fileId,
-                          filename: moveItem.name,
-                          old_parent: currentPath,
-                          new_parent: moveDestination,
-                          overwrite: true
-                        },
-                        { withCredentials: true }
-                      );
-                      message.success(`Moved '${moveItem.name}' to ${moveDestination || 'root'}`);
-                      resolve(true);
-                    } catch (err) {
-                      console.error('Error moving file with overwrite:', err);
-                      message.error(err.response?.data?.error || 'Failed to move file');
+              // If we get here, the move was successful
+              message.success(`Moved '${moveItem.name}' to ${moveDestination || 'root'}`);
+              return true;
+            } catch (moveErr) {
+              // Check if this is a conflict error
+              if (moveErr.response?.status === 409 && moveErr.response?.data?.file_exists) {
+                // Show conflict resolution modal
+                const FileOperationConflictModal = (await import('./common/FileOperationConflictModal')).default;
+                
+                return new Promise((resolve) => {
+                  FileOperationConflictModal({
+                    fileName: moveItem.name,
+                    destinationPath: moveDestination || 'root',
+                    operation: 'move',
+                    onOverwrite: async () => {
+                      try {
+                        await axios.post(
+                          `${BASE_URL}/move-file`,
+                          {
+                            id: fileId,
+                            filename: moveItem.name,
+                            old_parent: currentPath,
+                            new_parent: moveDestination,
+                            overwrite: true
+                          },
+                          { withCredentials: true }
+                        );
+                        message.success(`Moved '${moveItem.name}' to ${moveDestination || 'root'}`);
+                        resolve(true);
+                      } catch (err) {
+                        console.error('Error moving file with overwrite:', err);
+                        message.error(err.response?.data?.error || 'Failed to move file');
+                        resolve(false);
+                      }
+                    },
+                    onKeepBoth: async () => {
+                      try {
+                        await axios.post(
+                          `${BASE_URL}/move-file`,
+                          {
+                            id: fileId,
+                            filename: moveItem.name,
+                            old_parent: currentPath,
+                            new_parent: moveDestination,
+                            overwrite: false
+                          },
+                          { withCredentials: true }
+                        );
+                        message.success(`Moved '${moveItem.name}' to ${moveDestination || 'root'}`);
+                        resolve(true);
+                      } catch (err) {
+                        console.error('Error moving file with keep both:', err);
+                        message.error(err.response?.data?.error || 'Failed to move file');
+                        resolve(false);
+                      }
+                    },
+                    onSkip: () => {
+                      message.info('Skipped moving the file');
                       resolve(false);
                     }
-                  },
-                  onKeepBoth: async () => {
-                    try {
-                      await axios.post(
-                        `${BASE_URL}/move-file`,
-                        {
-                          id: fileId,
-                          filename: moveItem.name,
-                          old_parent: currentPath,
-                          new_parent: moveDestination,
-                          overwrite: false
-                        },
-                        { withCredentials: true }
-                      );
-                      message.success(`Moved '${moveItem.name}' to ${moveDestination || 'root'}`);
-                      resolve(true);
-                    } catch (err) {
-                      console.error('Error moving file with keep both:', err);
-                      message.error(err.response?.data?.error || 'Failed to move file');
-                      resolve(false);
-                    }
-                  },
-                  onSkip: () => {
-                    message.info('Skipped moving the file');
-                    resolve(false);
-                  }
+                  });
                 });
-              });
-            } else {
-              // Re-throw other errors
-              throw moveErr;
+              } else {
+                // Re-throw other errors
+                throw moveErr;
+              }
             }
-          }
           }
         } catch (err) {
           console.error('Error moving file:', err);
@@ -2050,7 +2039,7 @@ const FileManager = () => {
       setMoveDestination('');
       setMoveItem(null);
 
-      fetchItems();  // Stay in current folder
+      fetchItems(currentPath);  // Stay in current folder
       fetchFolderTree();
     } catch (err) {
       console.error('Move error:', err);
@@ -2093,7 +2082,7 @@ const FileManager = () => {
       cancelText: 'No',
       onOk: async () => {
         await batchDelete(selectedRows, currentPath, null, () => {
-          fetchItems();
+          fetchItems(currentPath);
           fetchFolderTree();
           setSelectedRowKeys([]);
           setSelectedRows([]);
