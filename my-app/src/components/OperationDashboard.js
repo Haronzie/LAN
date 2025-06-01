@@ -1510,12 +1510,10 @@ const OperationDashboard = () => {
         );
       } else {
         await axios.put(
-          `${BASE_URL}/file/rename`,
+          `${BASE_URL}/file/rename?directory=${encodeURIComponent(currentPath)}`,
           {
             old_filename: selectedItem.name,
-            new_filename: finalName,
-            directory: currentPath,
-            container: 'operation',
+            new_filename: finalName
           },
           { withCredentials: true }
         );
