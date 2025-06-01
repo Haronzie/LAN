@@ -1112,12 +1112,10 @@ const TrainingDashboard = () => {
         );
       } else {
         await axios.put(
-          `${BASE_URL}/file/rename`,
+          `${BASE_URL}/file/rename?directory=${encodeURIComponent(currentPath)}`,
           {
-            directory: currentPath,
             old_filename: selectedItem.name,
-            new_filename: finalName,
-            container: 'training'
+            new_filename: finalName
           },
           { withCredentials: true }
         );
