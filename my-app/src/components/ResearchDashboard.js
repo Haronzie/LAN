@@ -901,12 +901,10 @@ const ResearchDashboard = () => {
         );
       } else {
         await axios.put(
-          `${BASE_URL}/file/rename`,
+          `${BASE_URL}/file/rename?directory=${encodeURIComponent(currentPath)}`,
           {
-            directory: currentPath,
             old_filename: selectedItem.name,
-            new_filename: finalName,
-            container: 'research'
+            new_filename: finalName
           },
           { withCredentials: true }
         );
