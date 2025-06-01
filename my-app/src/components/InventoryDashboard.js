@@ -426,26 +426,162 @@ const InventoryDashboard = () => {
 
   // Handle form submission
   const onFinish = async (values) => {
+    let loadingMessage = null;
     try {
-      const baseUrl = 'http://localhost:8080/inventory';
+      // Show loading indicator
+      loadingMessage = message.loading(editingItem ? 'Updating item...' : 'Adding item...', 0);
       
+      setLoading(true);
+      const baseUrl = 'http://localhost:8080/api/inventory';
+      
+      // Validate and prepare form data
+      const itemData = {
+        name: (values.name || '').trim(),
+        category: values.category || 'Uncategorized',
+        quantity: Number(values.quantity) || 0,
+        lowStockThreshold: Number(values.lowStockThreshold) || 5,
+        unit: values.unit || 'pcs',
+        sku: (values.sku || `SKU-${Date.now()}`).trim(),
+        description: (values.description || '').trim()
+      };
+
+      // Client-side validation
+      const errors = [];
+      
+      if (!itemData.name) {
+        errors.push('Item name is required');
+      } else if (itemData.name.length > 100) {
+        errors.push('Item name must be less than 100 characters');
+      }
+      
+      if (isNaN(itemData.quantity) || itemData.quantity < 0) {
+        errors.push('Quantity must be a non-negative number');
+      }
+      
+      if (isNaN(itemData.lowStockThreshold) || itemData.lowStockThreshold < 1) {
+        errors.push('Low stock threshold must be at least 1');
+      }
+      
+      if (itemData.sku && itemData.sku.length > 50) {
+        errors.push('SKU must be less than 50 characters');
+      }
+      
+      if (itemData.description && itemData.description.length > 500) {
+        errors.push('Description must be less than 500 characters');
+      }
+      
+      if (errors.length > 0) {
+        throw new Error(errors.join('\n'));
+      }
+      
+      console.log('Submitting item data:', itemData);
+
+      console.log('Submitting item data:', itemData);
+
+      let response;
       if (editingItem) {
         // Update existing item
-        await axios.put(`${baseUrl}/${editingItem.id}`, values, { withCredentials: true });
+        response = await axios.put(
+          `${baseUrl}/${editingItem.id}`, 
+          itemData, 
+          { 
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          }
+        );
         message.success('Item updated successfully');
       } else {
         // Add new item
-        await axios.post(baseUrl, values, { withCredentials: true });
+        response = await axios.post(
+          baseUrl, 
+          itemData, 
+          { 
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          }
+        );
         message.success('Item added successfully');
       }
       
+      if (response && response.data) {
+        console.log('Server response:', response.data);
+      }
+      
+      // Show success message
+      message.success(
+        <span>
+          {editingItem ? 'Item updated successfully!' : 'Item added successfully!'}
+          <Button 
+            type="link" 
+            size="small" 
+            onClick={() => {
+              form.resetFields();
+              setModalVisible(true);
+              message.destroy();
+            }}
+          >
+            Add another
+          </Button>
+        </span>,
+        5
+      );
+      
+      // Reset form and close modal
       setModalVisible(false);
       form.resetFields();
       setEditingItem(null);
-      fetchInventory();
+      
+      // Refresh the inventory list
+      await fetchInventory();
     } catch (error) {
-      console.error('Error saving item:', error);
-      message.error(error.response?.data?.message || `Failed to ${editingItem ? 'update' : 'add'} item`);
+      console.error('Error saving item:', {
+        message: error.message,
+        response: error.response?.data,
+        config: error.config
+      });
+      
+      // Format error message
+      let errorMessage = '';
+      
+      if (error.response?.data?.errors) {
+        // Handle validation errors from server
+        const errors = Object.values(error.response.data.errors).flat();
+        errorMessage = errors.join('\n');
+      } else if (error.response?.data?.message) {
+        // Handle custom error messages from server
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        // Handle client-side validation errors
+        errorMessage = error.message;
+      } else {
+        // Generic error message
+        errorMessage = `Failed to ${editingItem ? 'update' : 'add'} item. Please try again.`;
+      }
+      
+      // Show error message with proper formatting
+      message.error({
+        content: (
+          <div style={{ maxHeight: '200px', overflow: 'auto' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+              {editingItem ? 'Failed to update item' : 'Failed to add item'}
+            </div>
+            <div style={{ whiteSpace: 'pre-line' }}>{errorMessage}</div>
+          </div>
+        ),
+        duration: 5,
+      });
+    } finally {
+      // Hide loading message if it exists
+      if (loadingMessage) {
+        loadingMessage();
+      }
+      setLoading(false);
     }
   };
 
@@ -1068,7 +1204,12 @@ const InventoryDashboard = () => {
             form={form}
             layout="vertical"
             onFinish={onFinish}
-            initialValues={{ lowStockThreshold: 5 }}
+            initialValues={{ 
+              lowStockThreshold: 5,
+              quantity: 0,
+              unit: 'pcs',
+              category: 'Medical Supplies' // Default category
+            }}
           >
             <Row gutter={16}>
               <Col span={12}>
@@ -1077,7 +1218,7 @@ const InventoryDashboard = () => {
                   label="Item Name"
                   rules={[{ required: true, message: 'Please enter item name' }]}
                 >
-                  <Input placeholder="Enter item name" />
+                  <Input placeholder="e.g., First Aid Kit" />
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -1086,45 +1227,88 @@ const InventoryDashboard = () => {
                   label="SKU"
                   rules={[{ required: true, message: 'Please enter SKU' }]}
                 >
-                  <Input placeholder="Enter SKU" />
+                  <Input placeholder="e.g., FAK-001" />
                 </Form.Item>
               </Col>
             </Row>
             
             <Row gutter={16}>
-              <Col span={12}>
+              <Col span={8}>
                 <Form.Item
                   name="quantity"
                   label="Quantity"
-                  rules={[{ required: true, message: 'Please enter quantity' }]}
+                  rules={[{ 
+                    required: true, 
+                    message: 'Please enter quantity',
+                    type: 'number',
+                    min: 0
+                  }]}
                 >
                   <InputNumber 
                     min={0}
                     style={{ width: '100%' }} 
-                    placeholder="Enter quantity" 
+                    placeholder="0" 
                   />
                 </Form.Item>
               </Col>
-              <Col span={12}>
+              <Col span={8}>
                 <Form.Item
                   name="lowStockThreshold"
-                  label="Low Stock Threshold"
+                  label="Low Stock Alert"
                   tooltip="Alert when quantity falls below this number"
+                  rules={[{ 
+                    required: true, 
+                    message: 'Required',
+                    type: 'number',
+                    min: 1
+                  }]}
                 >
                   <InputNumber 
                     min={1}
                     style={{ width: '100%' }} 
-                    placeholder="Enter threshold" 
+                    placeholder="5" 
                   />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="unit"
+                  label="Unit"
+                  rules={[{ required: true, message: 'Please select unit' }]}
+                >
+                  <Select placeholder="Select unit">
+                    <Option value="pcs">Pieces</Option>
+                    <Option value="boxes">Boxes</Option>
+                    <Option value="sets">Sets</Option>
+                    <Option value="kits">Kits</Option>
+                    <Option value="units">Units</Option>
+                    <Option value="bottles">Bottles</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={24}>
+                <Form.Item
+                  name="category"
+                  label="Category"
+                  rules={[{ required: true, message: 'Please select category' }]}
+                >
+                  <Select placeholder="Select category">
+                    {categories.map(cat => (
+                      <Option key={cat} value={cat}>{cat}</Option>
+                    ))}
+                  </Select>
                 </Form.Item>
               </Col>
             </Row>
             
             <Form.Item
               name="description"
-              label="Description"
+              label="Description (Optional)"
             >
-              <Input.TextArea rows={3} placeholder="Enter item description (optional)" />
+              <Input.TextArea rows={2} placeholder="Enter item description" />
             </Form.Item>
             
             <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>

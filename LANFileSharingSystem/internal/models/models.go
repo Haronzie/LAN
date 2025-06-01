@@ -1043,17 +1043,17 @@ func (app *App) GetFileIDByPath(path string) (int, error) {
 func (app *App) GetFileRecordByPath(filePath string) (FileRecord, error) {
 	var fr FileRecord
 
-	// Normalize the path for case-insensitive comparison
-	normalizedPath := strings.ToLower(strings.TrimSpace(filePath))
+	// Clean and trim the path while preserving case
+	cleanPath := filepath.ToSlash(filepath.Clean(strings.TrimSpace(filePath)))
 
 	// Log the search path for debugging
-	log.Printf("Searching for file with path: '%s' (normalized: '%s')", filePath, normalizedPath)
+	log.Printf("Searching for file with path: '%s' (clean: '%s')", filePath, cleanPath)
 
 	err := app.DB.QueryRow(`
         SELECT id, file_name, file_path, size, content_type, uploader
         FROM files
-        WHERE LOWER(file_path) = LOWER($1)
-    `, normalizedPath).Scan(
+        WHERE file_path = $1
+    `, cleanPath).Scan(
 		&fr.ID,
 		&fr.FileName,
 		&fr.FilePath,
@@ -1063,9 +1063,17 @@ func (app *App) GetFileRecordByPath(filePath string) (FileRecord, error) {
 	)
 
 	if err != nil {
-		log.Printf("Error finding file with path '%s': %v", normalizedPath, err)
+		log.Printf("Error finding file with path '%s': %v", cleanPath, err)
 	} else {
 		log.Printf("Found file record: %+v", fr)
+	}
+
+	if err == sql.ErrNoRows {
+		log.Printf("No file found with path: %s", cleanPath)
+		return FileRecord{}, fmt.Errorf("file not found: %s", cleanPath)
+	} else if err != nil {
+		log.Printf("Error querying file by path '%s': %v", cleanPath, err)
+		return FileRecord{}, fmt.Errorf("error querying file: %v", err)
 	}
 
 	return fr, err

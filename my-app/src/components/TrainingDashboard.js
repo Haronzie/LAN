@@ -1239,8 +1239,6 @@ const TrainingDashboard = () => {
             source_file: copyItem.name,
             new_file_name: copyNewName,
             destination_folder: destinationPath,
-            container: 'training',
-            source_parent: currentPath,
             overwrite: overwrite
           },
           { withCredentials: true }
@@ -1429,22 +1427,46 @@ const TrainingDashboard = () => {
 
   const finalizeMove = async (overwrite) => {
     try {
-      const formData = new FormData();
-      formData.append('sourcePath', moveItem.path || path.join(currentPath, moveItem.name));
-      formData.append('destinationPath', path.join(moveDestination, moveItem.name));
-      formData.append('overwrite', overwrite);
-      formData.append('isDirectory', moveItem.type === 'directory');
+      const sourcePath = moveItem.path || path.join(currentPath, moveItem.name);
+      const destinationPath = path.join(moveDestination, moveItem.name);
+      
+      if (moveItem.type === 'directory') {
+        // For directories, use the directory/move endpoint
+        const formData = new FormData();
+        formData.append('name', moveItem.name);
+        formData.append('oldParent', currentPath);
+        formData.append('newParent', moveDestination);
+        formData.append('overwrite', overwrite);
 
-      await axios.post(
-        `${BASE_URL}/directory/move`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          withCredentials: true,
-        }
-      );
+        await axios.post(
+          `${BASE_URL}/directory/move`,
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+            withCredentials: true,
+          }
+        );
+      } else {
+        // For files, use the move-file endpoint
+        const formData = new FormData();
+        formData.append('source_file', moveItem.name);
+        formData.append('source_parent', currentPath);
+        formData.append('destination_folder', moveDestination);
+        formData.append('overwrite', overwrite);
+
+        await axios.post(
+          `${BASE_URL}/move-file`,
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+            withCredentials: true,
+          }
+        );
+      }
 
       message.success(`Successfully moved ${moveItem.name}`);
       fetchItems();

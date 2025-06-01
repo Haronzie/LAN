@@ -115,36 +115,40 @@ func (fc *FileController) Upload(w http.ResponseWriter, r *http.Request) {
 	log.Println("🟡 Got upload directory (raw):", targetDir)
 
 	if targetDir != "" {
-		// Normalize and sanitize
+			// Normalize and sanitize the path while preserving case
 		cleanTarget := filepath.Clean(targetDir)
+		// Convert to forward slashes for consistency
+		targetDir = filepath.ToSlash(cleanTarget)
+
+		// Split into parts for validation while preserving original case
 		parts := strings.Split(cleanTarget, string(os.PathSeparator))
-
-		// Ensure consistent directory format - always use forward slashes
-		// and lowercase for consistent database storage and retrieval
-		for i := range parts {
-			parts[i] = strings.ToLower(parts[i])
+		
+		// Validate top-level folder exists and is one of the allowed folders (case-insensitive check)
+		if len(parts) > 0 {
+			topFolder := strings.ToLower(parts[0])
+			validTopFolders := map[string]string{
+				"operation": "Operation",
+				"research":  "Research",
+				"training":  "Training",
+			}
+			
+			// Check if the top folder is valid (case-insensitive)
+			if validName, exists := validTopFolders[topFolder]; exists {
+				// Replace the first part with the correctly-cased version
+				parts[0] = validName
+				targetDir = filepath.ToSlash(filepath.Join(parts...))
+			} else {
+				models.RespondError(w, http.StatusBadRequest, "Invalid top-level folder. Must be one of: Operation, Research, Training")
+				return
+			}
 		}
-
-		// Rebuild the path with forward slashes for consistent storage
-		targetDir = strings.Join(parts, "/")
+		
 		log.Println("📁 Normalized upload directory:", targetDir)
 
+		// Prevent directory traversal
 		if strings.HasPrefix(targetDir, "..") {
 			models.RespondError(w, http.StatusBadRequest, "Invalid directory path")
 			return
-		}
-
-		if len(parts) > 0 {
-			topFolder := parts[0]
-			validTopFolders := map[string]bool{
-				"operation": true,
-				"research":  true,
-				"training":  true,
-			}
-			if !validTopFolders[topFolder] {
-				models.RespondError(w, http.StatusBadRequest, "Invalid top-level folder")
-				return
-			}
 		}
 	}
 
@@ -373,8 +377,8 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure directory uses consistent slashes for comparison
-	normalizedDir := filepath.ToSlash(filepath.Clean(directory))
-	log.Printf("🔍 Rename - Looking for file: '%s' in directory: '%s' (normalized: '%s')", req.OldFilename, directory, normalizedDir)
+	directory = filepath.ToSlash(directory) // Convert to forward slashes
+	log.Printf("🔍 Rename - Looking for file: '%s' in directory: '%s'", req.OldFilename, directory)
 
 	// 1) Get all files with the same name (case-insensitive)
 	rows, err := fc.App.DB.Query(`
@@ -400,10 +404,10 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 
 		// Normalize the file path for comparison
 		fileDir := filepath.ToSlash(filepath.Dir(fr.FilePath))
-		log.Printf("🔍 Checking file: %s (dir: %s) against target dir: %s", fr.FileName, fileDir, normalizedDir)
+		log.Printf("🔍 Checking file: %s (dir: %s) against target dir: %s", fr.FileName, fileDir, directory)
 
-		// Check if this is an exact match for the current directory (case-insensitive)
-		if strings.EqualFold(fileDir, normalizedDir) {
+			// Check if this is an exact match for the current directory (case-sensitive)
+		if fileDir == directory {
 			log.Printf("✅ Found matching file: %s in directory: %s", fr.FileName, fileDir)
 			matchingFile = &fr
 			break
@@ -411,14 +415,14 @@ func (fc *FileController) RenameFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if matchingFile == nil {
-		log.Printf("❌ File '%s' not found in directory '%s' (normalized: '%s')", req.OldFilename, directory, normalizedDir)
+		log.Printf("❌ File '%s' not found in directory '%s'", req.OldFilename, directory)
 		models.RespondError(w, http.StatusNotFound, "File not found in the specified directory")
 		return
 	}
 
 	// 2) Build the new relative path (keep the same folder, just change the file name)
 	oldFullPath := filepath.Join("Cdrrmo", matchingFile.FilePath)
-	newRelativePath := filepath.Join(normalizedDir, req.NewFilename)
+	newRelativePath := filepath.Join(directory, req.NewFilename)
 	newFullPath := filepath.Join("Cdrrmo", newRelativePath)
 
 	log.Printf("🔄 Renaming file:\n  From: %s\n  To:   %s", oldFullPath, newFullPath)
@@ -730,6 +734,14 @@ func (fc *FileController) CopyFile(w http.ResponseWriter, r *http.Request) {
 		counter++
 	}
 	dstPath := filepath.Join("Cdrrmo", newRelativePath)
+
+	// Ensure the destination directory exists
+	destDir := filepath.Dir(dstPath)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		log.Printf("[CopyFile] ERROR: Failed to create destination directory '%s': %v", destDir, err)
+		models.RespondError(w, http.StatusInternalServerError, "Failed to create destination directory")
+		return
+	}
 
 	in, err := os.Open(srcPath)
 	if err != nil {
